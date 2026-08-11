@@ -11,9 +11,10 @@ import { colors } from '@theme';
 interface ProgressIndicatorProps {
   count: number;
   current: number;
+  activeColor?: string;
 }
 
-export function ProgressIndicator({ count, current }: ProgressIndicatorProps) {
+export function ProgressIndicator({ count, current, activeColor = colors.primary }: ProgressIndicatorProps) {
   return (
     <View
       style={styles.container}
@@ -22,13 +23,13 @@ export function ProgressIndicator({ count, current }: ProgressIndicatorProps) {
       accessibilityValue={{ min: 0, max: count, now: current + 1 }}
     >
       {Array.from({ length: count }).map((_, i) => (
-        <Dot key={i} active={i === current} done={i < current} />
+        <Dot key={i} active={i === current} done={i < current} activeColor={activeColor} />
       ))}
     </View>
   );
 }
 
-function Dot({ active, done }: { active: boolean; done: boolean }) {
+function Dot({ active, done, activeColor }: { active: boolean; done: boolean; activeColor: string }) {
   const reducedMotion = useReducedMotion();
 
   const animStyle = useAnimatedStyle(() => {
@@ -46,7 +47,7 @@ function Dot({ active, done }: { active: boolean; done: boolean }) {
       style={[
         styles.dot,
         animStyle,
-        active && styles.dotActive,
+        active && { backgroundColor: activeColor },
         done && styles.dotDone,
       ]}
     />
@@ -64,10 +65,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.borderStrong,
   },
-  dotActive: {
-    backgroundColor: colors.primary,
-  },
   dotDone: {
     backgroundColor: colors.primaryLight,
   },
 });
+
