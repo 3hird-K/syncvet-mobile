@@ -1,0 +1,223 @@
+import React, { useCallback, useMemo } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import type { ReactNode } from 'react';
+
+import { colors, radius, spacing, typography } from '@theme';
+
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+type ButtonSize = 'sm' | 'md' | 'lg';
+
+export interface ButtonProps {
+  title: string;
+  onPress: () => void;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  loading?: boolean;
+  disabled?: boolean;
+  fullWidth?: boolean;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
+  accessibilityLabel?: string;
+  testID?: string;
+}
+
+const VARIANT_STYLES = {
+  primary: {
+    bg: colors.primary,
+    pressedBg: colors.primaryStrong,
+    text: colors.white,
+    border: 'transparent',
+  },
+  secondary: {
+    bg: colors.primaryLight,
+    pressedBg: colors.primaryLighter,
+    text: colors.primaryDark,
+    border: 'transparent',
+  },
+  outline: {
+    bg: 'transparent',
+    pressedBg: colors.surfaceMuted,
+    text: colors.primaryDark,
+    border: colors.borderStrong,
+  },
+  ghost: {
+    bg: 'transparent',
+    pressedBg: colors.surfaceMuted,
+    text: colors.primaryDark,
+    border: 'transparent',
+  },
+  danger: {
+    bg: colors.error,
+    pressedBg: colors.errorDark,
+    text: colors.white,
+    border: 'transparent',
+  },
+} as const;
+
+const SIZE_STYLES: Record<ButtonSize, { height: number; paddingH: number; text: typeof typography.button }> = {
+  sm: { height: 40, paddingH: spacing.lg, text: typography.captionBold },
+  md: { height: 50, paddingH: spacing.xl, text: typography.button },
+  lg: { height: 56, paddingH: spacing.xl, text: typography.button },
+};
+
+export function Button({
+  title,
+  onPress,
+  variant = 'primary',
+  size = 'md',
+  loading = false,
+  disabled = false,
+  fullWidth = true,
+  leftIcon,
+  rightIcon,
+  accessibilityLabel,
+  testID,
+}: ButtonProps) {
+  const reducedMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  const bg = useSharedValue(0);
+
+  const variantStyle = VARIANT_STYLES[variant];
+  const sizeStyle = SIZE_STYLES[size];
+
+  const isDisabled = disabled || loading;
+
+  const bgStyle = useAnimatedStyle(() => {
+    const t = bg.value;
+    return {
+      backgroundColor: withTiming(
+        t > 0.5 ? variantStyle.pressedBg : variantStyle.bg,
+        { duration: reducedMotion ? 0 : 120 },
+      ),
+    };
+  });
+
+  const scaleStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: withSpring(scale.value, {
+        damping: 18,
+        stiffness: 300,
+        mass: 0.6,
+      }) }],
+    };
+  });
+
+  const handlePressIn = useCallback(() => {
+    if (isDisabled) return;
+    bg.value = 1;
+    if (!reducedMotion) scale.value = 0.97;
+  }, [isDisabled, reducedMotion, scale, bg]);
+
+  const handlePressOut = useCallback(() => {
+    bg.value = 0;
+    scale.value = 1;
+  }, [bg, scale]);
+
+  const content = useMemo(() => {
+    if (loading) {
+      return (
+        <View style={styles.row}>
+          <ActivityIndicator
+            size="small"
+            color={variantStyle.text}
+            accessibilityElementsHidden
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.row}>
+        {leftIcon ? <View style={styles.iconLeft}>{leftIcon}</View> : null}
+        <Text
+          style={[
+            sizeStyle.text,
+            { color: variantStyle.text },
+            isDisabled && styles.disabledText,
+          ]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+        {rightIcon ? <View style={styles.iconRight}>{rightIcon}</View> : null}
+      </View>
+    );
+  }, [loading, leftIcon, rightIcon, variantStyle.text, sizeStyle.text, isDisabled, title]);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      testID={testID}
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      disabled={isDisabled}
+      style={({ pressed }) => [
+        styles.base,
+        {
+          height: sizeStyle.height,
+          paddingHorizontal: sizeStyle.paddingH,
+          borderRadius: radius.lg,
+          borderWidth: variant === 'outline' ? 1.5 : 0,
+          borderColor: variantStyle.border,
+          opacity: isDisabled ? (variant === 'primary' || variant === 'danger' ? 0.55 : 0.4) : 1,
+          alignSelf: fullWidth ? 'stretch' : 'flex-start',
+        },
+        pressed && styles.pressed,
+      ]}
+    >
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { borderRadius: radius.lg, borderWidth: variant === 'outline' ? 1.5 : 0, borderColor: variantStyle.border },
+          bgStyle,
+        ]}
+      />
+      <Animated.View style={[styles.content, scaleStyle]}>{content}</Animated.View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  base: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pressed: {
+    opacity: 0.92,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconLeft: {
+    marginRight: spacing.sm,
+  },
+  iconRight: {
+    marginLeft: spacing.sm,
+  },
+  disabledText: {
+    opacity: 0.8,
+  },
+});
