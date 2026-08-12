@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@theme';
 import { haptic } from '@lib/haptics';
 
-export function BackButton({ to }: { to?: string }) {
+export function BackButton({ to, onPress }: { to?: string; onPress?: () => void }) {
   const router = useRouter();
 
   return (
@@ -15,7 +15,9 @@ export function BackButton({ to }: { to?: string }) {
       accessibilityLabel="Go back"
       onPress={() => {
         haptic.light();
-        if (to) {
+        if (onPress) {
+          onPress();
+        } else if (to) {
           router.replace(to as never);
         } else if (router.canGoBack()) {
           router.back();

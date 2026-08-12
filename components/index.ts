@@ -30,3 +30,4 @@ export { AppointmentCard } from './ui/AppointmentCard';
 export { ActivityRow } from './ui/ActivityRow';
 export { InfoRow } from './ui/InfoRow';
 export { Stepper } from './ui/Stepper';
+export { VisualChoiceCards } from './ui/VisualChoiceCards';

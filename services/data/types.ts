@@ -11,6 +11,10 @@ export interface Pet {
   gender: PetGender;
   /** Year of birth. Age is derived from the current year. */
   birthYear: number;
+  isVaccinated?: boolean;
+  isSpayedNeutered?: boolean;
+  weightCategory?: string;
+  notes?: string;
   createdAt: string;
 }
 

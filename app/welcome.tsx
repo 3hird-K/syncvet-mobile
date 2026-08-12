@@ -8,6 +8,7 @@ import { colors, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { Logo } from '@components/ui/Logo';
+import { Button } from '@components/ui/Button';
 import { PhotoIllustration } from '@components/ui/PhotoIllustration';
 import { SocialAuthButton } from '@components/ui/SocialAuthButton';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
@@ -22,20 +23,25 @@ export default function WelcomeScreen() {
     router.push('/(auth)/google');
   };
 
+  const handleGetStarted = () => {
+    haptic.light();
+    router.push('/(auth)');
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Top Hero Canvas with Animated Floating Bubbles */}
+      {/* Top Hero Canvas with Animated Floating Paw Bubbles */}
       <View style={styles.heroCanvas}>
         <AnimatedBubbleBackground />
-        
+
         <View style={styles.logoRow}>
-          <Logo size={42} wordmarkSize={20} />
+          <Logo size={38} wordmarkSize={20} />
         </View>
 
         <View style={styles.heroIllustration}>
           <PhotoIllustration
             source={require('@assets/no-backgrounds/doctors-pets-removebg-preview.png')}
-            size={420}
+            size={380}
             accentColor={colors.primary}
           />
         </View>
@@ -45,23 +51,31 @@ export default function WelcomeScreen() {
       <View style={[styles.cardSheet, shadows.lg]}>
         {/* Floating Center Paw Badge */}
         <View style={[styles.floatingBadge, shadows.md]}>
-          <Ionicons name="paw" size={26} color={colors.white} />
+          <Ionicons name="paw" size={24} color={colors.white} />
         </View>
 
         <View style={styles.cardContent}>
           <Text style={styles.subtitle}>WELCOME TO SYNCVET</Text>
           <Text style={styles.headline}>Better care for your best friend.</Text>
           <Text style={styles.body}>
-            Access veterinary services from your City Veterinary Office, right from your phone.
+            Access city veterinary consultations, vaccinations, and pet health records right from your phone.
           </Text>
 
           <View style={styles.ctaWrap}>
+            <Button
+              title="Get Started"
+              size="lg"
+              onPress={handleGetStarted}
+              variant="primary"
+            />
+
             <SocialAuthButton
               onPress={handleGoogle}
               loading={connecting}
             />
+
             <Text style={styles.footnote}>
-              By continuing, you agree to our{' '}
+              By continuing, you agree to SyncVet’s{' '}
               <Text style={styles.link}>Terms</Text> and{' '}
               <Text style={styles.link}>Privacy Policy</Text>.
             </Text>
@@ -87,7 +101,7 @@ const styles = StyleSheet.create({
   },
   logoRow: {
     position: 'absolute',
-    top: 20,
+    top: 16,
     left: 24,
     zIndex: 10,
   },
@@ -102,7 +116,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     paddingHorizontal: 28,
-    paddingTop: 38,
+    paddingTop: 36,
     paddingBottom: 28,
     alignItems: 'center',
     position: 'relative',
@@ -111,9 +125,9 @@ const styles = StyleSheet.create({
   floatingBadge: {
     position: 'absolute',
     top: -26,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -129,7 +143,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   headline: {
     ...typography.heading2,
@@ -138,19 +152,19 @@ const styles = StyleSheet.create({
     fontSize: 23,
     lineHeight: 30,
     fontWeight: '700',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   body: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 21,
     maxWidth: 320,
   },
   ctaWrap: {
     width: '100%',
-    marginTop: 24,
+    marginTop: 20,
     gap: 12,
   },
   footnote: {

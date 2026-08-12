@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors, shadows, spacing, typography } from '@theme';
+import { colors, radius, shadows, spacing, typography } from '@theme';
 import { phoneRule, required } from '@lib/validation';
 import { haptic } from '@lib/haptics';
 import { useForm } from '@hooks/useForm';
@@ -16,7 +16,11 @@ import { BackButton } from '@components/ui/BackButton';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
-import { PhotoIllustration } from '@components/ui/PhotoIllustration';
+const CLINIC_OPTIONS = [
+  { label: 'Main City Vet Clinic', value: 'main' },
+  { label: 'District 1 Health Station', value: 'd1' },
+  { label: 'Mobile Vet Service', value: 'mobile' },
+];
 
 export default function OwnerRegistrationScreen() {
   const router = useRouter();
@@ -25,6 +29,7 @@ export default function OwnerRegistrationScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
   const [ready, setReady] = useState(false);
+  const [preferredClinic, setPreferredClinic] = useState('main');
 
   const { fields, setValue, validateField, validateAll } = useForm(
     {
@@ -70,40 +75,23 @@ export default function OwnerRegistrationScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        {/* Sleek Top Header Navigation Bar */}
+        <View style={styles.topHeaderNav}>
+          <BackButton />
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Top Hero Canvas with Animated Floating Paw Bubbles */}
-          <View style={styles.heroCanvas}>
-            <AnimatedBubbleBackground />
-            <View style={styles.backBtnWrap}>
-              <BackButton />
-            </View>
-
-            <View style={styles.heroIllustration}>
-              <PhotoIllustration
-                source={require('@assets/no-backgrounds/nurse-pets2.png')}
-                size={220}
-                accentColor={colors.primary}
-              />
-            </View>
-          </View>
-
-          {/* Curved Bottom Sheet Container */}
-          <View style={[styles.cardSheet, shadows.lg]}>
-            {/* Floating Center Badge Pill */}
-            <View style={[styles.floatingBadge, shadows.md]}>
-              <Ionicons name="person-outline" size={24} color={colors.white} />
-            </View>
-
+          <View style={styles.formContent}>
             <StepHeader
               step={1}
               total={2}
               title="Tell us about yourself"
-              subtitle="The City Veterinary Office uses these details to reach you about your pet’s care."
+              subtitle="The City Veterinary Office uses these details to contact you about your pet’s care and appointments."
             />
 
             <View style={styles.form}>
@@ -155,7 +143,6 @@ export default function OwnerRegistrationScreen() {
                 size="lg"
                 onPress={handleContinue}
                 loading={submitting}
-                rightIcon={<Ionicons name="arrow-forward" size={20} color={colors.white} />}
                 variant="primary"
               />
             </View>
@@ -169,64 +156,32 @@ export default function OwnerRegistrationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E6F5F2',
+    backgroundColor: colors.background,
   },
   flex: {
     flex: 1,
   },
+  topHeaderNav: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
   scrollContent: {
     flexGrow: 1,
-  },
-  heroCanvas: {
-    height: 190,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    zIndex: 1,
-  },
-  backBtnWrap: {
-    position: 'absolute',
-    top: 16,
-    left: 20,
-    zIndex: 20,
-  },
-  heroIllustration: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginBottom: -28,
-    zIndex: 1,
-  },
-  cardSheet: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
-    paddingHorizontal: 28,
-    paddingTop: 38,
+    paddingHorizontal: 24,
     paddingBottom: 28,
-    position: 'relative',
-    minHeight: 520,
-    zIndex: 10,
   },
-  floatingBadge: {
-    position: 'absolute',
-    top: -26,
-    alignSelf: 'center',
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: colors.white,
+  formContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingTop: 12,
   },
   form: {
     marginTop: spacing.xl,
     gap: spacing.lg,
   },
   multilineInput: {
-    minHeight: 56,
+    minHeight: 64,
     paddingTop: spacing.md,
   },
   bottom: {

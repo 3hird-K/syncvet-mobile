@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -7,14 +8,24 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+} from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
+import type { RefObject } from 'react';
 
-import { colors, radius, shadows, spacing, typography } from '@theme';
+import { colors, radius, spacing, typography } from '@theme';
 import {
   emailRule,
   evaluatePasswordStrength,
@@ -29,12 +40,12 @@ import { AuthError } from '@services/auth';
 import { Button } from '@components/ui/Button';
 import { Input } from '@components/ui/Input';
 import { PasswordInput } from '@components/ui/PasswordInput';
-import { Logo } from '@components/ui/Logo';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
-import { SegmentedControl } from '@components/ui/SegmentedControl';
-import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
+import { SocialAuthButton } from '@components/ui/SocialAuthButton';
 
-type AuthMode = 'signin' | 'signup';
+type AuthMode = 'signup' | 'signin';
+
+const PAGES: AuthMode[] = ['signup', 'signin'];
 
 const STRENGTH_META: Record<PasswordStrength, { label: string; color: string }> = {
   weak: { label: 'Weak', color: colors.error },
@@ -45,10 +56,272 @@ const STRENGTH_META: Record<PasswordStrength, { label: string; color: string }> 
 
 const STRENGTH_ORDER: PasswordStrength[] = ['weak', 'fair', 'good', 'strong'];
 
+interface FormLike {
+  fields: Record<string, { value: string; error?: string }>;
+  setValue: (name: string, value: string) => void;
+  validateField: (name: string) => void;
+}
+
+interface AuthSlideProps {
+  mode: AuthMode;
+  scrollX: SharedValue<number>;
+  index: number;
+  submitting: boolean;
+  connectingGoogle: boolean;
+  networkError?: string;
+  strength: PasswordStrength;
+  signInForm: FormLike;
+  signUpForm: FormLike;
+  signInPasswordRef: RefObject<TextInput | null>;
+  signUpEmailRef: RefObject<TextInput | null>;
+  signUpPasswordRef: RefObject<TextInput | null>;
+  onGoogle: () => void;
+  onForgot: () => void;
+  onSignIn: () => void;
+  onSignUp: () => void;
+  onSwitchMode: () => void;
+}
+
+function AuthSlide({
+  mode,
+  scrollX,
+  index,
+  submitting,
+  connectingGoogle,
+  networkError,
+  strength,
+  signInForm,
+  signUpForm,
+  signInPasswordRef,
+  signUpEmailRef,
+  signUpPasswordRef,
+  onGoogle,
+  onForgot,
+  onSignIn,
+  onSignUp,
+  onSwitchMode,
+}: AuthSlideProps) {
+  const { width } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
+  const isSignIn = mode === 'signin';
+  const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+
+  const strengthMeta = STRENGTH_META[strength];
+  const strengthIndex = STRENGTH_ORDER.indexOf(strength);
+
+  const contentStyle = useAnimatedStyle(() => {
+    if (reducedMotion) return {};
+    return {
+      opacity: interpolate(scrollX.value, inputRange, [0, 1, 0], Extrapolation.CLAMP),
+      transform: [
+        {
+          translateY: interpolate(
+            scrollX.value,
+            inputRange,
+            [24, 0, -24],
+            Extrapolation.CLAMP,
+          ),
+        },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View style={contentStyle}>
+      {/* Header Title Block */}
+      <View style={styles.headerBlock}>
+        <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
+        <Text style={styles.title}>
+          {isSignIn ? 'Welcome back' : 'Create an account'}
+        </Text>
+        <Text style={styles.subtitle}>
+          {isSignIn
+            ? 'Sign in to access your pet health records and book consultations.'
+            : 'Join SyncVet to connect with your City Veterinary Office.'}
+        </Text>
+      </View>
+
+      {/* Form Block */}
+      <View style={styles.form}>
+        {isSignIn ? (
+          <>
+            <Input
+              value={signInForm.fields.email.value}
+              onChangeText={(v) => signInForm.setValue('email', v)}
+              onBlur={() => signInForm.validateField('email')}
+              error={signInForm.fields.email.error}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="emailAddress"
+              autoComplete="email"
+              returnKeyType="next"
+              onSubmitEditing={() => signInPasswordRef.current?.focus()}
+              leftIcon={
+                <Ionicons name="mail-outline" size={20} color={colors.primary} />
+              }
+              placeholder="Email address"
+              editable={!submitting}
+            />
+
+            <PasswordInput
+              ref={signInPasswordRef}
+              value={signInForm.fields.password.value}
+              onChangeText={(v) => signInForm.setValue('password', v)}
+              onBlur={() => signInForm.validateField('password')}
+              error={signInForm.fields.password.error}
+              textContentType="password"
+              autoComplete="current-password"
+              returnKeyType="done"
+              onSubmitEditing={onSignIn}
+              leftIcon={
+                <Ionicons name="lock-closed-outline" size={20} color={colors.primary} />
+              }
+              placeholder="Password"
+              editable={!submitting}
+            />
+
+            <View style={styles.forgotRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onForgot}
+                hitSlop={8}
+              >
+                <Text style={styles.forgot}>Forgot password?</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <>
+            <Input
+              value={signUpForm.fields.fullName.value}
+              onChangeText={(v) => signUpForm.setValue('fullName', v)}
+              onBlur={() => signUpForm.validateField('fullName')}
+              error={signUpForm.fields.fullName.error}
+              returnKeyType="next"
+              onSubmitEditing={() => signUpEmailRef.current?.focus()}
+              leftIcon={
+                <Ionicons name="person-outline" size={20} color={colors.primary} />
+              }
+              placeholder="Full name"
+              editable={!submitting}
+            />
+
+            <Input
+              ref={signUpEmailRef}
+              value={signUpForm.fields.email.value}
+              onChangeText={(v) => signUpForm.setValue('email', v)}
+              onBlur={() => signUpForm.validateField('email')}
+              error={signUpForm.fields.email.error}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="emailAddress"
+              autoComplete="email"
+              returnKeyType="next"
+              onSubmitEditing={() => signUpPasswordRef.current?.focus()}
+              leftIcon={
+                <Ionicons name="mail-outline" size={20} color={colors.primary} />
+              }
+              placeholder="Email address"
+              editable={!submitting}
+            />
+
+            <View>
+              <PasswordInput
+                ref={signUpPasswordRef}
+                value={signUpForm.fields.password.value}
+                onChangeText={(v) => signUpForm.setValue('password', v)}
+                onBlur={() => signUpForm.validateField('password')}
+                error={signUpForm.fields.password.error}
+                textContentType="newPassword"
+                autoComplete="new-password"
+                returnKeyType="done"
+                onSubmitEditing={onSignUp}
+                leftIcon={
+                  <Ionicons name="lock-closed-outline" size={20} color={colors.primary} />
+                }
+                placeholder="Create password"
+                editable={!submitting}
+              />
+              {signUpForm.fields.password.value ? (
+                <View
+                  style={styles.strengthRow}
+                  accessibilityLabel={`Password strength: ${strengthMeta.label}`}
+                >
+                  <View style={styles.strengthBars}>
+                    {STRENGTH_ORDER.map((level, i) => (
+                      <View
+                        key={level}
+                        style={[
+                          styles.strengthBar,
+                          {
+                            backgroundColor:
+                              i <= strengthIndex ? strengthMeta.color : colors.border,
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={[styles.strengthLabel, { color: strengthMeta.color }]}>
+                    {strengthMeta.label}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </>
+        )}
+
+        {networkError ? <ErrorMessage message={networkError} /> : null}
+
+        <Button
+          title={isSignIn ? 'Sign In' : 'Create Account'}
+          size="lg"
+          onPress={isSignIn ? onSignIn : onSignUp}
+          loading={submitting}
+          variant="primary"
+        />
+
+        {/* Divider line */}
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Google Social Auth */}
+        <SocialAuthButton
+          onPress={onGoogle}
+          loading={connectingGoogle}
+          label={isSignIn ? 'Sign in with Google' : 'Sign up with Google'}
+        />
+
+        {/* Bottom Mode Switch Row */}
+        <View style={styles.modeSwitchRow}>
+          <Text style={styles.modeSwitchText}>
+            {isSignIn ? "Don't have an account? " : 'Already have an account? '}
+          </Text>
+          <Pressable
+            onPress={onSwitchMode}
+            hitSlop={8}
+          >
+            <Text style={styles.modeSwitchLink}>
+              {isSignIn ? 'Create Account' : 'Sign In'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function AuthScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const listRef = useRef<FlatList<AuthMode>>(null);
   const [mode, setMode] = useState<AuthMode>('signup'); // Default to Create Account per user's preference
   const [submitting, setSubmitting] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
 
   const signIn = useAuthStore((state) => state.signIn);
@@ -82,16 +355,42 @@ export default function AuthScreen() {
     () => evaluatePasswordStrength(signUpForm.fields.password.value),
     [signUpForm.fields.password.value],
   );
-  const strengthMeta = STRENGTH_META[strength];
-  const strengthIndex = STRENGTH_ORDER.indexOf(strength);
 
   const isSignIn = mode === 'signin';
 
-  const switchMode = useCallback((next: AuthMode) => {
+  const scrollX = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler((e) => {
+    scrollX.value = e.contentOffset.x;
+  });
+
+  const onMomentumScrollEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      const index = Math.round(e.nativeEvent.contentOffset.x / width);
+      setMode(PAGES[Math.max(0, Math.min(PAGES.length - 1, index))]);
+    },
+    [width],
+  );
+
+  const goToMode = useCallback(
+    (next: AuthMode) => {
+      haptic.light();
+      setMode(next);
+      const index = PAGES.indexOf(next);
+      listRef.current?.scrollToOffset({ offset: index * width, animated: true });
+    },
+    [width],
+  );
+
+  const handleGoogle = useCallback(async () => {
+    haptic.medium();
+    setConnectingGoogle(true);
+    router.push('/(auth)/google');
+  }, [router]);
+
+  const handleForgot = useCallback(() => {
     haptic.light();
-    setMode(next);
-    setNetworkError(undefined);
-  }, []);
+    router.push('/forgot-password');
+  }, [router]);
 
   const handleSignIn = useCallback(async () => {
     if (!signInForm.validateAll()) {
@@ -152,221 +451,82 @@ export default function AuthScreen() {
     }
   }, [signUpForm, signUp, router]);
 
+  const renderPage = useCallback(
+    ({ item, index }: { item: AuthMode; index: number }) => (
+      <View style={{ width }}>
+        <ScrollView
+          style={styles.pageScroll}
+          contentContainerStyle={styles.pageContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <AuthSlide
+            mode={item}
+            scrollX={scrollX}
+            index={index}
+            submitting={submitting}
+            connectingGoogle={connectingGoogle}
+            networkError={networkError}
+            strength={strength}
+            signInForm={signInForm}
+            signUpForm={signUpForm}
+            signInPasswordRef={signInPasswordRef}
+            signUpEmailRef={signUpEmailRef}
+            signUpPasswordRef={signUpPasswordRef}
+            onGoogle={handleGoogle}
+            onForgot={handleForgot}
+            onSignIn={handleSignIn}
+            onSignUp={handleSignUp}
+            onSwitchMode={() => goToMode(item === 'signin' ? 'signup' : 'signin')}
+          />
+        </ScrollView>
+      </View>
+    ),
+    [
+      width,
+      scrollX,
+      submitting,
+      connectingGoogle,
+      networkError,
+      strength,
+      signInForm,
+      signUpForm,
+      handleGoogle,
+      handleForgot,
+      handleSignIn,
+      handleSignUp,
+      goToMode,
+    ],
+  );
+
+  const keyExtractor = useCallback((item: AuthMode) => item, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+        {/* Side-by-side paged slides */}
+        <Animated.FlatList
+          ref={listRef}
+          data={PAGES}
+          renderItem={renderPage}
+          keyExtractor={keyExtractor}
+          horizontal
+          pagingEnabled
           bounces={false}
-        >
-          {/* Top Hero Canvas with Animated Floating Bubbles */}
-          <View style={styles.heroCanvas}>
-            <AnimatedBubbleBackground />
-
-            <View style={styles.logoHeader}>
-              <Logo size={42} wordmarkSize={20} />
-            </View>
-          </View>
-
-          {/* Curved Bottom Sheet Container */}
-          <View style={[styles.cardSheet, shadows.lg]}>
-            {/* Floating Overlap Center Badge Pill */}
-            <View style={[styles.floatingBadge, shadows.md]}>
-              <Ionicons
-                name={isSignIn ? 'key-outline' : 'person-add-outline'}
-                size={26}
-                color={colors.white}
-              />
-            </View>
-
-            <View style={styles.cardHeader}>
-              <Text style={styles.subtitleTag}>AUTHENTICATION</Text>
-              <Text style={styles.title}>Welcome to SyncVet</Text>
-              <Text style={styles.subtitle}>
-                Access veterinary services from your city, all in one place.
-              </Text>
-            </View>
-
-            <SegmentedControl<AuthMode>
-              options={[
-                { value: 'signin', label: 'Sign In' },
-                { value: 'signup', label: 'Create Account' },
-              ]}
-              value={mode}
-              onChange={switchMode}
-            />
-
-            <Animated.View
-              key={mode}
-              entering={FadeInDown.duration(260).springify().damping(22)}
-              exiting={FadeOut.duration(120)}
-              style={styles.form}
-            >
-              {isSignIn ? (
-                <>
-                  <Input
-                    label="Email address"
-                    value={signInForm.fields.email.value}
-                    onChangeText={(v) => signInForm.setValue('email', v)}
-                    onBlur={() => signInForm.validateField('email')}
-                    error={signInForm.fields.email.error}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="emailAddress"
-                    autoComplete="email"
-                    returnKeyType="next"
-                    onSubmitEditing={() => signInPasswordRef.current?.focus()}
-                    leftIcon={
-                      <Ionicons name="mail-outline" size={20} color={colors.textMuted} />
-                    }
-                    placeholder="you@example.com"
-                    editable={!submitting}
-                  />
-
-                  <PasswordInput
-                    ref={signInPasswordRef}
-                    label="Password"
-                    value={signInForm.fields.password.value}
-                    onChangeText={(v) => signInForm.setValue('password', v)}
-                    onBlur={() => signInForm.validateField('password')}
-                    error={signInForm.fields.password.error}
-                    textContentType="password"
-                    autoComplete="current-password"
-                    returnKeyType="done"
-                    onSubmitEditing={handleSignIn}
-                    leftIcon={
-                      <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />
-                    }
-                    placeholder="Enter your password"
-                    editable={!submitting}
-                  />
-
-                  <View style={styles.forgotRow}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        haptic.light();
-                        router.push('/forgot-password');
-                      }}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.forgot}>Forgot password?</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Input
-                    label="Full name"
-                    value={signUpForm.fields.fullName.value}
-                    onChangeText={(v) => signUpForm.setValue('fullName', v)}
-                    onBlur={() => signUpForm.validateField('fullName')}
-                    error={signUpForm.fields.fullName.error}
-                    returnKeyType="next"
-                    onSubmitEditing={() => signUpEmailRef.current?.focus()}
-                    leftIcon={
-                      <Ionicons name="person-outline" size={20} color={colors.textMuted} />
-                    }
-                    placeholder="Juan Dela Cruz"
-                    editable={!submitting}
-                  />
-
-                  <Input
-                    ref={signUpEmailRef}
-                    label="Email address"
-                    value={signUpForm.fields.email.value}
-                    onChangeText={(v) => signUpForm.setValue('email', v)}
-                    onBlur={() => signUpForm.validateField('email')}
-                    error={signUpForm.fields.email.error}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="emailAddress"
-                    autoComplete="email"
-                    returnKeyType="next"
-                    onSubmitEditing={() => signUpPasswordRef.current?.focus()}
-                    leftIcon={
-                      <Ionicons name="mail-outline" size={20} color={colors.textMuted} />
-                    }
-                    placeholder="you@example.com"
-                    editable={!submitting}
-                  />
-
-                  <View>
-                    <PasswordInput
-                      ref={signUpPasswordRef}
-                      label="Password"
-                      value={signUpForm.fields.password.value}
-                      onChangeText={(v) => signUpForm.setValue('password', v)}
-                      onBlur={() => signUpForm.validateField('password')}
-                      error={signUpForm.fields.password.error}
-                      helper={
-                        signUpForm.fields.password.value
-                          ? undefined
-                          : 'At least 8 characters.'
-                      }
-                      textContentType="newPassword"
-                      autoComplete="new-password"
-                      returnKeyType="done"
-                      onSubmitEditing={handleSignUp}
-                      leftIcon={
-                        <Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />
-                      }
-                      placeholder="Create a password"
-                      editable={!submitting}
-                    />
-                    {signUpForm.fields.password.value ? (
-                      <View
-                        style={styles.strengthRow}
-                        accessibilityLabel={`Password strength: ${strengthMeta.label}`}
-                      >
-                        <View style={styles.strengthBars}>
-                          {STRENGTH_ORDER.map((level, i) => (
-                            <View
-                              key={level}
-                              style={[
-                                styles.strengthBar,
-                                {
-                                  backgroundColor:
-                                    i <= strengthIndex ? strengthMeta.color : colors.border,
-                                },
-                              ]}
-                            />
-                          ))}
-                        </View>
-                        <Text style={[styles.strengthLabel, { color: strengthMeta.color }]}>
-                          {strengthMeta.label}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </>
-              )}
-
-              {networkError ? <ErrorMessage message={networkError} /> : null}
-
-              <Button
-                title={isSignIn ? 'Sign In' : 'Create Account'}
-                size="lg"
-                onPress={isSignIn ? handleSignIn : handleSignUp}
-                loading={submitting}
-                variant="primary"
-              />
-            </Animated.View>
-
-            <Text style={styles.terms}>
-              By continuing, you agree to the SyncVet{' '}
-              <Text style={styles.link}>Terms of Service</Text> and{' '}
-              <Text style={styles.link}>Privacy Policy</Text>.
-            </Text>
-          </View>
-        </ScrollView>
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={scrollHandler}
+          onMomentumScrollEnd={onMomentumScrollEnd}
+          getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+          keyboardShouldPersistTaps="handled"
+          initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          windowSize={4}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -375,77 +535,45 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E6F5F2',
+    backgroundColor: colors.background,
   },
   flex: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
+  pageScroll: {
+    flex: 1,
   },
-  heroCanvas: {
-    height: 140,
+  pageContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 20,
   },
-  logoHeader: {
-    marginTop: 10,
-  },
-  cardSheet: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
-    paddingHorizontal: 28,
-    paddingTop: 38,
-    paddingBottom: 28,
-    position: 'relative',
-    minHeight: 520,
-  },
-  floatingBadge: {
-    position: 'absolute',
-    top: -26,
-    alignSelf: 'center',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: colors.white,
-  },
-  cardHeader: {
-    alignItems: 'center',
-    marginBottom: spacing.xl,
+  headerBlock: {
+    marginBottom: spacing.lg,
   },
   subtitleTag: {
     ...typography.captionBold,
     color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   title: {
-    ...typography.heading2,
+    ...typography.heading1,
     color: colors.textPrimary,
-    textAlign: 'center',
-    fontSize: 23,
-    lineHeight: 30,
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: '700',
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
-    textAlign: 'center',
     marginTop: 6,
     fontSize: 14,
     lineHeight: 20,
-    maxWidth: 310,
   },
   form: {
-    marginTop: spacing.xl,
     gap: spacing.lg,
   },
   forgotRow: {
@@ -478,15 +606,38 @@ const styles = StyleSheet.create({
     width: 52,
     textAlign: 'right',
   },
-  terms: {
-    ...typography.small,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.xxl,
-    lineHeight: 18,
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+    gap: spacing.md,
   },
-  link: {
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    ...typography.smallBold,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  modeSwitchRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  modeSwitchText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  modeSwitchLink: {
+    ...typography.body,
+    fontWeight: '700',
     color: colors.primary,
+    fontSize: 14,
   },
 });
-
