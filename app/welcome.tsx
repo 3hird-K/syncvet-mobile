@@ -34,8 +34,8 @@ export default function WelcomeScreen() {
 
         <View style={styles.heroIllustration}>
           <PhotoIllustration
-            source={require('@assets/image2.png')}
-            size={220}
+            source={require('@assets/no-backgrounds/doctors-pets-removebg-preview.png')}
+            size={420}
             accentColor={colors.primary}
           />
         </View>
@@ -43,9 +43,9 @@ export default function WelcomeScreen() {
 
       {/* Curved Bottom Sheet Container */}
       <View style={[styles.cardSheet, shadows.lg]}>
-        {/* Floating Center Icon Badge */}
+        {/* Floating Center Paw Badge */}
         <View style={[styles.floatingBadge, shadows.md]}>
-          <Ionicons name="heart" size={26} color={colors.white} />
+          <Ionicons name="paw" size={26} color={colors.white} />
         </View>
 
         <View style={styles.cardContent}>
@@ -78,10 +78,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E6F5F2',
   },
   heroCanvas: {
-    flex: 1.1,
-    justifyContent: 'center',
+    flex: 1.35,
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: 20,
+    overflow: 'visible',
+    zIndex: 1,
   },
   logoRow: {
     position: 'absolute',
@@ -91,8 +93,9 @@ const styles = StyleSheet.create({
   },
   heroIllustration: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 30,
+    justifyContent: 'flex-end',
+    marginBottom: -32,
+    zIndex: 1,
   },
   cardSheet: {
     backgroundColor: colors.white,
@@ -103,6 +106,7 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     alignItems: 'center',
     position: 'relative',
+    zIndex: 10,
   },
   floatingBadge: {
     position: 'absolute',

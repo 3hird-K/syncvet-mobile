@@ -8,6 +8,11 @@ import { haptic } from '@lib/haptics';
 import type { Pet } from '@services/data';
 import { Avatar } from './Avatar';
 
+const PET_IMAGES: Record<string, any> = {
+  dog: require('@assets/no-backgrounds/dog2-removebg-preview.png'),
+  cat: require('@assets/no-backgrounds/cat1-removebg-preview.png'),
+};
+
 interface PetCardProps {
   pet: Pet;
   onPress?: () => void;
@@ -18,6 +23,7 @@ interface PetCardProps {
 /** Vertical pet card for lists/grids with photo tile, name, breed and age. */
 export function PetCard({ pet, onPress, onAdd, compact = false }: PetCardProps) {
   const age = formatAge(ageFromBirthYear(pet.birthYear));
+  const petImage = PET_IMAGES[pet.species] ?? PET_IMAGES.dog;
 
   return (
     <Pressable
@@ -33,6 +39,7 @@ export function PetCard({ pet, onPress, onAdd, compact = false }: PetCardProps) 
       <Avatar
         name={pet.name}
         size={compact ? 52 : 68}
+        photo={petImage}
         icon="paw"
       />
       <Text style={[styles.name, compact && styles.nameCompact]} numberOfLines={1}>

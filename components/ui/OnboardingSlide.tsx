@@ -82,9 +82,9 @@ export function OnboardingSlide({
 
       {/* Bottom Sheet Card Container */}
       <View style={[styles.cardSheet, shadows.lg]}>
-        {/* Floating Overlap Icon Badge */}
+        {/* Floating Center Paw Badge Bubble */}
         <View style={[styles.floatingBadge, { backgroundColor: badgeColor }, shadows.md]}>
-          <Ionicons name={iconName} size={26} color={colors.white} />
+          <Ionicons name="paw" size={26} color={colors.white} />
         </View>
 
         <Animated.View style={[styles.textWrap, contentStyle]}>
@@ -104,15 +104,18 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   topSection: {
-    flex: 1.15,
-    justifyContent: 'center',
+    flex: 1.35,
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingTop: 10,
     paddingHorizontal: 20,
+    overflow: 'visible',
+    zIndex: 1,
   },
   illustrationWrap: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: -32,
+    zIndex: 1,
   },
   cardSheet: {
     backgroundColor: colors.white,
@@ -124,6 +127,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
     minHeight: 280,
+    zIndex: 10,
   },
   floatingBadge: {
     position: 'absolute',

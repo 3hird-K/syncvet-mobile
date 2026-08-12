@@ -17,20 +17,36 @@ export interface OnboardingSlideData {
 
 type IllustrationProps = { size?: number };
 
-const DiscoverPhoto = ({ size }: IllustrationProps) => (
-  <PhotoIllustration source={require('@assets/image.png')} size={size} accentColor={colors.primary} />
+const DiscoverPhoto = ({ size = 450 }: IllustrationProps) => (
+  <PhotoIllustration
+    source={require('@assets/no-backgrounds/nurse-pets-removebg-preview.png')}
+    size={size}
+    accentColor={colors.primary}
+  />
 );
 
 const RegisterPhoto = ({ size }: IllustrationProps) => (
-  <PhotoIllustration source={require('@assets/boy-child.png')} size={size} accentColor={colors.primary} />
+  <PhotoIllustration
+    source={require('@assets/no-backgrounds/nurse-pets-removebg-preview.png')}
+    size={size}
+    accentColor={colors.primary}
+  />
 );
 
 const UpdatesPhoto = ({ size }: IllustrationProps) => (
-  <PhotoIllustration source={require('@assets/image.png')} size={size} accentColor={colors.primary} />
+  <PhotoIllustration
+    source={require('@assets/no-backgrounds/dog11-removebg-preview.png')}
+    size={size}
+    accentColor={colors.primary}
+  />
 );
 
 const WelcomePhoto = ({ size }: IllustrationProps) => (
-  <PhotoIllustration source={require('@assets/image2.png')} size={size} accentColor={colors.primary} />
+  <PhotoIllustration
+    source={require('@assets/no-backgrounds/nurse-pets2.png')}
+    size={size}
+    accentColor={colors.primary}
+  />
 );
 
 export const ONBOARDING_SLIDES: OnboardingSlideData[] = [

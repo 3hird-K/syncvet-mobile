@@ -9,6 +9,7 @@ interface PhotoIllustrationProps {
   size?: number;
   borderRadius?: number;
   accentColor?: string;
+  transparent?: boolean;
 }
 
 /**
@@ -17,11 +18,25 @@ interface PhotoIllustrationProps {
  */
 export function PhotoIllustration({
   source,
-  size = 230,
+  size = 320,
   borderRadius = radius.xxl,
   accentColor = colors.primary,
+  transparent = true,
 }: PhotoIllustrationProps) {
-  const haloSize = size + 20;
+  if (transparent) {
+    return (
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }}>
+        <Image
+          source={source}
+          style={styles.imageContain}
+          resizeMode="contain"
+          accessibilityRole="image"
+        />
+      </View>
+    );
+  }
+
+  const haloSize = size + 28;
 
   return (
     <View style={[styles.outerContainer, { width: haloSize, height: haloSize }]}>
@@ -66,14 +81,26 @@ const styles = StyleSheet.create({
   },
   ambientHalo: {
     position: 'absolute',
-    opacity: 0.14,
-    transform: [{ scale: 1.08 }],
+    opacity: 0.16,
+    transform: [{ scale: 1.12 }],
+  },
+  innerHalo: {
+    position: 'absolute',
+    opacity: 0.6,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
   },
   wrap: {
     overflow: 'hidden',
     backgroundColor: colors.surface,
   },
   image: {
+    width: '100%',
+    height: '100%',
+  },
+  imageContain: {
     width: '100%',
     height: '100%',
   },
@@ -87,4 +114,5 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.4)',
   },
 });
+
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, typography } from '@theme';
@@ -7,8 +8,8 @@ import { colors, typography } from '@theme';
 interface AvatarProps {
   name: string;
   size?: number;
-  photoUrl?: string | null;
-  photo?: string | null;
+  photoUrl?: string | ImageSourcePropType | null;
+  photo?: string | ImageSourcePropType | null;
   icon?: 'paw' | 'person';
 }
 
@@ -46,15 +47,17 @@ export function Avatar({
   photo,
   icon = 'person',
 }: AvatarProps) {
-  const source = photoUrl ?? photo;
+  const rawSource = photoUrl ?? photo;
   const palette = AVATAR_PALETTE[hashString(name) % AVATAR_PALETTE.length];
 
-  if (source) {
+  if (rawSource) {
+    const imageSource = typeof rawSource === 'string' ? { uri: rawSource } : rawSource;
     return (
       <View style={[styles.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
         <Image
-          source={{ uri: source }}
+          source={imageSource}
           style={styles.image}
+          resizeMode="cover"
           accessibilityRole="image"
         />
       </View>

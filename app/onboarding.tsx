@@ -88,6 +88,7 @@ export default function OnboardingScreen() {
   const renderItem = useCallback(
     ({ item, index }: { item: (typeof ONBOARDING_SLIDES)[number]; index: number }) => {
       const Illustration = item.illustration;
+      const illustrationSize = index === 0 ? 450 : 380;
       return (
         <View style={{ width }}>
           <OnboardingSlide
@@ -97,7 +98,7 @@ export default function OnboardingScreen() {
             iconName={item.iconName}
             accentBg={item.accentBg}
             badgeColor={item.badgeColor}
-            illustration={<Illustration size={220} />}
+            illustration={<Illustration size={illustrationSize} />}
             scrollX={scrollX}
             index={index}
           />

@@ -8,6 +8,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 
 interface BubbleProps {
   size: number;
@@ -19,6 +20,7 @@ interface BubbleProps {
   duration?: number;
   moveY?: number;
   moveX?: number;
+  showPaw?: boolean;
 }
 
 function FloatingBubble({
@@ -31,6 +33,7 @@ function FloatingBubble({
   duration = 3800,
   moveY = 18,
   moveX = 10,
+  showPaw = true,
 }: BubbleProps) {
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -73,6 +76,8 @@ function FloatingBubble({
     ],
   }));
 
+  const iconSize = Math.round(size * 0.32);
+
   return (
     <Animated.View
       style={[
@@ -86,11 +91,21 @@ function FloatingBubble({
           left,
           right,
           bottom,
+          alignItems: 'center',
+          justifyContent: 'center',
         },
         animatedStyle,
       ]}
       pointerEvents="none"
-    />
+    >
+      {showPaw && size >= 65 ? (
+        <Ionicons
+          name="paw"
+          size={iconSize}
+          color="rgba(15, 123, 110, 0.22)"
+        />
+      ) : null}
+    </Animated.View>
   );
 }
 
