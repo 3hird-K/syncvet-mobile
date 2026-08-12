@@ -93,8 +93,9 @@ export default function SplashScreen() {
     <View style={styles.container}>
       <Animated.View style={[styles.iconWrap, iconStyle]}>
         <Image
-          source={require('@assets/icon.png')}
+          source={require('@assets/boy-child.png')}
           style={styles.appIcon}
+          resizeMode="cover"
           accessibilityRole="image"
           accessibilityLabel="SyncVet logo"
         />

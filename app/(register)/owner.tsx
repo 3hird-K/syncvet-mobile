@@ -16,6 +16,8 @@ import { BackButton } from '@components/ui/BackButton';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
+import { PhotoIllustration } from '@components/ui/PhotoIllustration';
+
 export default function OwnerRegistrationScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -74,11 +76,19 @@ export default function OwnerRegistrationScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Top Hero Canvas with Animated Floating Bubbles */}
+          {/* Top Hero Canvas with Animated Floating Paw Bubbles */}
           <View style={styles.heroCanvas}>
             <AnimatedBubbleBackground />
             <View style={styles.backBtnWrap}>
               <BackButton />
+            </View>
+
+            <View style={styles.heroIllustration}>
+              <PhotoIllustration
+                source={require('@assets/no-backgrounds/nurse-pets2.png')}
+                size={220}
+                accentColor={colors.primary}
+              />
             </View>
           </View>
 
@@ -86,7 +96,7 @@ export default function OwnerRegistrationScreen() {
           <View style={[styles.cardSheet, shadows.lg]}>
             {/* Floating Center Badge Pill */}
             <View style={[styles.floatingBadge, shadows.md]}>
-              <Ionicons name="person-outline" size={26} color={colors.white} />
+              <Ionicons name="person-outline" size={24} color={colors.white} />
             </View>
 
             <StepHeader
@@ -104,7 +114,7 @@ export default function OwnerRegistrationScreen() {
                 onBlur={() => validateField('fullName')}
                 error={fields.fullName.error}
                 returnKeyType="next"
-                leftIcon={<Ionicons name="person-outline" size={20} color={colors.textMuted} />}
+                leftIcon={<Ionicons name="person-outline" size={20} color={colors.primary} />}
                 placeholder="Your full name"
                 editable={!submitting}
               />
@@ -118,7 +128,7 @@ export default function OwnerRegistrationScreen() {
                 textContentType="telephoneNumber"
                 autoComplete="tel"
                 returnKeyType="next"
-                leftIcon={<Ionicons name="phone-portrait-outline" size={20} color={colors.textMuted} />}
+                leftIcon={<Ionicons name="call-outline" size={20} color={colors.primary} />}
                 placeholder="09xx xxx xxxx"
                 editable={!submitting}
               />
@@ -131,7 +141,7 @@ export default function OwnerRegistrationScreen() {
                 multiline
                 textContentType="fullStreetAddress"
                 returnKeyType="done"
-                leftIcon={<Ionicons name="home-outline" size={20} color={colors.textMuted} />}
+                leftIcon={<Ionicons name="location-outline" size={20} color={colors.primary} />}
                 placeholder="Street, barangay, city"
                 editable={!submitting}
                 style={styles.multilineInput}
@@ -141,7 +151,7 @@ export default function OwnerRegistrationScreen() {
             <View style={styles.bottom}>
               {networkError ? <ErrorMessage message={networkError} /> : null}
               <Button
-                title="Continue"
+                title="Continue to Pet Profile"
                 size="lg"
                 onPress={handleContinue}
                 loading={submitting}
@@ -166,18 +176,25 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'space-between',
   },
   heroCanvas: {
-    height: 120,
-    justifyContent: 'center',
+    height: 190,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
     paddingHorizontal: 20,
+    zIndex: 1,
   },
   backBtnWrap: {
     position: 'absolute',
     top: 16,
     left: 20,
-    zIndex: 10,
+    zIndex: 20,
+  },
+  heroIllustration: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: -28,
+    zIndex: 1,
   },
   cardSheet: {
     flex: 1,
@@ -189,14 +206,15 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     position: 'relative',
     minHeight: 520,
+    zIndex: 10,
   },
   floatingBadge: {
     position: 'absolute',
     top: -26,
     alignSelf: 'center',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',

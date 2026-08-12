@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +29,10 @@ import { ChoiceChips } from '@components/ui/ChoiceChips';
 import { Stepper } from '@components/ui/Stepper';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
+import { PhotoIllustration } from '@components/ui/PhotoIllustration';
+
+const DOG_BREEDS = ['Golden Retriever', 'Labrador', 'Shih Tzu', 'Poodle', 'Aspin', 'Beagle'];
+const CAT_BREEDS = ['Persian', 'Siamese', 'Domestic Short Hair', 'Puspin', 'Bengal'];
 
 export default function PetRegistrationScreen() {
   const router = useRouter();
@@ -48,6 +53,21 @@ export default function PetRegistrationScreen() {
       breed: [required('Enter your pet’s breed.')],
     },
   );
+
+  const handleSpeciesChange = (newSpecies: Species) => {
+    haptic.light();
+    setSpecies(newSpecies);
+    // Clear or suggest default breed if empty
+    if (!fields.breed.value) {
+      setValue('breed', newSpecies === 'dog' ? 'Golden Retriever' : 'Persian');
+    }
+  };
+
+  const handleBreedPreset = (breedName: string) => {
+    haptic.light();
+    setValue('breed', breedName);
+    validateField('breed');
+  };
 
   const handleSave = useCallback(async () => {
     if (!validateAll()) {
@@ -78,6 +98,13 @@ export default function PetRegistrationScreen() {
     }
   }, [validateAll, user?.id, addPet, fields.name.value, fields.breed.value, species, gender, age, router]);
 
+  const heroImage =
+    species === 'cat'
+      ? require('@assets/no-backgrounds/cat1-removebg-preview.png')
+      : require('@assets/no-backgrounds/dog2-removebg-preview.png');
+
+  const breedPresets = species === 'dog' ? DOG_BREEDS : CAT_BREEDS;
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
@@ -90,11 +117,19 @@ export default function PetRegistrationScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Top Hero Canvas with Animated Floating Bubbles */}
+          {/* Top Hero Canvas with Dynamic Species Cutout Illustration */}
           <View style={styles.heroCanvas}>
             <AnimatedBubbleBackground />
             <View style={styles.backBtnWrap}>
               <BackButton />
+            </View>
+
+            <View style={styles.heroIllustration}>
+              <PhotoIllustration
+                source={heroImage}
+                size={230}
+                accentColor={colors.primary}
+              />
             </View>
           </View>
 
@@ -102,17 +137,18 @@ export default function PetRegistrationScreen() {
           <View style={[styles.cardSheet, shadows.lg]}>
             {/* Floating Center Badge Pill */}
             <View style={[styles.floatingBadge, shadows.md]}>
-              <Ionicons name="paw-outline" size={26} color={colors.white} />
+              <Ionicons name="paw" size={24} color={colors.white} />
             </View>
 
             <StepHeader
               step={2}
               total={2}
               title="Now, tell us about your pet"
-              subtitle="Your pet’s health profile helps the city veterinary office prepare for their visit."
+              subtitle="Your pet’s health profile helps the City Veterinary Office prepare for their visit."
             />
 
             <View style={styles.form}>
+              {/* Pet Name */}
               <Input
                 label="Pet name"
                 value={fields.name.value}
@@ -121,11 +157,12 @@ export default function PetRegistrationScreen() {
                 error={fields.name.error}
                 returnKeyType="next"
                 onSubmitEditing={() => breedRef.current?.focus()}
-                leftIcon={<Ionicons name="paw-outline" size={20} color={colors.textMuted} />}
-                placeholder="e.g. Milo"
+                leftIcon={<Ionicons name="paw-outline" size={20} color={colors.primary} />}
+                placeholder="e.g. Milo or Luna"
                 editable={!submitting}
               />
 
+              {/* Species Selection */}
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Species</Text>
                 <ChoiceChips<Species>
@@ -134,40 +171,76 @@ export default function PetRegistrationScreen() {
                     { label: '🐈 Cat', value: 'cat' },
                   ]}
                   value={species}
-                  onChange={setSpecies}
+                  onChange={handleSpeciesChange}
                 />
               </View>
 
-              <Input
-                ref={breedRef}
-                label="Breed"
-                value={fields.breed.value}
-                onChangeText={(v) => setValue('breed', v)}
-                onBlur={() => validateField('breed')}
-                error={fields.breed.error}
-                returnKeyType="done"
-                leftIcon={<Ionicons name="ribbon-outline" size={20} color={colors.textMuted} />}
-                placeholder="e.g. Golden Retriever"
-                editable={!submitting}
-              />
+              {/* Breed Input with Quick Presets */}
+              <View style={styles.fieldBlock}>
+                <Input
+                  ref={breedRef}
+                  label="Breed"
+                  value={fields.breed.value}
+                  onChangeText={(v) => setValue('breed', v)}
+                  onBlur={() => validateField('breed')}
+                  error={fields.breed.error}
+                  returnKeyType="done"
+                  leftIcon={<Ionicons name="ribbon-outline" size={20} color={colors.primary} />}
+                  placeholder="e.g. Golden Retriever"
+                  editable={!submitting}
+                />
+                <View style={styles.presetsRow}>
+                  <Text style={styles.presetHint}>Quick pick:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetsScroll}>
+                    {breedPresets.map((preset) => (
+                      <Pressable
+                        key={preset}
+                        onPress={() => handleBreedPreset(preset)}
+                        style={({ pressed }) => [
+                          styles.presetChip,
+                          fields.breed.value === preset && styles.presetChipActive,
+                          pressed && styles.presetChipPressed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.presetText,
+                            fields.breed.value === preset && styles.presetTextActive,
+                          ]}
+                        >
+                          {preset}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
 
+              {/* Gender Selection */}
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Gender</Text>
                 <ChoiceChips<PetGender>
                   options={[
-                    { label: 'Male', value: 'male' },
-                    { label: 'Female', value: 'female' },
+                    { label: '♂ Male', value: 'male' },
+                    { label: '♀ Female', value: 'female' },
                   ]}
                   value={gender}
-                  onChange={setGender}
+                  onChange={(g) => {
+                    haptic.light();
+                    setGender(g);
+                  }}
                 />
               </View>
 
+              {/* Age Stepper */}
               <View style={styles.fieldBlock}>
                 <Text style={styles.label}>Age</Text>
                 <Stepper
                   value={age}
-                  onChange={setAge}
+                  onChange={(a) => {
+                    haptic.light();
+                    setAge(a);
+                  }}
                   min={0}
                   max={25}
                   label={(v) => (v === 0 ? 'Under a year' : v === 1 ? '1 year old' : `${v} years old`)}
@@ -178,11 +251,11 @@ export default function PetRegistrationScreen() {
             <View style={styles.bottom}>
               {networkError ? <ErrorMessage message={networkError} /> : null}
               <Button
-                title="Save & Continue"
+                title="Complete Registration"
                 size="lg"
                 onPress={handleSave}
                 loading={submitting}
-                rightIcon={<Ionicons name="arrow-forward" size={20} color={colors.white} />}
+                rightIcon={<Ionicons name="checkmark-circle" size={22} color={colors.white} />}
                 variant="primary"
               />
             </View>
@@ -203,18 +276,25 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'space-between',
   },
   heroCanvas: {
-    height: 120,
-    justifyContent: 'center',
+    height: 190,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
     paddingHorizontal: 20,
+    zIndex: 1,
   },
   backBtnWrap: {
     position: 'absolute',
     top: 16,
     left: 20,
-    zIndex: 10,
+    zIndex: 20,
+  },
+  heroIllustration: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: -28,
+    zIndex: 1,
   },
   cardSheet: {
     flex: 1,
@@ -225,15 +305,16 @@ const styles = StyleSheet.create({
     paddingTop: 38,
     paddingBottom: 28,
     position: 'relative',
-    minHeight: 560,
+    minHeight: 600,
+    zIndex: 10,
   },
   floatingBadge: {
     position: 'absolute',
     top: -26,
     alignSelf: 'center',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -245,11 +326,47 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
   },
   fieldBlock: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   label: {
     ...typography.label,
     color: colors.textSecondary,
+  },
+  presetsRow: {
+    marginTop: 4,
+    gap: 6,
+  },
+  presetHint: {
+    ...typography.small,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  presetsScroll: {
+    gap: 8,
+    paddingVertical: 4,
+  },
+  presetChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  presetChipActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
+  presetChipPressed: {
+    opacity: 0.8,
+  },
+  presetText: {
+    ...typography.smallBold,
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  presetTextActive: {
+    color: colors.primaryDark,
   },
   bottom: {
     marginTop: spacing.xxl,

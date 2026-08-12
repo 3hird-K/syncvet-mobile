@@ -14,12 +14,12 @@ export interface OnboardingSlideData {
   illustration: ComponentType<{ size?: number }>;
   isAuthSlide?: boolean;
 }
-
+ 
 type IllustrationProps = { size?: number };
 
 const DiscoverPhoto = ({ size = 450 }: IllustrationProps) => (
   <PhotoIllustration
-    source={require('@assets/no-backgrounds/nurse-pets-removebg-preview.png')}
+    source={require('@assets/no-backgrounds/nurse1-removebg-preview.png')}
     size={size}
     accentColor={colors.primary}
   />
