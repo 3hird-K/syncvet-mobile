@@ -9,8 +9,10 @@ import { phoneRule, required } from '@lib/validation';
 import { haptic } from '@lib/haptics';
 import { useForm } from '@hooks/useForm';
 import { useAuthStore } from '@store/useAuthStore';
+import Animated, { FadeIn, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import { Button } from '@components/ui/Button';
 import { Input } from '@components/ui/Input';
+import { AddressPicker } from '@components/ui/AddressPicker';
 import { StepHeader } from '@components/ui/StepHeader';
 import { BackButton } from '@components/ui/BackButton';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
@@ -69,6 +71,9 @@ export default function OwnerRegistrationScreen() {
     }
   }, [validateAll, saveOwnerProfile, fields.mobileNumber.value, fields.address.value, router]);
 
+  const reducedMotion = useReducedMotion();
+  const enterAnim = reducedMotion ? FadeIn.duration(120) : ZoomIn.duration(280);
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
@@ -94,7 +99,7 @@ export default function OwnerRegistrationScreen() {
               subtitle="The City Veterinary Office uses these details to contact you about your pet’s care and appointments."
             />
 
-            <View style={styles.form}>
+            <Animated.View entering={enterAnim} style={styles.form}>
               <Input
                 value={fields.fullName.value}
                 onChangeText={(v) => setValue('fullName', v)}
@@ -119,20 +124,16 @@ export default function OwnerRegistrationScreen() {
                 placeholder="Mobile number (09xxxxxxxxx)"
                 editable={!submitting}
               />
-              <Input
+              <AddressPicker
                 value={fields.address.value}
-                onChangeText={(v) => setValue('address', v)}
-                onBlur={() => validateField('address')}
+                onChange={(v) => {
+                  setValue('address', v);
+                  validateField('address');
+                }}
                 error={fields.address.error}
-                multiline
-                textContentType="fullStreetAddress"
-                returnKeyType="done"
-                leftIcon={<Ionicons name="location-outline" size={20} color={colors.primary} />}
-                placeholder="Complete home address"
                 editable={!submitting}
-                style={styles.multilineInput}
               />
-            </View>
+            </Animated.View>
 
             <View style={styles.bottom}>
               {networkError ? <ErrorMessage message={networkError} /> : null}

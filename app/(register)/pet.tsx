@@ -20,6 +20,7 @@ import { useForm } from '@hooks/useForm';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import type { PetGender, Species } from '@services/data';
+import Animated, { FadeIn, ZoomIn, useReducedMotion } from 'react-native-reanimated';
 import { Button } from '@components/ui/Button';
 import { Input } from '@components/ui/Input';
 import { StepHeader } from '@components/ui/StepHeader';
@@ -72,15 +73,15 @@ export default function PetRegistrationScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
 
-  // Sub-step wizard state inside Step 2 (1: Identity, 2: Breed & Age, 3: Health)
-  const [subPart, setSubPart] = useState<1 | 2 | 3>(1);
+  // Sub-step wizard state inside Step 2 (1: Identity, 2: Breed & Age, 3: Health & Vaccines, 4: Weight & Notes)
+  const [subPart, setSubPart] = useState<1 | 2 | 3 | 4>(1);
 
   // Part 1 & 2 state
   const [species, setSpecies] = useState<Species>('dog');
   const [gender, setGender] = useState<PetGender>('male');
   const [age, setAge] = useState(1);
 
-  // Part 3 health state
+  // Part 3 & 4 state
   const [isVaccinated, setIsVaccinated] = useState<'yes' | 'no' | 'unknown'>('yes');
   const [isSpayedNeutered, setIsSpayedNeutered] = useState<'yes' | 'no' | 'unknown'>('no');
   const [weightCategory, setWeightCategory] = useState<'small' | 'medium' | 'large'>('medium');
@@ -129,9 +130,15 @@ export default function PetRegistrationScreen() {
     setSubPart(3);
   };
 
+  const handlePart3Next = () => {
+    haptic.light();
+    setSubPart(4);
+  };
+
   const handlePrevious = () => {
     haptic.light();
-    if (subPart === 3) setSubPart(2);
+    if (subPart === 4) setSubPart(3);
+    else if (subPart === 3) setSubPart(2);
     else if (subPart === 2) setSubPart(1);
   };
 
@@ -170,10 +177,15 @@ export default function PetRegistrationScreen() {
 
   const partSubtitle =
     subPart === 1
-      ? 'Part 1 of 3: Basic Pet Identity'
+      ? 'Part 1 of 4: Basic Pet Identity'
       : subPart === 2
-      ? 'Part 2 of 3: Breed & Age Details'
-      : 'Part 3 of 3: Health & Vaccination Record';
+      ? 'Part 2 of 4: Breed & Age Details'
+      : subPart === 3
+      ? 'Part 3 of 4: Health & Vaccines'
+      : 'Part 4 of 4: Physical & Care Profile';
+
+  const reducedMotion = useReducedMotion();
+  const enterAnim = reducedMotion ? FadeIn.duration(120) : ZoomIn.duration(260);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -205,11 +217,12 @@ export default function PetRegistrationScreen() {
               <View style={[styles.subProgressSeg, subPart >= 1 && styles.subProgressSegActive]} />
               <View style={[styles.subProgressSeg, subPart >= 2 && styles.subProgressSegActive]} />
               <View style={[styles.subProgressSeg, subPart >= 3 && styles.subProgressSegActive]} />
+              <View style={[styles.subProgressSeg, subPart >= 4 && styles.subProgressSegActive]} />
             </View>
 
             {/* PART 1: IDENTITY */}
             {subPart === 1 ? (
-              <View style={styles.form}>
+              <Animated.View key="subpart-1" entering={enterAnim} style={styles.form}>
                 <Input
                   value={fields.name.value}
                   onChangeText={(v) => setValue('name', v)}
@@ -277,12 +290,12 @@ export default function PetRegistrationScreen() {
                     }}
                   />
                 </View>
-              </View>
+              </Animated.View>
             ) : null}
 
             {/* PART 2: BREED & AGE */}
             {subPart === 2 ? (
-              <View style={styles.form}>
+              <Animated.View key="subpart-2" entering={enterAnim} style={styles.form}>
                 <View style={styles.fieldBlock}>
                   <Text style={styles.sectionLabel}>
                     {species === 'dog' ? 'Dog Breed' : 'Cat Breed'}
@@ -340,14 +353,27 @@ export default function PetRegistrationScreen() {
                   <View style={styles.labelWithBadgeRow}>
                     <Text style={styles.sectionLabel}>Pet Age</Text>
                     <View style={styles.ageBadge}>
+                      <Ionicons
+                        name={
+                          age === 0
+                            ? 'paw-outline'
+                            : age <= 3
+                            ? 'sparkles'
+                            : age <= 7
+                            ? 'star-outline'
+                            : 'shield-outline'
+                        }
+                        size={12}
+                        color={colors.primaryDark}
+                      />
                       <Text style={styles.ageBadgeText}>
                         {age === 0
-                          ? '🐾 Under a year'
+                          ? 'Under 1 yr (Puppy / Kitten)'
                           : age <= 3
-                          ? `✨ Young (${age} yr${age > 1 ? 's' : ''})`
+                          ? `Young Adult (${age} yr${age > 1 ? 's' : ''})`
                           : age <= 7
-                          ? `🌟 Adult (${age} yrs)`
-                          : `👑 Senior (${age} yrs)`}
+                          ? `Adult (${age} yrs)`
+                          : `Senior Pet (${age} yrs)`}
                       </Text>
                     </View>
                   </View>
@@ -362,12 +388,12 @@ export default function PetRegistrationScreen() {
                     label={(v) => (v === 0 ? 'Under 1 year' : v === 1 ? '1 year old' : `${v} years old`)}
                   />
                 </View>
-              </View>
+              </Animated.View>
             ) : null}
 
-            {/* PART 3: HEALTH PROFILE */}
+            {/* PART 3: HEALTH & VACCINATION RECORD */}
             {subPart === 3 ? (
-              <View style={styles.form}>
+              <Animated.View key="subpart-3" entering={enterAnim} style={styles.form}>
                 <View style={styles.fieldBlock}>
                   <Text style={styles.sectionLabel}>Anti-Rabies Vaccination</Text>
                   <VisualChoiceCards<'yes' | 'no' | 'unknown'>
@@ -443,7 +469,12 @@ export default function PetRegistrationScreen() {
                     }}
                   />
                 </View>
+              </Animated.View>
+            ) : null}
 
+            {/* PART 4: PHYSICAL & CARE PROFILE */}
+            {subPart === 4 ? (
+              <Animated.View key="subpart-4" entering={enterAnim} style={styles.form}>
                 <View style={styles.fieldBlock}>
                   <Text style={styles.sectionLabel}>Estimated Weight Category</Text>
                   <VisualChoiceCards<'small' | 'medium' | 'large'>
@@ -494,7 +525,7 @@ export default function PetRegistrationScreen() {
                     style={styles.multilineInput}
                   />
                 </View>
-              </View>
+              </Animated.View>
             ) : null}
 
             {/* Bottom Actions */}
@@ -510,30 +541,30 @@ export default function PetRegistrationScreen() {
                   showPaw
                 />
               ) : subPart === 2 ? (
-                <View style={styles.btnRow}>
-                  <View style={styles.halfBtn}>
-                    <Button title="Back" size="lg" onPress={handlePrevious} variant="outline" />
-                  </View>
-                  <View style={styles.halfBtn}>
-                    <Button title="Next: Health" size="lg" onPress={handlePart2Next} variant="primary" showPaw />
-                  </View>
-                </View>
+                <Button
+                  title="Continue to Vaccines & Health"
+                  size="lg"
+                  onPress={handlePart2Next}
+                  variant="primary"
+                  showPaw
+                />
+              ) : subPart === 3 ? (
+                <Button
+                  title="Continue to Weight & Notes"
+                  size="lg"
+                  onPress={handlePart3Next}
+                  variant="primary"
+                  showPaw
+                />
               ) : (
-                <View style={styles.btnRow}>
-                  <View style={styles.halfBtn}>
-                    <Button title="Back" size="lg" onPress={handlePrevious} variant="outline" />
-                  </View>
-                  <View style={styles.halfBtn}>
-                    <Button
-                      title="Complete Registration"
-                      size="lg"
-                      onPress={handleSaveComplete}
-                      loading={submitting}
-                      variant="primary"
-                      showPaw
-                    />
-                  </View>
-                </View>
+                <Button
+                  title="Complete Registration"
+                  size="lg"
+                  onPress={handleSaveComplete}
+                  loading={submitting}
+                  variant="primary"
+                  showPaw
+                />
               )}
             </View>
           </View>
@@ -583,7 +614,7 @@ const styles = StyleSheet.create({
   },
   form: {
     marginTop: spacing.lg,
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
   fieldBlock: {
     gap: spacing.sm,
@@ -599,6 +630,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   ageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radius.pill,

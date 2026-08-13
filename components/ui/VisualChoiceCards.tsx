@@ -132,7 +132,7 @@ function RowCardOption<T extends string>({
               },
             ]}
           >
-            <Ionicons name={option.iconName} size={20} color={iconColor} />
+            <Ionicons name={option.iconName} size={18} color={iconColor} />
           </View>
         ) : null}
 
@@ -243,40 +243,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   rowCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.xl,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.border,
-    minHeight: 88,
+    minHeight: 52,
     position: 'relative',
-    gap: 6,
+    gap: 10,
   },
   rowIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rowTextWrap: {
-    alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
   },
   rowTitle: {
     ...typography.captionBold,
     fontSize: 14,
     color: colors.textPrimary,
-    textAlign: 'center',
   },
   rowSubtitle: {
     ...typography.small,
     fontSize: 11,
     color: colors.textMuted,
-    textAlign: 'center',
     marginTop: 1,
   },
   stackContainer: {
