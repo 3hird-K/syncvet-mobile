@@ -26,79 +26,8 @@ function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/** First-run demo data so the redesigned dashboard is reviewable immediately. */
-function buildSeed(ownerId: string): OwnerData {
-  const now = new Date();
-  const upcoming = toISODate(addDays(5, now));
-  const past = toISODate(addDays(-12, now));
-  const pets: Pet[] = [
-    {
-      id: uid('pet'),
-      ownerId,
-      name: 'Milo',
-      species: 'dog',
-      breed: 'Golden Retriever',
-      gender: 'male',
-      birthYear: now.getFullYear() - 4,
-      createdAt: now.toISOString(),
-    },
-    {
-      id: uid('pet'),
-      ownerId,
-      name: 'Luna',
-      species: 'cat',
-      breed: 'Persian',
-      gender: 'female',
-      birthYear: now.getFullYear() - 2,
-      createdAt: now.toISOString(),
-    },
-  ];
-  const appointments: Appointment[] = [
-    {
-      id: uid('apt'),
-      ownerId,
-      petId: pets[0].id,
-      petName: 'Milo',
-      serviceId: 'vaccination',
-      status: 'confirmed',
-      date: upcoming,
-      timeSlot: '9:30 AM',
-      location: 'City Veterinary Office',
-      createdAt: now.toISOString(),
-    },
-    {
-      id: uid('apt'),
-      ownerId,
-      petId: pets[0].id,
-      petName: 'Milo',
-      serviceId: 'consultation',
-      status: 'completed',
-      date: past,
-      timeSlot: '2:00 PM',
-      location: 'City Veterinary Office',
-      notes: 'Annual wellness check',
-      createdAt: now.toISOString(),
-    },
-  ];
-  const activity: ActivityItem[] = [
-    {
-      id: uid('act'),
-      ownerId,
-      type: 'registration',
-      title: 'Vaccination registration submitted',
-      detail: 'Milo · City Veterinary Office',
-      date: now.toISOString(),
-    },
-    {
-      id: uid('act'),
-      ownerId,
-      type: 'completed',
-      title: 'Consultation completed',
-      detail: 'Milo · Wellness check',
-      date: addDays(-12, now).toISOString(),
-    },
-  ];
-  return { pets, appointments, activity };
+function emptyOwnerData(): OwnerData {
+  return { pets: [], appointments: [], activity: [] };
 }
 
 /**
@@ -221,12 +150,12 @@ export class MockDataService implements DataService {
       try {
         return JSON.parse(raw) as OwnerData;
       } catch {
-        // fall through to reseed
+        // fall through
       }
     }
-    const seeded = buildSeed(ownerId);
-    await this.save(ownerId, seeded);
-    return seeded;
+    const initial = emptyOwnerData();
+    await this.save(ownerId, initial);
+    return initial;
   }
 
   private async save(ownerId: string, data: OwnerData): Promise<void> {

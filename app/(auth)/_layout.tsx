@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
 
+import { useAuth } from '@clerk/expo';
+
 import { colors } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
 
@@ -10,19 +12,6 @@ import { useAuthStore } from '@store/useAuthStore';
  * registration flow otherwise.
  */
 export default function AuthLayout() {
-  const router = useRouter();
-  const status = useAuthStore((state) => state.status);
-  const user = useAuthStore((state) => state.user);
-
-  useEffect(() => {
-    if (status !== 'authenticated') return;
-    if (user?.profileCompleted) {
-      router.replace('/(main)');
-    } else {
-      router.replace('/owner');
-    }
-  }, [status, user?.profileCompleted, router]);
-
   return (
     <Stack
       screenOptions={{

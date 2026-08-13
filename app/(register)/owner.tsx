@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -26,18 +27,18 @@ const CLINIC_OPTIONS = [
 
 export default function OwnerRegistrationScreen() {
   const router = useRouter();
+  const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
   const saveOwnerProfile = useAuthStore((state) => state.saveOwnerProfile);
   const [submitting, setSubmitting] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
-  const [ready, setReady] = useState(false);
   const [preferredClinic, setPreferredClinic] = useState('main');
 
   const { fields, setValue, validateField, validateAll } = useForm(
     {
-      fullName: user?.fullName ?? '',
-      mobileNumber: user?.mobileNumber ?? '',
-      address: user?.address ?? '',
+      fullName: clerkUser?.fullName || clerkUser?.firstName || user?.fullName || '',
+      mobileNumber: (clerkUser?.unsafeMetadata?.mobileNumber as string) || user?.mobileNumber || '',
+      address: (clerkUser?.unsafeMetadata?.address as string) || user?.address || '',
     },
     {
       fullName: [required('Enter your full name.')],
@@ -46,9 +47,21 @@ export default function OwnerRegistrationScreen() {
     },
   );
 
+  const syncedUserRef = useRef(false);
   useEffect(() => {
-    setReady(true);
-  }, []);
+    if (user && !syncedUserRef.current) {
+      syncedUserRef.current = true;
+      if (user.fullName && !fields.fullName.value) {
+        setValue('fullName', user.fullName);
+      }
+      if (user.mobileNumber && !fields.mobileNumber.value) {
+        setValue('mobileNumber', user.mobileNumber);
+      }
+      if (user.address && !fields.address.value) {
+        setValue('address', user.address);
+      }
+    }
+  }, [user, fields.fullName.value, fields.mobileNumber.value, fields.address.value, setValue]);
 
   const handleContinue = useCallback(async () => {
     if (!validateAll()) {
@@ -58,7 +71,25 @@ export default function OwnerRegistrationScreen() {
     setSubmitting(true);
     setNetworkError(undefined);
     try {
-      await saveOwnerProfile(fields.mobileNumber.value, fields.address.value);
+      const mobile = fields.mobileNumber.value.trim();
+      const addr = fields.address.value.trim();
+
+      await saveOwnerProfile(mobile, addr);
+
+      if (clerkUser) {
+        try {
+          await clerkUser.update({
+            unsafeMetadata: {
+              ...clerkUser.unsafeMetadata,
+              mobileNumber: mobile,
+              address: addr,
+            },
+          });
+        } catch (e) {
+          console.log('Clerk metadata update note:', e);
+        }
+      }
+
       haptic.success();
       router.push('/(register)/pet');
     } catch {
@@ -69,7 +100,7 @@ export default function OwnerRegistrationScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [validateAll, saveOwnerProfile, fields.mobileNumber.value, fields.address.value, router]);
+  }, [validateAll, saveOwnerProfile, fields.mobileNumber.value, fields.address.value, clerkUser, router]);
 
   const reducedMotion = useReducedMotion();
   const enterAnim = reducedMotion ? FadeIn.duration(120) : ZoomIn.duration(280);

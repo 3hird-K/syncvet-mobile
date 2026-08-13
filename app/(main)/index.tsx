@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -38,11 +39,19 @@ function greeting(): string {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
   const { loading } = useResidentData();
   const pets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
   const activity = useDataStore((state) => state.activity);
+
+  const displayName =
+    clerkUser?.fullName ||
+    clerkUser?.firstName ||
+    user?.fullName ||
+    'Resident';
+  const displayPhoto = clerkUser?.imageUrl || user?.photoUrl;
 
   const upcoming = useMemo(() => {
     const today = todayISO();
@@ -61,21 +70,13 @@ export default function HomeScreen() {
     [router],
   );
 
-  if (loading || (!user)) {
-    return (
-      <Screen scroll={false}>
-        <LoadingState label="Loading your dashboard…" />
-      </Screen>
-    );
-  }
-
   return (
     <AnimatedScreen animation="fade">
       <Screen scroll>
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.greeting}>
-              {greeting()}, {getFirstName(user.fullName)} 👋
+              {greeting()}, {getFirstName(displayName)} 👋
             </Text>
             <Text style={styles.subtitle}>
               Here’s what’s happening with your pets.
@@ -94,7 +95,7 @@ export default function HomeScreen() {
               <Ionicons name="notifications-outline" size={20} color={colors.textPrimary} />
               <View style={styles.notifDot} />
             </Pressable>
-            <Avatar name={user.fullName} size={42} photoUrl={user.photoUrl} />
+            <Avatar name={displayName} size={42} photoUrl={displayPhoto} />
           </View>
         </View>
 

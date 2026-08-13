@@ -1,15 +1,15 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -37,10 +37,17 @@ export function AddressPicker({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [streetDetail, setStreetDetail] = useState<string>('');
+  const lastParsedValue = useRef<string>('');
 
-  // Parse existing address value if already filled
+  // Parse existing address value if already filled without infinite loops
   React.useEffect(() => {
-    if (value && !selectedLocation) {
+    if (value !== lastParsedValue.current) {
+      lastParsedValue.current = value;
+      if (!value) {
+        setSelectedLocation('');
+        setStreetDetail('');
+        return;
+      }
       // Find if value matches any known location
       const match = MISAMIS_ORIENTAL_LOCATIONS.find((loc) =>
         value.includes(loc.barangay) && value.includes(loc.cityOrMunicipality),
@@ -53,7 +60,7 @@ export function AddressPicker({
         setStreetDetail(value);
       }
     }
-  }, [value, selectedLocation]);
+  }, [value]);
 
   const filteredLocations = useMemo(() => {
     return searchPhilippineLocations(searchQuery, 12);

@@ -10,8 +10,11 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useAuth, useUser } from '@clerk/expo';
+
 import { colors, radius, shadows, typography } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
+import { useDataStore } from '@store/useDataStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { PhotoIllustration } from '@components/ui/PhotoIllustration';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
@@ -22,6 +25,10 @@ export default function SplashScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
+  const { isSignedIn } = useAuth();
+  const { user: clerkUser } = useUser();
+  const user = useAuthStore((state) => state.user);
+  const googleSignIn = useAuthStore((state) => state.googleSignIn);
 
   const heroScale = useSharedValue(0.7);
   const heroOpacity = useSharedValue(0);
@@ -30,6 +37,43 @@ export default function SplashScreen() {
   const textY = useSharedValue(16);
   const progress = useSharedValue(0);
   const done = useRef(false);
+  const clerkSynced = useRef(false);
+
+  // Sync Clerk profile once if active session exists
+  useEffect(() => {
+    if (isSignedIn && clerkUser && !user && !clerkSynced.current) {
+      clerkSynced.current = true;
+      const metadata = clerkUser.unsafeMetadata || {};
+      const mobileNumber = (metadata.mobileNumber as string) || '';
+      const address = (metadata.address as string) || '';
+      const profileCompleted = Boolean(metadata.profileCompleted);
+
+      googleSignIn({
+        email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
+        fullName: clerkUser.fullName || clerkUser.firstName || 'Resident',
+        photoUrl: clerkUser.imageUrl,
+      })
+        .then(async () => {
+          if (mobileNumber || address) {
+            await useAuthStore.getState().saveOwnerProfile(mobileNumber, address);
+          }
+          if (profileCompleted) {
+            await useAuthStore.getState().markRegistrationComplete();
+          }
+          const clerkPets = (metadata.pets as any[]) || [];
+          const ownerId = useAuthStore.getState().user?.id;
+          if (ownerId && clerkPets.length > 0) {
+            const currentPets = useDataStore.getState().pets;
+            if (currentPets.length === 0) {
+              for (const pet of clerkPets) {
+                await useDataStore.getState().addPet(ownerId, pet);
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isSignedIn, clerkUser, user, googleSignIn]);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -67,11 +111,22 @@ export default function SplashScreen() {
 
   const routeToNext = () => {
     const completed = useOnboardingStore.getState().completed;
-    const { status, user } = useAuthStore.getState();
-    const isAuthenticated = status === 'authenticated' && !!user;
+    const { status, user: currentUser } = useAuthStore.getState();
+    const isAuth = (status === 'authenticated' && !!currentUser) || Boolean(isSignedIn);
 
-    if (isAuthenticated) {
-      router.replace(user?.profileCompleted ? '/(main)' : '/owner');
+    if (isAuth) {
+      const metadata = clerkUser?.unsafeMetadata;
+      const hasMetadata = Boolean(
+        currentUser?.profileCompleted ||
+        metadata?.profileCompleted ||
+        (metadata?.mobileNumber && metadata?.address)
+      );
+
+      if (hasMetadata) {
+        router.replace('/(main)');
+      } else {
+        router.replace('/(register)/owner');
+      }
     } else if (completed) {
       router.replace('/(auth)');
     } else {

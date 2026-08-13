@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useAuth, useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -14,11 +16,39 @@ import { Avatar } from '@components/ui/Avatar';
 import { InfoRow } from '@components/ui/InfoRow';
 
 export default function ProfileScreen() {
+  const router = useRouter();
+  const { signOut: clerkSignOut } = useAuth();
+  const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
   const signOut = useAuthStore((state) => state.signOut);
   const pets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
   useResidentData();
+
+  const fullName =
+    clerkUser?.fullName ||
+    clerkUser?.firstName ||
+    user?.fullName ||
+    'SyncVet Resident';
+  const email =
+    clerkUser?.primaryEmailAddress?.emailAddress ||
+    user?.email ||
+    'resident@syncvet.app';
+  const photoUrl = clerkUser?.imageUrl || user?.photoUrl;
+  const mobileNumber =
+    (clerkUser?.unsafeMetadata?.mobileNumber as string) ||
+    clerkUser?.primaryPhoneNumber?.phoneNumber ||
+    user?.mobileNumber ||
+    '—';
+  const address =
+    (clerkUser?.unsafeMetadata?.address as string) ||
+    user?.address ||
+    'Barangay Carmen, Cagayan de Oro City, Misamis Oriental';
+  const memberSince = clerkUser?.createdAt
+    ? formatShortDate(new Date(clerkUser.createdAt).toISOString().slice(0, 10))
+    : user?.createdAt
+    ? formatShortDate(user.createdAt.slice(0, 10))
+    : 'Recent';
 
   const stats = useMemo(() => {
     const today = todayISO();
@@ -30,20 +60,26 @@ export default function ProfileScreen() {
   }, [pets, appointments]);
 
   const handleSignOut = () => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+    Alert.alert('Sign out', 'Are you sure you want to sign out of SyncVet?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: () => {
+        onPress: async () => {
           haptic.light();
-          signOut().catch(() => {});
+          try {
+            if (clerkSignOut) {
+              await clerkSignOut();
+            }
+          } catch {
+            // ignore clerk offline
+          }
+          await signOut();
+          router.replace('/(auth)');
         },
       },
     ]);
   };
-
-  if (!user) return null;
 
   return (
     <AnimatedScreen animation="fade">
@@ -53,10 +89,10 @@ export default function ProfileScreen() {
         </View>
 
         <View style={[styles.identity, shadows.sm]}>
-          <Avatar name={user.fullName} size={72} photoUrl={user.photoUrl} />
+          <Avatar name={fullName} size={72} photoUrl={photoUrl} />
           <View style={styles.identityBody}>
-            <Text style={styles.name}>{user.fullName}</Text>
-            <Text style={styles.email}>{user.email}</Text>
+            <Text style={styles.name}>{fullName}</Text>
+            <Text style={styles.email}>{email}</Text>
           </View>
         </View>
 
@@ -67,11 +103,11 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.card}>
-          <InfoRow label="Mobile" value={user.mobileNumber || '—'} icon="call-outline" />
-          <InfoRow label="Address" value={user.address || '—'} icon="home-outline" />
+          <InfoRow label="Mobile" value={mobileNumber} icon="call-outline" />
+          <InfoRow label="Address" value={address} icon="home-outline" />
           <InfoRow
             label="Member since"
-            value={formatShortDate(user.createdAt.slice(0, 10))}
+            value={memberSince}
             icon="shield-checkmark-outline"
           />
         </View>

@@ -44,16 +44,14 @@ export default function GoogleAuthScreen() {
     },
   );
 
-  const finish = useCallback(
-    (user?: { profileCompleted: boolean }) => {
-      if (user?.profileCompleted) {
-        router.replace('/(main)');
-      } else {
-        router.replace('/owner');
-      }
-    },
-    [router],
-  );
+  const finish = useCallback(() => {
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser?.profileCompleted) {
+      router.replace('/(main)');
+    } else {
+      router.replace('/(register)/owner');
+    }
+  }, [router]);
 
   const handleSelect = useCallback(
     async (name: string, email: string) => {
@@ -64,7 +62,7 @@ export default function GoogleAuthScreen() {
         const state = useAuthStore.getState();
         await state.googleSignIn({ email, fullName: name });
         haptic.success();
-        finish(useAuthStore.getState().user ?? undefined);
+        finish();
       } catch {
         setError('We couldn’t sign you in with Google. Please try again.');
         haptic.error();

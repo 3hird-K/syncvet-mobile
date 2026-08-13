@@ -14,20 +14,18 @@ export default function RegisterLayout() {
   const status = useAuthStore((state) => state.status);
   const profileCompleted = useAuthStore((state) => state.user?.profileCompleted);
 
+  const segmentPath = segments.join('/');
+  const onSuccess = segmentPath.includes('success');
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/(auth)');
       return;
     }
-    const onSuccess = segments.some((s) => s === 'success');
     if (status === 'authenticated' && profileCompleted && !onSuccess) {
       router.replace('/(main)');
     }
-  }, [status, profileCompleted, router, segments]);
-
-  if (status !== 'authenticated') {
-    return null;
-  }
+  }, [status, profileCompleted, router, onSuccess]);
 
   return (
     <Stack

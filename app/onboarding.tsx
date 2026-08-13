@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Platform,
@@ -19,6 +19,7 @@ import { colors, spacing, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { ONBOARDING_SLIDES } from '@lib/onboarding';
 import type { OnboardingSlideData } from '@lib/onboarding';
+import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { ProgressIndicator } from '@components/ui/ProgressIndicator';
 import { OnboardingSlide } from '@components/ui/OnboardingSlide';
@@ -40,6 +41,15 @@ export default function OnboardingScreen() {
   const [current, setCurrent] = useState(0);
   const setCompleted = useOnboardingStore((state) => state.setCompleted);
 
+  const status = useAuthStore((state) => state.status);
+  const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      router.replace('/(main)');
+    }
+  }, [status, router]);
+
   const total = ONBOARDING_SLIDES.length;
   const isLast = current === total - 1;
   const currentSlide = ONBOARDING_SLIDES[current] || ONBOARDING_SLIDES[0];
@@ -48,6 +58,10 @@ export default function OnboardingScreen() {
   const scrollHandler = useAnimatedScrollHandler((e) => {
     scrollX.value = e.contentOffset.x;
   });
+
+  if (status === 'authenticated') {
+    return null;
+  }
 
   const finish = useCallback(() => {
     haptic.success();

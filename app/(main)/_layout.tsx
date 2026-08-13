@@ -35,14 +35,8 @@ export default function MainLayout() {
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/(auth)');
-    } else if (status === 'authenticated' && !profileCompleted) {
-      router.replace('/owner');
     }
-  }, [status, profileCompleted, router]);
-
-  if (status !== 'authenticated' || !profileCompleted) {
-    return null;
-  }
+  }, [status, router]);
 
   return (
     <Tabs

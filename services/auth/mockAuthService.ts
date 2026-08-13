@@ -104,7 +104,7 @@ export class MockAuthService implements AuthService {
 
     const user: AuthUser = {
       id: `usr_${Date.now().toString(36)}`,
-      fullName: profile.fullName.trim(),
+      fullName: profile.fullName.trim() || 'Resident',
       email,
       mobileNumber: '',
       address: '',
@@ -171,7 +171,7 @@ export class MockAuthService implements AuthService {
       id: `usr_${Date.now().toString(36)}`,
       fullName: params.fullName.trim(),
       email,
-      mobileNumber: params.mobileNumber?.trim() ?? '',
+      mobileNumber: params.mobileNumber?.trim() || '',
       address: '',
       authProvider: 'email',
       profileCompleted: false,

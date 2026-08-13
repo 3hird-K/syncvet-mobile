@@ -4,6 +4,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -28,7 +29,9 @@ import type { SharedValue } from 'react-native-reanimated';
 import type { RefObject } from 'react';
 
 import * as Linking from 'expo-linking';
-import { useOAuth } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import { useClerk, useOAuth } from '@clerk/expo';
 
 import { colors, radius, spacing, typography } from '@theme';
 import {
@@ -459,6 +462,19 @@ export default function AuthScreen() {
   );
 
   const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+  const clerk = useClerk();
+
+  const [pendingVerification, setPendingVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationError, setVerificationError] = useState<string | undefined>();
+
+  // Warm up browser for OAuth
+  React.useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
 
   const handleGoogle = useCallback(async () => {
     try {
@@ -466,22 +482,27 @@ export default function AuthScreen() {
       setConnectingGoogle(true);
       setNetworkError(undefined);
 
-      const redirectUrl = Linking.createURL('/', { scheme: 'syncvet' });
-      const { createdSessionId, signIn: clerkSignIn, signUp: clerkSignUp, setActive } =
+      const redirectUrl = AuthSession.makeRedirectUri();
+
+      const { createdSessionId, signIn: clerkSignInFlow, signUp: clerkSignUpFlow, setActive } =
         await startOAuthFlow({ redirectUrl });
 
-      if (createdSessionId && setActive) {
-        await setActive({ session: createdSessionId });
+      const sessionId = createdSessionId || clerkSignInFlow?.createdSessionId || clerkSignUpFlow?.createdSessionId;
+
+      if (sessionId && setActive) {
+        await setActive({ session: sessionId });
         haptic.success();
 
         const clerkEmail =
-          clerkSignUp?.emailAddress ??
-          clerkSignIn?.identifier ??
+          clerkSignUpFlow?.emailAddress ??
+          clerkSignInFlow?.identifier ??
           '';
+        const firstName = clerkSignUpFlow?.firstName || clerkSignInFlow?.userData?.firstName || '';
+        const lastName = clerkSignUpFlow?.lastName || clerkSignInFlow?.userData?.lastName || '';
         const clerkName =
-          clerkSignUp?.firstName && clerkSignUp?.lastName
-            ? `${clerkSignUp.firstName} ${clerkSignUp.lastName}`
-            : clerkSignUp?.firstName ?? (clerkEmail ? clerkEmail.split('@')[0] : 'Resident');
+          firstName && lastName
+            ? `${firstName} ${lastName}`
+            : firstName || (clerkEmail ? clerkEmail.split('@')[0] : 'Resident');
 
         await useAuthStore.getState().googleSignIn({
           email: clerkEmail || 'user@syncvet.app',
@@ -489,18 +510,33 @@ export default function AuthScreen() {
         });
 
         const currentUser = useAuthStore.getState().user;
-        if (currentUser?.profileCompleted) {
+        const metadata = (clerkSignUpFlow?.unsafeMetadata || (clerkSignInFlow?.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
+        const hasMetadata = Boolean(
+          metadata?.profileCompleted ||
+          (metadata?.mobileNumber && metadata?.address) ||
+          currentUser?.profileCompleted
+        );
+
+        if (hasMetadata) {
+          if (metadata?.mobileNumber || metadata?.address) {
+            await useAuthStore.getState().saveOwnerProfile(
+              (metadata?.mobileNumber as string) || currentUser?.mobileNumber || '',
+              (metadata?.address as string) || currentUser?.address || '',
+            );
+          }
+          await useAuthStore.getState().markRegistrationComplete();
           router.replace('/(main)');
         } else {
-          router.replace('/owner');
+          router.replace('/(register)/owner');
         }
+      } else {
+        // Dismissed or no session created, reset loading
+        setConnectingGoogle(false);
       }
     } catch (err: any) {
-      console.warn('Google OAuth error:', err);
-      if (err?.code !== 'SIGN_IN_CANCELLED') {
-        setNetworkError('Google sign in could not be completed. Please try again.');
-        haptic.error();
-      }
+      console.warn('Google OAuth redirected to account selector:', err);
+      setConnectingGoogle(false);
+      router.push('/(auth)/google');
     } finally {
       setConnectingGoogle(false);
     }
@@ -518,28 +554,87 @@ export default function AuthScreen() {
     }
     setSubmitting(true);
     setNetworkError(undefined);
+    const email = signInForm.fields.email.value.trim();
+    const password = signInForm.fields.password.value;
+
     try {
+      if (clerk && clerk.client) {
+        const result = await clerk.client.signIn.create({
+          identifier: email,
+          password,
+        });
+
+        if (result.status === 'complete') {
+          await clerk.setActive({ session: result.createdSessionId });
+          const fullName = result.userData?.firstName
+            ? `${result.userData.firstName} ${result.userData.lastName || ''}`.trim()
+            : 'Resident';
+
+          await useAuthStore.getState().googleSignIn({
+            email,
+            fullName,
+          });
+
+          haptic.success();
+          const metadata = ((result.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
+          const hasMetadata = Boolean(
+            metadata?.profileCompleted ||
+            (metadata?.mobileNumber && metadata?.address)
+          );
+
+          if (hasMetadata) {
+            if (metadata?.mobileNumber || metadata?.address) {
+              await useAuthStore.getState().saveOwnerProfile(
+                (metadata?.mobileNumber as string) || '',
+                (metadata?.address as string) || '',
+              );
+            }
+            await useAuthStore.getState().markRegistrationComplete();
+            router.replace('/(main)');
+          } else {
+            router.replace('/(register)/owner');
+          }
+          return;
+        }
+      }
+
+      // Local fallback
       await signIn({
-        email: signInForm.fields.email.value,
-        password: signInForm.fields.password.value,
+        email,
+        password,
       });
       haptic.success();
-      router.replace(
-        useAuthStore.getState().user?.profileCompleted ? '/(main)' : '/owner',
-      );
-    } catch (err) {
-      if (err instanceof AuthError && err.field) {
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.profileCompleted) {
+        router.replace('/(main)');
+      } else {
+        router.replace('/(register)/owner');
+      }
+    } catch (err: any) {
+      console.log('Sign in error:', err);
+      if (err?.errors?.[0]) {
+        const clerkErr = err.errors[0];
+        const param = clerkErr.meta?.paramName || clerkErr.code;
+        const msg = clerkErr.longMessage || clerkErr.message || 'Invalid email or password.';
+        if (param === 'identifier' || param === 'email_address') {
+          signInForm.setFieldError('email', msg);
+        } else if (param === 'password') {
+          signInForm.setFieldError('password', msg);
+        } else {
+          setNetworkError(msg);
+        }
+      } else if (err instanceof AuthError && err.field) {
         signInForm.setFieldError(err.field, err.message);
       } else {
         setNetworkError(
-          'We couldn’t reach the server. Check your connection and try again.',
+          err?.message || 'We couldn’t reach the server. Check your connection and try again.',
         );
       }
       haptic.error();
     } finally {
       setSubmitting(false);
     }
-  }, [signInForm, signIn, router]);
+  }, [signInForm, clerk, signIn, router]);
 
   const handleSignUp = useCallback(async () => {
     if (!signUpForm.validateAll()) {
@@ -548,27 +643,124 @@ export default function AuthScreen() {
     }
     setSubmitting(true);
     setNetworkError(undefined);
+    setVerificationError(undefined);
+
+    const email = signUpForm.fields.email.value.trim();
+    const password = signUpForm.fields.password.value;
+    const fullName = signUpForm.fields.fullName.value.trim();
+    const nameParts = fullName.split(' ');
+    const firstName = nameParts[0] || fullName;
+    const lastName = nameParts.slice(1).join(' ') || '';
+
     try {
+      if (clerk && clerk.client) {
+        const result = await clerk.client.signUp.create({
+          emailAddress: email,
+          password,
+          firstName,
+          lastName,
+        });
+
+        if (result.status === 'complete') {
+          await clerk.setActive({ session: result.createdSessionId });
+          await useAuthStore.getState().googleSignIn({
+            email,
+            fullName,
+          });
+          haptic.success();
+          router.replace('/(register)/owner');
+          return;
+        } else if (result.unverifiedFields?.includes('email_address')) {
+          await clerk.client.signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+          haptic.medium();
+          setPendingVerification(true);
+          return;
+        }
+      }
+
+      // Local fallback
       await signUp({
-        fullName: signUpForm.fields.fullName.value,
-        email: signUpForm.fields.email.value,
-        password: signUpForm.fields.password.value,
+        fullName,
+        email,
+        password,
       });
       haptic.success();
-      router.replace('/owner');
-    } catch (err) {
-      if (err instanceof AuthError && err.field) {
+      router.replace('/(register)/owner');
+    } catch (err: any) {
+      console.log('Sign up error:', err);
+      if (err?.errors?.[0]) {
+        const clerkErr = err.errors[0];
+        const param = clerkErr.meta?.paramName || clerkErr.code;
+        const msg = clerkErr.longMessage || clerkErr.message || 'Could not complete registration.';
+        if (param === 'email_address' || param === 'identifier') {
+          signUpForm.setFieldError('email', msg);
+        } else if (param === 'password') {
+          signUpForm.setFieldError('password', msg);
+        } else {
+          setNetworkError(msg);
+        }
+      } else if (err instanceof AuthError && err.field) {
         signUpForm.setFieldError(err.field, err.message);
       } else {
         setNetworkError(
-          'We couldn’t reach the server. Check your connection and try again.',
+          err?.message || 'We couldn’t reach the server. Check your connection and try again.',
         );
       }
       haptic.error();
     } finally {
       setSubmitting(false);
     }
-  }, [signUpForm, signUp, router]);
+  }, [signUpForm, clerk, signUp, router]);
+
+  const handleVerifyCode = useCallback(async () => {
+    if (!verificationCode.trim()) {
+      setVerificationError('Please enter the 6-digit verification code.');
+      haptic.warning();
+      return;
+    }
+    if (!clerk || !clerk.client) return;
+    setSubmitting(true);
+    setVerificationError(undefined);
+    try {
+      const completeSignUp = await clerk.client.signUp.attemptEmailAddressVerification({
+        code: verificationCode.trim(),
+      });
+
+      if (completeSignUp.status === 'complete') {
+        await clerk.setActive({ session: completeSignUp.createdSessionId });
+        await useAuthStore.getState().googleSignIn({
+          email: signUpForm.fields.email.value.trim(),
+          fullName: signUpForm.fields.fullName.value.trim(),
+        });
+        haptic.success();
+        setPendingVerification(false);
+        router.replace('/(register)/owner');
+      } else {
+        setVerificationError('Verification incomplete. Please check your code.');
+        haptic.error();
+      }
+    } catch (err: any) {
+      const msg =
+        err?.errors?.[0]?.longMessage ||
+        err?.errors?.[0]?.message ||
+        'Invalid verification code. Please try again.';
+      setVerificationError(msg);
+      haptic.error();
+    } finally {
+      setSubmitting(false);
+    }
+  }, [verificationCode, clerk, signUpForm, router]);
+
+  const handleResendCode = useCallback(async () => {
+    if (!clerk || !clerk.client) return;
+    try {
+      await clerk.client.signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      haptic.light();
+      setVerificationError(undefined);
+    } catch (err: any) {
+      setVerificationError(err?.errors?.[0]?.message || 'Could not resend code.');
+    }
+  }, [clerk]);
 
   const handleViewOnboarding = useCallback(() => {
     haptic.light();
@@ -665,6 +857,72 @@ export default function AuthScreen() {
           />
         </View>
       ) : null}
+
+      {/* Clerk Email Verification Modal */}
+      <Modal
+        visible={pendingVerification}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPendingVerification(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalIconWrap}>
+                <Ionicons name="mail-open" size={28} color={colors.primary} />
+              </View>
+              <Text style={styles.modalTitle}>Check Your Email</Text>
+              <Text style={styles.modalSubtitle}>
+                We sent a 6-digit verification code to{' '}
+                <Text style={styles.modalEmailBold}>{signUpForm.fields.email.value}</Text>
+              </Text>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Input
+                value={verificationCode}
+                onChangeText={(v) => {
+                  setVerificationCode(v);
+                  setVerificationError(undefined);
+                }}
+                keyboardType="number-pad"
+                maxLength={6}
+                placeholder="6-digit verification code"
+                leftIcon={<Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />}
+                editable={!submitting}
+              />
+
+              {verificationError ? <ErrorMessage message={verificationError} /> : null}
+
+              <Button
+                title="Verify & Continue"
+                onPress={handleVerifyCode}
+                loading={submitting}
+                variant="primary"
+                size="lg"
+                showPaw
+              />
+
+              <View style={styles.modalFooterRow}>
+                <Pressable
+                  onPress={handleResendCode}
+                  style={styles.modalResendBtn}
+                  hitSlop={8}
+                >
+                  <Text style={styles.modalResendText}>Resend Code</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setPendingVerification(false)}
+                  style={styles.modalCancelBtn}
+                  hitSlop={8}
+                >
+                  <Text style={styles.modalCancelText}>Back</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -812,5 +1070,78 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 145,
     maxHeight: 165,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(7, 30, 38, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.15)',
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0, 168, 150, 0.10)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    ...typography.heading2,
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  modalEmailBold: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  modalBody: {
+    gap: spacing.md,
+  },
+  modalFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  modalResendBtn: {
+    paddingVertical: 6,
+  },
+  modalResendText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 13,
+  },
+  modalCancelBtn: {
+    paddingVertical: 6,
+  },
+  modalCancelText: {
+    ...typography.captionMedium,
+    color: colors.textMuted,
+    fontSize: 13,
   },
 });
