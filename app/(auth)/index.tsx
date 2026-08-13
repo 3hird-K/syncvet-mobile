@@ -27,6 +27,9 @@ import Animated, {
 import type { SharedValue } from 'react-native-reanimated';
 import type { RefObject } from 'react';
 
+import * as Linking from 'expo-linking';
+import { useOAuth } from '@clerk/clerk-expo';
+
 import { colors, radius, spacing, typography } from '@theme';
 import {
   emailRule,
@@ -455,11 +458,53 @@ export default function AuthScreen() {
     [width],
   );
 
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+
   const handleGoogle = useCallback(async () => {
-    haptic.medium();
-    setConnectingGoogle(true);
-    router.push('/(auth)/google');
-  }, [router]);
+    try {
+      haptic.medium();
+      setConnectingGoogle(true);
+      setNetworkError(undefined);
+
+      const redirectUrl = Linking.createURL('/', { scheme: 'syncvet' });
+      const { createdSessionId, signIn: clerkSignIn, signUp: clerkSignUp, setActive } =
+        await startOAuthFlow({ redirectUrl });
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        haptic.success();
+
+        const clerkEmail =
+          clerkSignUp?.emailAddress ??
+          clerkSignIn?.identifier ??
+          '';
+        const clerkName =
+          clerkSignUp?.firstName && clerkSignUp?.lastName
+            ? `${clerkSignUp.firstName} ${clerkSignUp.lastName}`
+            : clerkSignUp?.firstName ?? (clerkEmail ? clerkEmail.split('@')[0] : 'Resident');
+
+        await useAuthStore.getState().googleSignIn({
+          email: clerkEmail || 'user@syncvet.app',
+          fullName: clerkName || 'SyncVet Resident',
+        });
+
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser?.profileCompleted) {
+          router.replace('/(main)');
+        } else {
+          router.replace('/owner');
+        }
+      }
+    } catch (err: any) {
+      console.warn('Google OAuth error:', err);
+      if (err?.code !== 'SIGN_IN_CANCELLED') {
+        setNetworkError('Google sign in could not be completed. Please try again.');
+        haptic.error();
+      }
+    } finally {
+      setConnectingGoogle(false);
+    }
+  }, [startOAuthFlow, router]);
 
   const handleForgot = useCallback(() => {
     haptic.light();
