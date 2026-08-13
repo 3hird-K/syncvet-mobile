@@ -21,6 +21,7 @@ interface OnboardingSlideProps {
   iconName?: keyof typeof Ionicons.glyphMap;
   accentBg?: string;
   badgeColor?: string;
+  footer?: ReactNode;
   /** When provided, the slide animates in sync with horizontal scroll. */
   scrollX?: SharedValue<number>;
   index?: number;
@@ -34,6 +35,7 @@ export function OnboardingSlide({
   iconName = 'paw',
   accentBg = '#E6F5F2',
   badgeColor = colors.primary,
+  footer,
   scrollX,
   index = 0,
 }: OnboardingSlideProps) {
@@ -46,13 +48,43 @@ export function OnboardingSlide({
   const illustrationStyle = useAnimatedStyle(() => {
     if (!animated || !scrollX) return {};
     return {
+      opacity: interpolate(scrollX.value, inputRange, [0.15, 1, 0.15], Extrapolation.CLAMP),
+      transform: [
+        {
+          scale: interpolate(scrollX.value, inputRange, [0.55, 1, 0.55], Extrapolation.CLAMP),
+        },
+        {
+          translateY: interpolate(scrollX.value, inputRange, [44, 0, 44], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  });
+
+  const cardAnimatedStyle = useAnimatedStyle(() => {
+    if (!animated || !scrollX) return {};
+    return {
       opacity: interpolate(scrollX.value, inputRange, [0.4, 1, 0.4], Extrapolation.CLAMP),
       transform: [
         {
-          scale: interpolate(scrollX.value, inputRange, [0.85, 1, 0.85], Extrapolation.CLAMP),
+          scale: interpolate(scrollX.value, inputRange, [0.76, 1, 0.76], Extrapolation.CLAMP),
         },
         {
-          translateY: interpolate(scrollX.value, inputRange, [20, 0, 20], Extrapolation.CLAMP),
+          translateY: interpolate(scrollX.value, inputRange, [32, 0, 32], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  });
+
+  const badgeAnimatedStyle = useAnimatedStyle(() => {
+    if (!animated || !scrollX) return {};
+    const rotation = interpolate(scrollX.value, inputRange, [-20, 0, 20], Extrapolation.CLAMP);
+    return {
+      transform: [
+        {
+          scale: interpolate(scrollX.value, inputRange, [0.35, 1, 0.35], Extrapolation.CLAMP),
+        },
+        {
+          rotate: `${rotation}deg`,
         },
       ],
     };
@@ -63,6 +95,9 @@ export function OnboardingSlide({
     return {
       opacity: interpolate(scrollX.value, inputRange, [0, 1, 0], Extrapolation.CLAMP),
       transform: [
+        {
+          scale: interpolate(scrollX.value, inputRange, [0.84, 1, 0.84], Extrapolation.CLAMP),
+        },
         {
           translateY: interpolate(scrollX.value, inputRange, [24, 0, -24], Extrapolation.CLAMP),
         },
@@ -81,18 +116,26 @@ export function OnboardingSlide({
       </View>
 
       {/* Bottom Sheet Card Container */}
-      <View style={[styles.cardSheet, shadows.lg]}>
-        {/* Floating Center Paw Badge Bubble */}
-        <View style={[styles.floatingBadge, { backgroundColor: badgeColor }, shadows.md]}>
-          <Ionicons name="paw" size={26} color={colors.white} />
-        </View>
+      <Animated.View style={[styles.cardSheet, cardAnimatedStyle, shadows.lg]}>
+        {/* Floating Center Badge Bubble */}
+        <Animated.View
+          style={[
+            styles.floatingBadge,
+            { backgroundColor: badgeColor },
+            badgeAnimatedStyle,
+            shadows.md,
+          ]}
+        >
+          <Ionicons name="paw" size={24} color={colors.white} />
+        </Animated.View>
 
         <Animated.View style={[styles.textWrap, contentStyle]}>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.description}>{description}</Text>
+          {footer ? <View style={styles.footerContainer}>{footer}</View> : null}
         </Animated.View>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -122,12 +165,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     paddingHorizontal: 28,
-    paddingTop: 38,
+    paddingTop: 36,
     paddingBottom: 20,
     alignItems: 'center',
     position: 'relative',
-    minHeight: 280,
+    minHeight: 220,
     zIndex: 10,
+    shadowColor: '#071D19',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 16,
   },
   floatingBadge: {
     position: 'absolute',
@@ -139,6 +187,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 3,
     borderColor: colors.white,
+    shadowColor: '#09231F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.20,
+    shadowRadius: 8,
+    elevation: 8,
   },
   textWrap: {
     alignItems: 'center',
@@ -167,6 +220,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     maxWidth: 310,
+  },
+  footerContainer: {
+    width: '100%',
+    marginTop: 20,
+    alignItems: 'center',
   },
 });
 

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
+import type { ImageSourcePropType } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -21,6 +22,8 @@ interface BubbleProps {
   moveY?: number;
   moveX?: number;
   showPaw?: boolean;
+  imageSource?: ImageSourcePropType;
+  imageOpacity?: number;
 }
 
 function FloatingBubble({
@@ -34,6 +37,8 @@ function FloatingBubble({
   moveY = 18,
   moveX = 10,
   showPaw = true,
+  imageSource,
+  imageOpacity = 0.85,
 }: BubbleProps) {
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -77,6 +82,7 @@ function FloatingBubble({
   }));
 
   const iconSize = Math.round(size * 0.32);
+  const imgSize = Math.round(size * 0.72);
 
   return (
     <Animated.View
@@ -93,12 +99,23 @@ function FloatingBubble({
           bottom,
           alignItems: 'center',
           justifyContent: 'center',
+          overflow: 'hidden',
         },
         animatedStyle,
       ]}
       pointerEvents="none"
     >
-      {showPaw && size >= 65 ? (
+      {imageSource ? (
+        <Image
+          source={imageSource}
+          style={{
+            width: imgSize,
+            height: imgSize,
+            opacity: imageOpacity,
+          }}
+          resizeMode="contain"
+        />
+      ) : showPaw && size >= 65 ? (
         <Ionicons
           name="paw"
           size={iconSize}
@@ -109,7 +126,58 @@ function FloatingBubble({
   );
 }
 
-export function AnimatedBubbleBackground() {
+interface AnimatedBubbleBackgroundProps {
+  variant?: 'default' | 'splash';
+}
+
+export function AnimatedBubbleBackground({ variant = 'default' }: AnimatedBubbleBackgroundProps) {
+  if (variant === 'splash') {
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {/* Soft top-right ambient bubble */}
+        <FloatingBubble
+          size={240}
+          top={-40}
+          right={-50}
+          color="rgba(15, 123, 110, 0.12)"
+          duration={4400}
+          moveY={20}
+          moveX={-12}
+        />
+        {/* Soft top-left ambient bubble */}
+        <FloatingBubble
+          size={260}
+          top={40}
+          left={-70}
+          color="rgba(245, 158, 11, 0.10)"
+          duration={4800}
+          moveY={18}
+          moveX={14}
+        />
+        {/* Soft mid-right ambient bubble */}
+        <FloatingBubble
+          size={130}
+          top={220}
+          right={10}
+          color="rgba(15, 123, 110, 0.14)"
+          duration={3600}
+          moveY={15}
+          moveX={-10}
+        />
+        {/* Soft lower-left ambient bubble */}
+        <FloatingBubble
+          size={110}
+          bottom={120}
+          left={20}
+          color="rgba(15, 123, 110, 0.12)"
+          duration={4100}
+          moveY={18}
+          moveX={-10}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Top large bubble */}

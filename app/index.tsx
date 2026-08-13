@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
   Easing,
@@ -7,53 +7,51 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withDelay,
-  withRepeat,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 
 import { colors, radius, shadows, typography } from '@theme';
+import { PhotoIllustration } from '@components/ui/PhotoIllustration';
+import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
 const SPLASH_DURATION = 1800;
 
 export default function SplashScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
 
-  const iconScale = useSharedValue(0.6);
-  const iconOpacity = useSharedValue(0);
-  const iconY = useSharedValue(24);
-  const pawOpacity = useSharedValue(0);
-  const pawY = useSharedValue(18);
+  const heroScale = useSharedValue(0.7);
+  const heroOpacity = useSharedValue(0);
+  const heroY = useSharedValue(20);
   const textOpacity = useSharedValue(0);
+  const textY = useSharedValue(16);
   const progress = useSharedValue(0);
   const done = useRef(false);
 
   useEffect(() => {
     if (reducedMotion) {
-      iconScale.value = 1;
-      iconOpacity.value = 1;
-      iconY.value = 0;
-      pawOpacity.value = 1;
-      pawY.value = 0;
+      heroScale.value = 1;
+      heroOpacity.value = 1;
+      heroY.value = 0;
       textOpacity.value = 1;
+      textY.value = 0;
       progress.value = 1;
       const t = setTimeout(() => {
         if (!done.current) {
           done.current = true;
           routeToNext();
         }
-      }, 700);
+      }, 600);
       return () => clearTimeout(t);
     }
 
-    iconScale.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.back(1.6)) });
-    iconOpacity.value = withTiming(1, { duration: 500 });
-    iconY.value = withTiming(0, { duration: 700, easing: Easing.out(Easing.cubic) });
-    pawOpacity.value = withDelay(350, withTiming(1, { duration: 500 }));
-    pawY.value = withDelay(350, withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }));
-    textOpacity.value = withDelay(450, withTiming(1, { duration: 500 }));
-    progress.value = withTiming(1, { duration: SPLASH_DURATION - 300, easing: Easing.inOut(Easing.cubic) });
+    heroScale.value = withTiming(1, { duration: 750, easing: Easing.out(Easing.back(1.4)) });
+    heroOpacity.value = withTiming(1, { duration: 550 });
+    heroY.value = withTiming(0, { duration: 750, easing: Easing.out(Easing.cubic) });
+    textOpacity.value = withDelay(300, withTiming(1, { duration: 500 }));
+    textY.value = withDelay(300, withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }));
+    progress.value = withTiming(1, { duration: SPLASH_DURATION - 200, easing: Easing.inOut(Easing.cubic) });
 
     const t = setTimeout(() => {
       if (!done.current) {
@@ -66,23 +64,17 @@ export default function SplashScreen() {
   }, []);
 
   const routeToNext = () => {
-    // Testing phase: always show the 3-slide onboarding carousel after the
-    // splash so the first-run screens can be reviewed on every launch.
     router.replace('/onboarding');
   };
 
-  const iconStyle = useAnimatedStyle(() => ({
-    opacity: iconOpacity.value,
-    transform: [{ scale: iconScale.value }, { translateY: iconY.value }],
-  }));
-
-  const pawStyle = useAnimatedStyle(() => ({
-    opacity: pawOpacity.value,
-    transform: [{ translateY: pawY.value }],
+  const heroStyle = useAnimatedStyle(() => ({
+    opacity: heroOpacity.value,
+    transform: [{ scale: heroScale.value }, { translateY: heroY.value }],
   }));
 
   const textStyle = useAnimatedStyle(() => ({
     opacity: textOpacity.value,
+    transform: [{ translateY: textY.value }],
   }));
 
   const progressStyle = useAnimatedStyle(() => ({
@@ -91,30 +83,39 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.iconWrap, iconStyle]}>
-        <Image
-          source={require('@assets/boy-child.png')}
-          style={styles.appIcon}
-          resizeMode="cover"
-          accessibilityRole="image"
-          accessibilityLabel="SyncVet logo"
-        />
-      </Animated.View>
+      {/* Clean Ambient Floating Pastel Bubbles */}
+      <AnimatedBubbleBackground variant="splash" />
 
-      <Animated.View style={[styles.pawWrap, pawStyle]}>
-        <Text style={styles.paw}>🐾</Text>
-      </Animated.View>
+      <View style={styles.centerContent}>
+        {/* Hero Photo Illustration */}
+        <Animated.View style={[styles.heroWrap, heroStyle]}>
+          <PhotoIllustration
+            source={require('@assets/no-backgrounds/nurse-pets-removebg-preview.png')}
+            size={Math.min(width * 0.74, 280)}
+            accentColor={colors.primary}
+          />
+        </Animated.View>
 
-      <Animated.View style={[styles.textWrap, textStyle]}>
-        <Text style={styles.wordmark}>
-          Sync<Text style={styles.accent}>Vet</Text>
-        </Text>
-        <Text style={styles.tagline}>Your pet’s care, connected to your city.</Text>
-      </Animated.View>
+        {/* Branding & Subtitle Tag */}
+        <Animated.View style={[styles.textWrap, textStyle]}>
+          <View style={styles.tagBadge}>
+            <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
+          </View>
 
-      <Animated.View style={styles.progressTrack}>
-        <Animated.View style={[styles.progressFill, progressStyle]} />
-      </Animated.View>
+          <Text style={styles.wordmark}>
+            Sync<Text style={styles.accent}>Vet</Text>
+          </Text>
+          <Text style={styles.tagline}>Your pet’s care, connected to your city.</Text>
+
+          {/* Integrated Loading Bar directly under tagline */}
+          <View style={styles.progressBlock}>
+            <View style={styles.progressTrack}>
+              <Animated.View style={[styles.progressFill, progressStyle]} />
+            </View>
+            <Text style={styles.loadingText}>Preparing your care experience...</Text>
+          </View>
+        </Animated.View>
+      </View>
     </View>
   );
 }
@@ -124,54 +125,77 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: '#E6F5F2',
+    paddingHorizontal: 24,
   },
-  iconWrap: {
+  centerContent: {
     alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 400,
   },
-  appIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: radius.xxl,
-    ...shadows.md,
-  },
-  pawWrap: {
-    marginTop: -18,
-    marginBottom: 18,
-  },
-  paw: {
-    fontSize: 26,
+  heroWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   textWrap: {
     alignItems: 'center',
-    marginTop: 6,
+    width: '100%',
+  },
+  tagBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0, 168, 150, 0.12)',
+    marginBottom: 10,
+  },
+  subtitleTag: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   wordmark: {
     ...typography.heading1,
-    fontSize: 34,
+    fontSize: 38,
     color: colors.textPrimary,
+    fontWeight: '800',
   },
   accent: {
     color: colors.primary,
   },
   tagline: {
-    ...typography.caption,
-    color: colors.textMuted,
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 14,
     marginTop: 6,
     textAlign: 'center',
   },
+  progressBlock: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 28,
+    gap: 10,
+  },
   progressTrack: {
-    position: 'absolute',
-    bottom: 90,
-    width: 96,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primaryLight,
+    width: '90%',
+    maxWidth: 340,
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0, 168, 150, 0.18)',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: radius.pill,
     backgroundColor: colors.primary,
+  },
+  loadingText: {
+    ...typography.small,
+    color: colors.textMuted,
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
 });

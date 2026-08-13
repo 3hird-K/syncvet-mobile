@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -317,12 +317,24 @@ function AuthSlide({
 
 export default function AuthScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const { width } = useWindowDimensions();
   const listRef = useRef<FlatList<AuthMode>>(null);
-  const [mode, setMode] = useState<AuthMode>('signup'); // Default to Create Account per user's preference
+  const initialMode: AuthMode = params.mode === 'signin' ? 'signin' : 'signup';
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [submitting, setSubmitting] = useState(false);
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
+
+  React.useEffect(() => {
+    if (params.mode === 'signin') {
+      setMode('signin');
+      const index = PAGES.indexOf('signin');
+      setTimeout(() => {
+        listRef.current?.scrollToOffset({ offset: index * width, animated: false });
+      }, 50);
+    }
+  }, [params.mode, width]);
 
   const signIn = useAuthStore((state) => state.signIn);
   const signUp = useAuthStore((state) => state.signUp);
@@ -521,6 +533,7 @@ export default function AuthScreen() {
           scrollEventThrottle={16}
           onScroll={scrollHandler}
           onMomentumScrollEnd={onMomentumScrollEnd}
+          initialScrollIndex={PAGES.indexOf(initialMode)}
           getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
           keyboardShouldPersistTaps="handled"
           initialNumToRender={2}

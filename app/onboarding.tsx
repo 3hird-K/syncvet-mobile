@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -21,7 +22,7 @@ import type { OnboardingSlideData } from '@lib/onboarding';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { ProgressIndicator } from '@components/ui/ProgressIndicator';
 import { OnboardingSlide } from '@components/ui/OnboardingSlide';
-import { SocialAuthButton } from '@components/ui/SocialAuthButton';
+import { Button } from '@components/ui/Button';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<OnboardingSlideData>);
 
@@ -37,7 +38,6 @@ export default function OnboardingScreen() {
   const { width } = useWindowDimensions();
   const listRef = useRef<FlatList>(null);
   const [current, setCurrent] = useState(0);
-  const [connecting, setConnecting] = useState(false);
   const setCompleted = useOnboardingStore((state) => state.setCompleted);
 
   const total = ONBOARDING_SLIDES.length;
@@ -52,19 +52,13 @@ export default function OnboardingScreen() {
   const finish = useCallback(() => {
     haptic.success();
     setCompleted();
-    router.replace('/welcome');
+    router.replace('/(auth)');
   }, [router, setCompleted]);
 
   const skip = useCallback(() => {
     haptic.light();
-    finish();
-  }, [finish]);
-
-  const handleGoogle = useCallback(async () => {
-    haptic.medium();
-    setConnecting(true);
     setCompleted();
-    router.push('/(auth)/google');
+    router.replace({ pathname: '/(auth)', params: { mode: 'signin' } });
   }, [router, setCompleted]);
 
   const onMomentumScrollEnd = useCallback(
@@ -79,16 +73,18 @@ export default function OnboardingScreen() {
     (e: ScrollEvent) => {
       const velocityX = e.nativeEvent.velocity?.x ?? 0;
       if (isLast && velocityX < -0.5) {
-        handleGoogle();
+        finish();
       }
     },
-    [isLast, handleGoogle],
+    [isLast, finish],
   );
 
   const renderItem = useCallback(
     ({ item, index }: { item: (typeof ONBOARDING_SLIDES)[number]; index: number }) => {
       const Illustration = item.illustration;
       const illustrationSize = index === 0 ? 450 : 380;
+      const isLastSlide = index === total - 1;
+
       return (
         <View style={{ width }}>
           <OnboardingSlide
@@ -101,11 +97,33 @@ export default function OnboardingScreen() {
             illustration={<Illustration size={illustrationSize} />}
             scrollX={scrollX}
             index={index}
+            footer={
+              <View style={styles.slideFooter}>
+                <ProgressIndicator count={total} current={index} activeColor={colors.primary} />
+                {isLastSlide ? (
+                  <View style={styles.authButtonWrap}>
+                    <Button
+                      title="Get Started"
+                      size="lg"
+                      onPress={finish}
+                      variant="primary"
+                    />
+                    <Text style={styles.footnote}>
+                      By continuing, you agree to SyncVet’s{' '}
+                      <Text style={styles.link}>Terms</Text> and{' '}
+                      <Text style={styles.link}>Privacy Policy</Text>.
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.swipeHint}>Swipe to continue</Text>
+                )}
+              </View>
+            }
           />
         </View>
       );
     },
-    [width, scrollX],
+    [width, scrollX, total, finish],
   );
 
   const keyExtractor = useCallback(
@@ -148,27 +166,6 @@ export default function OnboardingScreen() {
         maxToRenderPerBatch={1}
         windowSize={4}
       />
-
-      {/* Bottom Sheet Action Footer */}
-      <View style={styles.bottomSheetFooter}>
-        <ProgressIndicator count={total} current={current} activeColor={colors.primary} />
-        
-        {isLast ? (
-          <View style={styles.authButtonWrap}>
-            <SocialAuthButton
-              onPress={handleGoogle}
-              loading={connecting}
-            />
-            <Text style={styles.footnote}>
-              By continuing, you agree to our{' '}
-              <Text style={styles.link}>Terms</Text> and{' '}
-              <Text style={styles.link}>Privacy Policy</Text>.
-            </Text>
-          </View>
-        ) : (
-          <Text style={styles.swipeHint}>Swipe to continue</Text>
-        )}
-      </View>
     </SafeAreaView>
   );
 }
@@ -193,24 +190,22 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     color: colors.textSecondary,
   },
-  bottomSheetFooter: {
-    backgroundColor: colors.white,
-    paddingHorizontal: 28,
-    paddingBottom: 24,
-    paddingTop: 8,
+  slideFooter: {
     alignItems: 'center',
+    width: '100%',
     gap: 16,
-    minHeight: 90,
-    justifyContent: 'center',
+    marginTop: 4,
   },
   authButtonWrap: {
     width: '100%',
     gap: 10,
+    marginTop: 4,
   },
   swipeHint: {
     ...typography.small,
     color: colors.textMuted,
     textAlign: 'center',
+    marginTop: 4,
   },
   footnote: {
     ...typography.small,

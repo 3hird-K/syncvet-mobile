@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,18 +10,10 @@ import { useAuthStore } from '@store/useAuthStore';
 import { Logo } from '@components/ui/Logo';
 import { Button } from '@components/ui/Button';
 import { PhotoIllustration } from '@components/ui/PhotoIllustration';
-import { SocialAuthButton } from '@components/ui/SocialAuthButton';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const [connecting, setConnecting] = useState(false);
-
-  const handleGoogle = async () => {
-    haptic.medium();
-    setConnecting(true);
-    router.push('/(auth)/google');
-  };
 
   const handleGetStarted = () => {
     haptic.light();
@@ -40,7 +32,7 @@ export default function WelcomeScreen() {
 
         <View style={styles.heroIllustration}>
           <PhotoIllustration
-            source={require('@assets/no-backgrounds/doctors-pets-removebg-preview.png')}
+            source={require('@assets/no-backgrounds/nurse-pets2.png')}
             size={380}
             accentColor={colors.primary}
           />
@@ -58,7 +50,7 @@ export default function WelcomeScreen() {
           <Text style={styles.subtitle}>WELCOME TO SYNCVET</Text>
           <Text style={styles.headline}>Better care for your best friend.</Text>
           <Text style={styles.body}>
-            Access city veterinary consultations, vaccinations, and pet health records right from your phone.
+            Access veterinary services from your City Veterinary Office, right from your phone.
           </Text>
 
           <View style={styles.ctaWrap}>
@@ -67,11 +59,6 @@ export default function WelcomeScreen() {
               size="lg"
               onPress={handleGetStarted}
               variant="primary"
-            />
-
-            <SocialAuthButton
-              onPress={handleGoogle}
-              loading={connecting}
             />
 
             <Text style={styles.footnote}>
