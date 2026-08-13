@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, {
   Easing,
@@ -11,6 +11,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors, radius, shadows, typography } from '@theme';
+import { useAuthStore } from '@store/useAuthStore';
+import { useOnboardingStore } from '@store/useOnboardingStore';
 import { PhotoIllustration } from '@components/ui/PhotoIllustration';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
@@ -64,7 +66,17 @@ export default function SplashScreen() {
   }, []);
 
   const routeToNext = () => {
-    router.replace('/onboarding');
+    const completed = useOnboardingStore.getState().completed;
+    const { status, user } = useAuthStore.getState();
+    const isAuthenticated = status === 'authenticated' && !!user;
+
+    if (isAuthenticated) {
+      router.replace(user?.profileCompleted ? '/(main)' : '/owner');
+    } else if (completed) {
+      router.replace('/(auth)');
+    } else {
+      router.replace('/onboarding');
+    }
   };
 
   const heroStyle = useAnimatedStyle(() => ({
@@ -87,12 +99,14 @@ export default function SplashScreen() {
       <AnimatedBubbleBackground variant="splash" />
 
       <View style={styles.centerContent}>
-        {/* Hero Photo Illustration */}
+        {/* Main Highlight Hero Illustration (fam2-removebg-preview.png) */}
         <Animated.View style={[styles.heroWrap, heroStyle]}>
-          <PhotoIllustration
-            source={require('@assets/no-backgrounds/nurse-pets-removebg-preview.png')}
-            size={Math.min(width * 0.74, 280)}
-            accentColor={colors.primary}
+          <Image
+            source={require('@assets/no-backgrounds/fam2-removebg-preview.png')}
+            style={[styles.heroHighlightImage, { width: Math.min(width * 0.94, 420) }]}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="SyncVet Community - Doctors, Families, and Pets"
           />
         </Animated.View>
 
@@ -107,7 +121,7 @@ export default function SplashScreen() {
           </Text>
           <Text style={styles.tagline}>Your pet’s care, connected to your city.</Text>
 
-          {/* Integrated Loading Bar directly under tagline */}
+          {/* Integrated 90% Width Loading Progress Bar */}
           <View style={styles.progressBlock}>
             <View style={styles.progressTrack}>
               <Animated.View style={[styles.progressFill, progressStyle]} />
@@ -126,18 +140,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#E6F5F2',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   centerContent: {
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 440,
   },
   heroWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    width: '100%',
+    marginBottom: 24,
+  },
+  heroHighlightImage: {
+    height: 230,
+    maxHeight: 270,
   },
   textWrap: {
     alignItems: 'center',
@@ -181,7 +200,7 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     width: '90%',
-    maxWidth: 340,
+    maxWidth: 360,
     height: 8,
     borderRadius: radius.pill,
     backgroundColor: 'rgba(0, 168, 150, 0.18)',

@@ -80,6 +80,7 @@ interface AuthSlideProps {
   onSignIn: () => void;
   onSignUp: () => void;
   onSwitchMode: () => void;
+  onViewOnboarding: () => void;
 }
 
 function AuthSlide({
@@ -100,6 +101,7 @@ function AuthSlide({
   onSignIn,
   onSignUp,
   onSwitchMode,
+  onViewOnboarding,
 }: AuthSlideProps) {
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
@@ -112,15 +114,10 @@ function AuthSlide({
   const contentStyle = useAnimatedStyle(() => {
     if (reducedMotion) return {};
     return {
-      opacity: interpolate(scrollX.value, inputRange, [0, 1, 0], Extrapolation.CLAMP),
+      opacity: interpolate(scrollX.value, inputRange, [0.4, 1, 0.4], Extrapolation.CLAMP),
       transform: [
         {
-          translateY: interpolate(
-            scrollX.value,
-            inputRange,
-            [24, 0, -24],
-            Extrapolation.CLAMP,
-          ),
+          scale: interpolate(scrollX.value, inputRange, [0.96, 1, 0.96], Extrapolation.CLAMP),
         },
       ],
     };
@@ -130,7 +127,19 @@ function AuthSlide({
     <Animated.View style={contentStyle}>
       {/* Header Title Block */}
       <View style={styles.headerBlock}>
-        <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
+        <View style={styles.headerTopRow}>
+          <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
+          <Pressable
+            onPress={onViewOnboarding}
+            style={styles.onboardingHeaderBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="View App Info"
+          >
+            <Ionicons name="information-circle-outline" size={14} color={colors.primary} />
+            <Text style={styles.onboardingHeaderLink}>App Info</Text>
+          </Pressable>
+        </View>
         <Text style={styles.title}>
           {isSignIn ? 'Welcome back' : 'Create an account'}
         </Text>
@@ -310,6 +319,18 @@ function AuthSlide({
             </Text>
           </Pressable>
         </View>
+
+        {/* App Info & Features Link */}
+        <View style={styles.viewOnboardingRow}>
+          <Pressable
+            onPress={onViewOnboarding}
+            hitSlop={8}
+            style={styles.viewOnboardingBtn}
+          >
+            <Ionicons name="information-circle-outline" size={15} color={colors.primary} />
+            <Text style={styles.viewOnboardingText}>App Info & Features</Text>
+          </Pressable>
+        </View>
       </View>
     </Animated.View>
   );
@@ -463,6 +484,11 @@ export default function AuthScreen() {
     }
   }, [signUpForm, signUp, router]);
 
+  const handleViewOnboarding = useCallback(() => {
+    haptic.light();
+    router.push('/onboarding');
+  }, [router]);
+
   const renderPage = useCallback(
     ({ item, index }: { item: AuthMode; index: number }) => (
       <View style={{ width }}>
@@ -491,6 +517,7 @@ export default function AuthScreen() {
             onSignIn={handleSignIn}
             onSignUp={handleSignUp}
             onSwitchMode={() => goToMode(item === 'signin' ? 'signup' : 'signin')}
+            onViewOnboarding={handleViewOnboarding}
           />
         </ScrollView>
       </View>
@@ -509,6 +536,7 @@ export default function AuthScreen() {
       handleSignIn,
       handleSignUp,
       goToMode,
+      handleViewOnboarding,
     ],
   );
 
@@ -520,7 +548,6 @@ export default function AuthScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Side-by-side paged slides */}
         <Animated.FlatList
           ref={listRef}
           data={PAGES}
@@ -564,6 +591,26 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     marginBottom: spacing.lg,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  onboardingHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 168, 150, 0.10)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  onboardingHeaderLink: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 11,
   },
   subtitleTag: {
     ...typography.captionBold,
@@ -652,5 +699,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
     fontSize: 14,
+  },
+  viewOnboardingRow: {
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  viewOnboardingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  viewOnboardingText: {
+    ...typography.captionMedium,
+    color: colors.primary,
+    fontSize: 13,
   },
 });
