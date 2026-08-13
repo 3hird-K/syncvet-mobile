@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -42,6 +44,7 @@ import { Input } from '@components/ui/Input';
 import { PasswordInput } from '@components/ui/PasswordInput';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { SocialAuthButton } from '@components/ui/SocialAuthButton';
+import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
 type AuthMode = 'signup' | 'signin';
 
@@ -128,7 +131,10 @@ function AuthSlide({
       {/* Header Title Block */}
       <View style={styles.headerBlock}>
         <View style={styles.headerTopRow}>
-          <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
+          <View style={styles.subtitleTagWrap}>
+            <Ionicons name="paw" size={13} color={colors.primary} />
+            <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
+          </View>
           <Pressable
             onPress={onViewOnboarding}
             style={styles.onboardingHeaderBtn}
@@ -289,6 +295,7 @@ function AuthSlide({
           onPress={isSignIn ? onSignIn : onSignUp}
           loading={submitting}
           variant="primary"
+          showPaw
         />
 
         {/* Divider line */}
@@ -319,18 +326,6 @@ function AuthSlide({
             </Text>
           </Pressable>
         </View>
-
-        {/* App Info & Features Link */}
-        <View style={styles.viewOnboardingRow}>
-          <Pressable
-            onPress={onViewOnboarding}
-            hitSlop={8}
-            style={styles.viewOnboardingBtn}
-          >
-            <Ionicons name="information-circle-outline" size={15} color={colors.primary} />
-            <Text style={styles.viewOnboardingText}>App Info & Features</Text>
-          </Pressable>
-        </View>
       </View>
     </Animated.View>
   );
@@ -346,6 +341,20 @@ export default function AuthScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  React.useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   React.useEffect(() => {
     if (params.mode === 'signin') {
@@ -568,6 +577,17 @@ export default function AuthScreen() {
           windowSize={4}
         />
       </KeyboardAvoidingView>
+
+      {/* Absolute Bottom Full-Width Illustration (Hidden when keyboard is active) */}
+      {!keyboardVisible ? (
+        <View style={styles.absoluteBottomImageWrap} pointerEvents="none">
+          <Image
+            source={require('@assets/no-backgrounds/fam1-removebg-preview.png')}
+            style={[styles.absoluteBottomImage, { width }]}
+            resizeMode="contain"
+          />
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -587,7 +607,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingTop: 16,
+    paddingBottom: 110,
   },
   headerBlock: {
     marginBottom: spacing.lg,
@@ -596,7 +617,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  subtitleTagWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   onboardingHeaderBtn: {
     flexDirection: 'row',
@@ -617,7 +643,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
-    marginBottom: 4,
   },
   title: {
     ...typography.heading1,
@@ -647,24 +672,22 @@ const styles = StyleSheet.create({
   strengthRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    gap: spacing.md,
+    marginTop: spacing.xs,
+    gap: spacing.sm,
   },
   strengthBars: {
     flex: 1,
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: 4,
   },
   strengthBar: {
     flex: 1,
-    height: 5,
+    height: 4,
     borderRadius: radius.pill,
   },
   strengthLabel: {
-    ...typography.smallBold,
-    width: 52,
-    textAlign: 'right',
+    ...typography.captionBold,
+    fontSize: 12,
   },
   dividerRow: {
     flexDirection: 'row',
@@ -687,7 +710,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingVertical: 10,
   },
   modeSwitchText: {
     ...typography.body,
@@ -700,21 +723,16 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 14,
   },
-  viewOnboardingRow: {
+  absoluteBottomImageWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    marginTop: 2,
-    marginBottom: 8,
+    justifyContent: 'flex-end',
   },
-  viewOnboardingBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  viewOnboardingText: {
-    ...typography.captionMedium,
-    color: colors.primary,
-    fontSize: 13,
+  absoluteBottomImage: {
+    height: 145,
+    maxHeight: 165,
   },
 });

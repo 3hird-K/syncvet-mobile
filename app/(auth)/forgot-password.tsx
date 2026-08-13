@@ -1,6 +1,16 @@
-import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, spacing, typography } from '@theme';
@@ -17,9 +27,24 @@ import { SuccessMessage } from '@components/ui/SuccessMessage';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const { fields, setValue, validateField, validateAll } = useForm(
     { email: '' },
@@ -48,70 +73,87 @@ export default function ForgotPasswordScreen() {
   }, [validateAll, fields.email.value]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <BackButton />
-      </View>
-
-      <AuthHeader
-        title="Forgot password?"
-        subtitle="Enter the email associated with your account and we’ll send you a reset link."
-      />
-
-      {sent ? (
-        <View style={styles.body}>
-          <SuccessMessage
-            title="Reset link sent"
-            message={`If an account exists for ${fields.email.value}, you’ll receive a link shortly.`}
-          />
-          <Button
-            title="Back to Sign In"
-            size="lg"
-            onPress={() => {
-              haptic.light();
-              router.replace('/(auth)');
-            }}
-          />
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.headerRow}>
+          <BackButton />
         </View>
-      ) : (
-        <View style={styles.body}>
-          <View style={styles.form}>
-            <Input
-              label="Email address"
-              value={fields.email.value}
-              onChangeText={(v) => setValue('email', v)}
-              onBlur={() => validateField('email')}
-              error={fields.email.error}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="emailAddress"
-              autoComplete="email"
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
-              leftIcon={<Ionicons name="mail-outline" size={20} color={colors.textMuted} />}
-              placeholder="you@example.com"
-              editable={!submitting}
+
+        <AuthHeader
+          title="Forgot password?"
+          subtitle="Enter the email associated with your account and we’ll send you a reset link."
+          showLogo={false}
+        />
+
+        {sent ? (
+          <View style={styles.body}>
+            <SuccessMessage
+              title="Reset link sent"
+              message={`If an account exists for ${fields.email.value}, you’ll receive a link shortly.`}
             />
-
-            {networkError ? <ErrorMessage message={networkError} /> : null}
-
             <Button
-              title="Send Reset Link"
+              title="Back to Sign In"
               size="lg"
-              onPress={handleSubmit}
-              loading={submitting}
-              rightIcon={<Ionicons name="send-outline" size={20} color={colors.white} />}
+              onPress={() => {
+                haptic.light();
+                router.replace('/(auth)');
+              }}
+              showPaw
             />
           </View>
+        ) : (
+          <View style={styles.body}>
+            <View style={styles.form}>
+              <Input
+                label="Email address"
+                value={fields.email.value}
+                onChangeText={(v) => setValue('email', v)}
+                onBlur={() => validateField('email')}
+                error={fields.email.error}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="emailAddress"
+                autoComplete="email"
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit}
+                leftIcon={<Ionicons name="mail-outline" size={20} color={colors.primary} />}
+                placeholder="you@example.com"
+                editable={!submitting}
+              />
 
-          <Text style={styles.hint}>
-            You’ll only receive an email if the address matches an existing
-            account.
-          </Text>
+              {networkError ? <ErrorMessage message={networkError} /> : null}
+
+              <Button
+                title="Send Reset Link"
+                size="lg"
+                onPress={handleSubmit}
+                loading={submitting}
+                showPaw
+              />
+            </View>
+
+            <Text style={styles.hint}>
+              You’ll only receive an email if the address matches an existing account.
+            </Text>
+          </View>
+        )}
+      </KeyboardAvoidingView>
+
+      {/* Absolute Bottom Full-Width Illustration */}
+      {!keyboardVisible ? (
+        <View style={styles.absoluteBottomImageWrap} pointerEvents="none">
+          <Image
+            source={require('@assets/no-backgrounds/fam1-removebg-preview.png')}
+            style={[styles.absoluteBottomImage, { width }]}
+            resizeMode="contain"
+          />
         </View>
-      )}
-    </View>
+      ) : null}
+    </SafeAreaView>
   );
 }
 
@@ -122,16 +164,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.lg,
   },
+  flex: {
+    flex: 1,
+  },
   headerRow: {
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.md,
   },
   body: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingBottom: spacing.xxl,
+    paddingBottom: 130,
   },
   form: {
-    marginTop: spacing.xxl,
+    marginTop: spacing.lg,
     gap: spacing.lg,
   },
   hint: {
@@ -140,5 +185,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xl,
     lineHeight: 18,
+  },
+  absoluteBottomImageWrap: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  absoluteBottomImage: {
+    height: 145,
+    maxHeight: 165,
   },
 });

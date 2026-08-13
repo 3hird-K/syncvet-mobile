@@ -13,6 +13,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
 
 import { colors, radius, spacing, typography } from '@theme';
@@ -30,6 +31,7 @@ export interface ButtonProps {
   fullWidth?: boolean;
   leftIcon?: ReactNode;
   rightIcon?: ReactNode;
+  showPaw?: boolean;
   accessibilityLabel?: string;
   testID?: string;
 }
@@ -83,6 +85,7 @@ export function Button({
   fullWidth = true,
   leftIcon,
   rightIcon,
+  showPaw = false,
   accessibilityLabel,
   testID,
 }: ButtonProps) {
@@ -151,10 +154,16 @@ export function Button({
         >
           {title}
         </Text>
-        {rightIcon ? <View style={styles.iconRight}>{rightIcon}</View> : null}
+        {rightIcon ? (
+          <View style={styles.iconRight}>{rightIcon}</View>
+        ) : showPaw ? (
+          <View style={styles.iconRight}>
+            <Ionicons name="paw" size={size === 'sm' ? 14 : 16} color={variantStyle.text} />
+          </View>
+        ) : null}
       </View>
     );
-  }, [loading, leftIcon, rightIcon, variantStyle.text, sizeStyle.text, isDisabled, title]);
+  }, [loading, leftIcon, rightIcon, showPaw, variantStyle.text, sizeStyle.text, isDisabled, title, size]);
 
   return (
     <Pressable
