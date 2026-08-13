@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -22,12 +23,35 @@ import { Button } from '@components/ui/Button';
 export default function PetProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user: clerkUser } = useUser();
   const ownerId = useAuthStore((state) => state.user?.id);
   const pets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
   const deletePet = useDataStore((state) => state.deletePet);
 
-  const pet = useMemo(() => pets.find((p) => p.id === id), [pets, id]);
+  const metadataPets = useMemo(() => {
+    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
+    const list = Array.isArray(metadata.pets) ? metadata.pets : [];
+    return list.map((p: any, idx: number) => ({
+      id: p.id || `clerk-pet-${idx}`,
+      ownerId: ownerId || '',
+      name: p.name || 'My Pet',
+      species: p.species || 'dog',
+      breed: p.breed || '',
+      gender: p.gender || '',
+      birthYear: p.birthYear,
+      isVaccinated: Boolean(p.isVaccinated),
+      isSpayedNeutered: Boolean(p.isSpayedNeutered),
+      weightCategory: p.weightCategory,
+      notes: p.notes,
+      createdAt: new Date().toISOString(),
+    }));
+  }, [clerkUser?.unsafeMetadata, ownerId]);
+
+  const pet = useMemo(
+    () => pets.find((p) => p.id === id) || metadataPets.find((p) => p.id === id),
+    [pets, metadataPets, id],
+  );
 
   const petAppointments = useMemo(
     () =>

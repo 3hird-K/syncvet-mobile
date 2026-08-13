@@ -1,11 +1,24 @@
-import React, { useMemo } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
-import { todayISO, formatShortDate } from '@lib/format';
+import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
@@ -13,7 +26,22 @@ import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { Avatar } from '@components/ui/Avatar';
-import { InfoRow } from '@components/ui/InfoRow';
+import { Input } from '@components/ui/Input';
+import { Button } from '@components/ui/Button';
+import { AddressPicker } from '@components/ui/AddressPicker';
+
+interface MetadataPet {
+  id?: string;
+  name: string;
+  species: 'dog' | 'cat' | string;
+  breed?: string;
+  gender?: 'male' | 'female' | string;
+  birthYear?: number;
+  isVaccinated?: boolean;
+  isSpayedNeutered?: boolean;
+  weightCategory?: string;
+  notes?: string;
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -21,34 +49,74 @@ export default function ProfileScreen() {
   const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
   const signOut = useAuthStore((state) => state.signOut);
-  const pets = useDataStore((state) => state.pets);
+  const localPets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
   useResidentData();
 
+  // Extract Profile Data
   const fullName =
     clerkUser?.fullName ||
-    clerkUser?.firstName ||
+    (clerkUser?.firstName
+      ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim()
+      : '') ||
     user?.fullName ||
     'SyncVet Resident';
+
   const email =
     clerkUser?.primaryEmailAddress?.emailAddress ||
     user?.email ||
     'resident@syncvet.app';
-  const photoUrl = clerkUser?.imageUrl || user?.photoUrl;
+
+  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
+  const photoUrl = customPhoto || clerkUser?.imageUrl || user?.photoUrl;
+
+  const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
+
   const mobileNumber =
-    (clerkUser?.unsafeMetadata?.mobileNumber as string) ||
+    (metadata.mobileNumber as string) ||
     clerkUser?.primaryPhoneNumber?.phoneNumber ||
     user?.mobileNumber ||
-    '—';
+    '';
+
   const address =
-    (clerkUser?.unsafeMetadata?.address as string) ||
+    (metadata.address as string) ||
     user?.address ||
-    'Barangay Carmen, Cagayan de Oro City, Misamis Oriental';
-  const memberSince = clerkUser?.createdAt
-    ? formatShortDate(new Date(clerkUser.createdAt).toISOString().slice(0, 10))
-    : user?.createdAt
-    ? formatShortDate(user.createdAt.slice(0, 10))
-    : 'Recent';
+    'Cagayan de Oro City';
+
+  // State for Edit Profile Modal
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState(fullName);
+  const [editPhone, setEditPhone] = useState(mobileNumber);
+  const [editAddress, setEditAddress] = useState(address);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [editError, setEditError] = useState<string | undefined>();
+
+  // State for In-App Notification Toast
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+  };
+
+  // Read pets from Clerk metadata
+  const metadataPets: MetadataPet[] = useMemo(() => {
+    if (Array.isArray(metadata.pets) && metadata.pets.length > 0) {
+      return metadata.pets;
+    }
+    if (localPets && localPets.length > 0) {
+      return localPets;
+    }
+    return [];
+  }, [metadata.pets, localPets]);
 
   const stats = useMemo(() => {
     const today = todayISO();
@@ -56,222 +124,907 @@ export default function ProfileScreen() {
       (a) => a.status !== 'cancelled' && a.status !== 'completed' && a.date >= today,
     ).length;
     const completed = appointments.filter((a) => a.status === 'completed').length;
-    return { pets: pets.length, upcoming, completed };
-  }, [pets, appointments]);
+    return { pets: metadataPets.length, upcoming, completed };
+  }, [metadataPets, appointments]);
 
-  const handleSignOut = () => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out of SyncVet?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          haptic.light();
+  const handleChangeProfilePhoto = async () => {
+    try {
+      haptic.light();
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please grant access to your photo library to change your profile picture.',
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]?.uri) {
+        const uri = result.assets[0].uri;
+        const base64 = result.assets[0].base64;
+        setCustomPhoto(uri);
+        haptic.medium();
+
+        if (clerkUser) {
           try {
-            if (clerkSignOut) {
-              await clerkSignOut();
+            if (base64) {
+              await clerkUser.setProfileImage({
+                file: `data:image/jpeg;base64,${base64}`,
+              });
             }
-          } catch {
-            // ignore clerk offline
+          } catch (e) {
+            console.log('Clerk setProfileImage note:', e);
+            await clerkUser.update({
+              unsafeMetadata: {
+                ...clerkUser.unsafeMetadata,
+                photoUrl: uri,
+              },
+            });
           }
-          await signOut();
-          router.replace('/(auth)');
-        },
-      },
-    ]);
+        }
+        useAuthStore.setState((s) => ({
+          user: s.user ? { ...s.user, photoUrl: uri } : null,
+        }));
+        haptic.success();
+        showToast('Profile photo updated successfully!');
+      }
+    } catch (err) {
+      console.log('Image picker error:', err);
+    }
+  };
+
+  const openEditModal = () => {
+    haptic.light();
+    setEditName(fullName);
+    setEditPhone(mobileNumber);
+    setEditAddress(address);
+    setEditError(undefined);
+    setEditModalVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      setEditError('Please enter your full name.');
+      haptic.warning();
+      return;
+    }
+    if (!editPhone.trim()) {
+      setEditError('Please enter your mobile phone number.');
+      haptic.warning();
+      return;
+    }
+    if (!editAddress.trim()) {
+      setEditError('Please enter your residence address.');
+      haptic.warning();
+      return;
+    }
+
+    setSavingProfile(true);
+    setEditError(undefined);
+
+    try {
+      const nameParts = editName.trim().split(' ');
+      const firstName = nameParts[0] || editName.trim();
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      if (clerkUser) {
+        await clerkUser.update({
+          firstName,
+          lastName,
+          unsafeMetadata: {
+            ...clerkUser.unsafeMetadata,
+            mobileNumber: editPhone.trim(),
+            address: editAddress.trim(),
+          },
+        });
+      }
+
+      await useAuthStore.getState().saveOwnerProfile(editPhone.trim(), editAddress.trim());
+      haptic.success();
+      setEditModalVisible(false);
+      showToast('Profile details updated successfully!');
+    } catch (err: any) {
+      console.log('Update profile error:', err);
+      setEditError(err?.message || 'Could not update profile. Please try again.');
+      haptic.error();
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleCallCVO = () => {
+    haptic.light();
+    void Linking.openURL('tel:0888572260').catch(() => {});
   };
 
   return (
     <AnimatedScreen animation="fade">
       <Screen scroll>
-        <View style={styles.header}>
-          <Text style={styles.title}>Profile</Text>
+        {/* Floating Notification Toast */}
+        {toastMessage ? (
+          <Pressable
+            onPress={() => {
+              haptic.light();
+              setToastMessage(null);
+            }}
+            style={[styles.toastBanner, shadows.md]}
+          >
+            <View style={styles.toastIconWrap}>
+              <Ionicons name="checkmark-circle" size={18} color={colors.white} />
+            </View>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+            <Ionicons name="close" size={14} color="rgba(255,255,255,0.8)" />
+          </Pressable>
+        ) : null}
+
+        {/* Compact Screen Header */}
+        <View style={styles.topHeader}>
+          <Text style={styles.screenHeading}>Profile</Text>
+          <Pressable
+            onPress={openEditModal}
+            style={styles.headerEditBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Edit Profile"
+          >
+            <Ionicons name="pencil" size={13} color={colors.primary} />
+            <Text style={styles.headerEditText}>Edit</Text>
+          </Pressable>
         </View>
 
-        <View style={[styles.identity, shadows.sm]}>
-          <Avatar name={fullName} size={72} photoUrl={photoUrl} />
-          <View style={styles.identityBody}>
-            <Text style={styles.name}>{fullName}</Text>
-            <Text style={styles.email}>{email}</Text>
+        {/* Clean Hero Identity Card */}
+        <View style={[styles.heroCard, shadows.sm]}>
+          <View style={styles.heroTopRow}>
+            {/* Avatar on Left with Camera Badge */}
+            <Pressable
+              onPress={handleChangeProfilePhoto}
+              style={styles.avatarWrap}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile photo"
+            >
+              <Avatar name={fullName} size={64} photoUrl={photoUrl} />
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={13} color={colors.white} />
+              </View>
+            </Pressable>
+
+            {/* Resident Info on Right */}
+            <View style={styles.heroTextWrap}>
+              <Text style={styles.heroName} numberOfLines={1}>
+                {fullName}
+              </Text>
+              <Text style={styles.heroEmail} numberOfLines={1}>
+                {email}
+              </Text>
+              {mobileNumber ? (
+                <View style={styles.heroPhoneRow}>
+                  <Ionicons name="call-outline" size={11} color={colors.textSecondary} />
+                  <Text style={styles.heroPhoneText}>{mobileNumber}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
-        </View>
 
-        <View style={styles.statsRow}>
-          <StatCard label="Pets" value={stats.pets} icon="paw-outline" color={colors.primaryDark} />
-          <StatCard label="Upcoming" value={stats.upcoming} icon="calendar-outline" color={colors.info} />
-          <StatCard label="Completed" value={stats.completed} icon="checkmark-done-outline" color={colors.successDark} />
-        </View>
-
-        <View style={styles.card}>
-          <InfoRow label="Mobile" value={mobileNumber} icon="call-outline" />
-          <InfoRow label="Address" value={address} icon="home-outline" />
-          <InfoRow
-            label="Member since"
-            value={memberSince}
-            icon="shield-checkmark-outline"
-          />
-        </View>
-
-        <View style={styles.officeCard}>
-          <View style={styles.officeIcon}>
-            <Ionicons name="business-outline" size={22} color={colors.primaryDark} />
-          </View>
-          <View style={styles.officeBody}>
-            <Text style={styles.officeTitle}>City Veterinary Office</Text>
-            <Text style={styles.officeText}>
-              Vaccinations, consultations, and spay & neuter services for city residents.
+          {/* Residence Address Bar */}
+          <View style={styles.heroAddressBar}>
+            <Ionicons name="location-sharp" size={13} color={colors.primary} />
+            <Text style={styles.heroAddressText} numberOfLines={1}>
+              {address}
             </Text>
           </View>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={handleSignOut}
-          style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.error} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
+        {/* Compact Stats Row */}
+        <View style={styles.statsRow}>
+          <Pressable
+            style={[styles.statBox, shadows.sm]}
+            onPress={() => {
+              haptic.light();
+              router.push('/pets' as never);
+            }}
+          >
+            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(0, 168, 150, 0.12)' }]}>
+              <Ionicons name="paw" size={14} color={colors.primary} />
+            </View>
+            <Text style={styles.statNumber}>{stats.pets}</Text>
+            <Text style={styles.statLabel}>Pets</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.statBox, shadows.sm]}
+            onPress={() => {
+              haptic.light();
+              router.push('/appointments' as never);
+            }}
+          >
+            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(14, 116, 144, 0.12)' }]}>
+              <Ionicons name="calendar" size={14} color={colors.info} />
+            </View>
+            <Text style={styles.statNumber}>{stats.upcoming}</Text>
+            <Text style={styles.statLabel}>Upcoming</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.statBox, shadows.sm]}
+            onPress={() => {
+              haptic.light();
+              router.push('/appointments' as never);
+            }}
+          >
+            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+              <Ionicons name="checkmark-done" size={14} color={colors.success} />
+            </View>
+            <Text style={styles.statNumber}>{stats.completed}</Text>
+            <Text style={styles.statLabel}>Visits</Text>
+          </Pressable>
+        </View>
+
+        {/* Registered Pets - Modern Horizontal List (Image Left, Texts Right) */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>My Registered Pets</Text>
+            <Pressable
+              onPress={() => {
+                haptic.light();
+                router.push('/pets/add' as never);
+              }}
+              style={styles.addPetHeaderBtn}
+              hitSlop={8}
+            >
+              <Ionicons name="add" size={14} color={colors.primary} />
+              <Text style={styles.addPetHeaderText}>Add Pet</Text>
+            </Pressable>
+          </View>
+
+          {metadataPets.length === 0 ? (
+            <Pressable
+              style={[styles.emptyPetCard, shadows.sm]}
+              onPress={() => {
+                haptic.light();
+                router.push('/pets/add' as never);
+              }}
+            >
+              <View style={styles.emptyPetIcon}>
+                <Ionicons name="paw-outline" size={22} color={colors.primary} />
+              </View>
+              <View style={styles.emptyPetTextWrap}>
+                <Text style={styles.emptyPetTitle}>Register Your First Pet</Text>
+                <Text style={styles.emptyPetSub}>Get a digital City Vet health passport</Text>
+              </View>
+              <Ionicons name="add-circle" size={20} color={colors.primary} />
+            </Pressable>
+          ) : (
+            <View style={styles.petsVerticalList}>
+              {metadataPets.map((pet, idx) => {
+                const isDog = pet.species?.toLowerCase() === 'dog';
+                return (
+                  <Pressable
+                    key={pet.id || `pet-${idx}`}
+                    style={[styles.petListCard, shadows.sm]}
+                    onPress={() => {
+                      haptic.light();
+                      if (pet.id) {
+                        router.push(`/pets/${pet.id}` as never);
+                      } else {
+                        router.push('/pets' as never);
+                      }
+                    }}
+                  >
+                    {/* Image / Species Badge on the Left */}
+                    <View
+                      style={[
+                        styles.petLeftAvatarCircle,
+                        {
+                          backgroundColor: isDog
+                            ? 'rgba(0, 168, 150, 0.10)'
+                            : 'rgba(219, 39, 119, 0.10)',
+                        },
+                      ]}
+                    >
+                      <Text style={styles.petLeftAvatarEmoji}>{isDog ? '🐶' : '🐱'}</Text>
+                    </View>
+
+                    {/* Texts and Status on the Right */}
+                    <View style={styles.petRightInfo}>
+                      <View style={styles.petNameRow}>
+                        <Text style={styles.petNameText} numberOfLines={1}>
+                          {pet.name}
+                        </Text>
+                        {pet.isVaccinated ? (
+                          <View style={styles.vaccineTagSuccess}>
+                            <Ionicons name="shield-checkmark" size={10} color={colors.success} />
+                            <Text style={styles.vaccineTagSuccessText}>Vaccinated</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.vaccineTagWarning}>
+                            <Ionicons name="alert-circle" size={10} color={colors.warning} />
+                            <Text style={styles.vaccineTagWarningText}>Needs Shot</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <Text style={styles.petBreedText} numberOfLines={1}>
+                        {pet.breed || (isDog ? 'Dog' : 'Cat')}
+                        {pet.gender
+                          ? ` · ${pet.gender === 'male' ? 'Male ♂' : 'Female ♀'}`
+                          : ''}
+                      </Text>
+                    </View>
+
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* City Veterinary Office Contact Hub (Ultra-Compact) */}
+        <View style={[styles.cvoCleanCard, shadows.sm]}>
+          <View style={styles.cvoLeftRow}>
+            <View style={styles.cvoBadgeIcon}>
+              <Ionicons name="business" size={16} color={colors.white} />
+            </View>
+            <View style={styles.cvoTextWrap}>
+              <Text style={styles.cvoTitle}>City Veterinary Office</Text>
+              <Text style={styles.cvoSub}>Mon – Fri · 8:00 AM – 5:00 PM</Text>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={handleCallCVO}
+            style={({ pressed }) => [styles.cvoCallBtn, pressed && styles.cvoCallBtnPressed]}
+          >
+            <Ionicons name="call" size={13} color={colors.primary} />
+            <Text style={styles.cvoCallBtnText}>Call CVO</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.footerSpacing} />
       </Screen>
+
+      {/* Update Profile Modal */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalBackdrop}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalContainer}
+          >
+            <View style={[styles.modalCard, shadows.lg]}>
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Update Profile</Text>
+                  <Text style={styles.modalSub}>Manage your contact & address details</Text>
+                </View>
+                <Pressable
+                  onPress={() => setEditModalVisible(false)}
+                  style={styles.modalCloseBtn}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close" size={20} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+
+              <ScrollView
+                style={styles.modalFormScroll}
+                contentContainerStyle={styles.modalFormContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Full Name */}
+                <View style={styles.modalField}>
+                  <Text style={styles.modalFieldLabel}>Full Name</Text>
+                  <Input
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Enter full name"
+                    leftIcon={<Ionicons name="person-outline" size={18} color={colors.primary} />}
+                    editable={!savingProfile}
+                  />
+                </View>
+
+                {/* Mobile Number */}
+                <View style={styles.modalField}>
+                  <Text style={styles.modalFieldLabel}>Mobile Number</Text>
+                  <Input
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    keyboardType="phone-pad"
+                    placeholder="09XXXXXXXXX"
+                    leftIcon={<Ionicons name="call-outline" size={18} color={colors.primary} />}
+                    editable={!savingProfile}
+                  />
+                </View>
+
+                {/* Address Picker */}
+                <View style={styles.modalField}>
+                  <Text style={styles.modalFieldLabel}>Residence Address</Text>
+                  <AddressPicker
+                    value={editAddress}
+                    onChange={setEditAddress}
+                    editable={!savingProfile}
+                  />
+                </View>
+
+                {editError ? (
+                  <View style={styles.editErrorWrap}>
+                    <Ionicons name="alert-circle" size={16} color={colors.error} />
+                    <Text style={styles.editErrorText}>{editError}</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+
+              {/* Action Buttons */}
+              <View style={styles.modalActionsRow}>
+                <View style={styles.modalCancelWrap}>
+                  <Button
+                    title="Cancel"
+                    variant="outline"
+                    onPress={() => setEditModalVisible(false)}
+                    disabled={savingProfile}
+                    fullWidth
+                  />
+                </View>
+                <View style={styles.modalSaveWrap}>
+                  <Button
+                    title="Save Changes"
+                    variant="primary"
+                    onPress={handleSaveProfile}
+                    loading={savingProfile}
+                    showPaw
+                    fullWidth
+                  />
+                </View>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </AnimatedScreen>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-  color,
-}: {
-  label: string;
-  value: number;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  color: string;
-}) {
-  return (
-    <View style={styles.statCard}>
-      <View style={[styles.statIcon, { backgroundColor: `${color}14` }]}>
-        <Ionicons name={icon} size={18} color={color} />
-      </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  header: {
-    marginBottom: spacing.xl,
-  },
-  title: {
-    ...typography.heading1,
-    color: colors.textPrimary,
-  },
-  identity: {
+  toastBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.lg,
+    backgroundColor: '#0F766E',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    gap: 8,
+  },
+  toastIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toastText: {
+    ...typography.captionBold,
+    color: colors.white,
+    fontSize: 12.5,
+    flex: 1,
+  },
+  topHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    paddingTop: 2,
+  },
+  screenHeading: {
+    ...typography.heading2,
+    color: colors.textPrimary,
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  headerEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  headerEditText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 12,
+  },
+  heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.06)',
+    gap: 8,
   },
-  identityBody: {
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  avatarWrap: {
+    position: 'relative',
+    marginRight: 6,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  heroTextWrap: {
     flex: 1,
     gap: 2,
+    paddingLeft: 2,
   },
-  name: {
-    ...typography.heading3,
+  heroName: {
+    ...typography.title,
     color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
   },
-  email: {
+  heroEmail: {
     ...typography.caption,
     color: colors.textSecondary,
+    fontSize: 12.5,
+  },
+  heroPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 1,
+  },
+  heroPhoneText: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontSize: 11.5,
+  },
+  heroAddressBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(7, 30, 38, 0.03)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.md,
+  },
+  heroAddressText: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontSize: 11.5,
+    flex: 1,
   },
   statsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
   },
-  statCard: {
+  statBox: {
     flex: 1,
-    alignItems: 'center',
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
+    paddingVertical: 6,
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.lg,
-    gap: 2,
+    borderColor: 'rgba(7, 30, 38, 0.06)',
+    gap: 1,
   },
-  statIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  statIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
   },
-  statValue: {
-    ...typography.heading3,
+  statNumber: {
+    ...typography.title,
     color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
   },
   statLabel: {
-    ...typography.small,
+    ...typography.caption,
     color: colors.textMuted,
+    fontSize: 9.5,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xs,
-    marginBottom: spacing.xl,
+  sectionBlock: {
+    marginBottom: spacing.sm,
   },
-  officeCard: {
+  sectionHeaderRow: {
     flexDirection: 'row',
-    gap: spacing.md,
-    backgroundColor: colors.primaryLight,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 2,
   },
-  officeIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: colors.white,
+  sectionTitle: {
+    ...typography.title,
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  addPetHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 2,
+  },
+  addPetHeaderText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 12,
+  },
+  emptyPetCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.06)',
+    gap: spacing.md,
+  },
+  emptyPetIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0, 168, 150, 0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  officeBody: {
+  emptyPetTextWrap: {
+    flex: 1,
+    gap: 1,
+  },
+  emptyPetTitle: {
+    ...typography.title,
+    color: colors.textPrimary,
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  emptyPetSub: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontSize: 11,
+  },
+  petsVerticalList: {
+    gap: 6,
+  },
+  petListCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.06)',
+    gap: spacing.md,
+  },
+  petLeftAvatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  petLeftAvatarEmoji: {
+    fontSize: 22,
+  },
+  petRightInfo: {
     flex: 1,
     gap: 2,
   },
-  officeTitle: {
-    ...typography.captionBold,
-    color: colors.primaryDark,
-  },
-  officeText: {
-    ...typography.small,
-    color: colors.textSecondary,
-  },
-  signOut: {
+  petNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    height: 50,
+    gap: 6,
+  },
+  petNameText: {
+    ...typography.title,
+    color: colors.textPrimary,
+    fontSize: 14.5,
+    fontWeight: '700',
+  },
+  vaccineTagSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(16, 185, 129, 0.10)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+  },
+  vaccineTagSuccessText: {
+    ...typography.captionBold,
+    color: colors.success,
+    fontSize: 8.5,
+  },
+  vaccineTagWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+  },
+  vaccineTagWarningText: {
+    ...typography.captionBold,
+    color: colors.warning,
+    fontSize: 8.5,
+  },
+  petBreedText: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontSize: 11.5,
+  },
+  cvoCleanCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F3FAF8',
     borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.errorLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.15)',
+    marginTop: 2,
+  },
+  cvoLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  cvoBadgeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cvoTextWrap: {
+    flex: 1,
+  },
+  cvoTitle: {
+    ...typography.title,
+    color: colors.primaryDark,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cvoSub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 10.5,
+  },
+  cvoCallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.25)',
   },
-  signOutPressed: {
-    backgroundColor: colors.errorLight,
+  cvoCallBtnPressed: {
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
   },
-  signOutText: {
-    ...typography.button,
+  cvoCallBtnText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 11.5,
+  },
+  footerSpacing: {
+    height: spacing.lg,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(7, 30, 38, 0.60)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.xl,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    ...typography.heading2,
+    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalSub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    padding: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(7, 30, 38, 0.05)',
+  },
+  modalFormScroll: {
+    maxHeight: 400,
+  },
+  modalFormContent: {
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  modalField: {
+    gap: 4,
+  },
+  modalFieldLabel: {
+    ...typography.captionBold,
+    color: colors.textPrimary,
+    fontSize: 12.5,
+  },
+  editErrorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    padding: 10,
+    borderRadius: radius.md,
+  },
+  editErrorText: {
+    ...typography.caption,
     color: colors.error,
+    fontSize: 12,
+    flex: 1,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  modalCancelWrap: {
+    flex: 1,
+  },
+  modalSaveWrap: {
+    flex: 1.4,
   },
 });
