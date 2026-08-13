@@ -44,7 +44,6 @@ import { Input } from '@components/ui/Input';
 import { PasswordInput } from '@components/ui/PasswordInput';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { SocialAuthButton } from '@components/ui/SocialAuthButton';
-import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
 type AuthMode = 'signup' | 'signin';
 
@@ -114,27 +113,60 @@ function AuthSlide({
   const strengthMeta = STRENGTH_META[strength];
   const strengthIndex = STRENGTH_ORDER.indexOf(strength);
 
-  const contentStyle = useAnimatedStyle(() => {
+  const headerAnimatedStyle = useAnimatedStyle(() => {
     if (reducedMotion) return {};
     return {
-      opacity: interpolate(scrollX.value, inputRange, [0.4, 1, 0.4], Extrapolation.CLAMP),
+      opacity: interpolate(scrollX.value, inputRange, [0.25, 1, 0.25], Extrapolation.CLAMP),
       transform: [
         {
-          scale: interpolate(scrollX.value, inputRange, [0.96, 1, 0.96], Extrapolation.CLAMP),
+          scale: interpolate(scrollX.value, inputRange, [0.82, 1, 0.82], Extrapolation.CLAMP),
+        },
+        {
+          translateY: interpolate(scrollX.value, inputRange, [24, 0, 24], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  });
+
+  const tagAnimatedStyle = useAnimatedStyle(() => {
+    if (reducedMotion) return {};
+    const rotation = interpolate(scrollX.value, inputRange, [-14, 0, 14], Extrapolation.CLAMP);
+    return {
+      transform: [
+        {
+          scale: interpolate(scrollX.value, inputRange, [0.68, 1, 0.68], Extrapolation.CLAMP),
+        },
+        {
+          rotate: `${rotation}deg`,
+        },
+      ],
+    };
+  });
+
+  const formAnimatedStyle = useAnimatedStyle(() => {
+    if (reducedMotion) return {};
+    return {
+      opacity: interpolate(scrollX.value, inputRange, [0.35, 1, 0.35], Extrapolation.CLAMP),
+      transform: [
+        {
+          scale: interpolate(scrollX.value, inputRange, [0.84, 1, 0.84], Extrapolation.CLAMP),
+        },
+        {
+          translateY: interpolate(scrollX.value, inputRange, [36, 0, 36], Extrapolation.CLAMP),
         },
       ],
     };
   });
 
   return (
-    <Animated.View style={contentStyle}>
+    <View>
       {/* Header Title Block */}
-      <View style={styles.headerBlock}>
+      <Animated.View style={[styles.headerBlock, headerAnimatedStyle]}>
         <View style={styles.headerTopRow}>
-          <View style={styles.subtitleTagWrap}>
+          <Animated.View style={[styles.subtitleTagWrap, tagAnimatedStyle]}>
             <Ionicons name="paw" size={13} color={colors.primary} />
             <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
-          </View>
+          </Animated.View>
           <Pressable
             onPress={onViewOnboarding}
             style={styles.onboardingHeaderBtn}
@@ -154,10 +186,10 @@ function AuthSlide({
             ? 'Sign in to access your pet health records and book consultations.'
             : 'Join SyncVet to connect with your City Veterinary Office.'}
         </Text>
-      </View>
+      </Animated.View>
 
       {/* Form Block */}
-      <View style={styles.form}>
+      <Animated.View style={[styles.form, formAnimatedStyle]}>
         {isSignIn ? (
           <>
             <Input
@@ -326,8 +358,8 @@ function AuthSlide({
             </Text>
           </Pressable>
         </View>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -583,7 +615,7 @@ export default function AuthScreen() {
         <View style={styles.absoluteBottomImageWrap} pointerEvents="none">
           <Image
             source={require('@assets/no-backgrounds/fam1-removebg-preview.png')}
-            style={[styles.absoluteBottomImage, { width }]}
+            style={styles.absoluteBottomImage}
             resizeMode="contain"
           />
         </View>
@@ -732,6 +764,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   absoluteBottomImage: {
+    width: '100%',
     height: 145,
     maxHeight: 165,
   },

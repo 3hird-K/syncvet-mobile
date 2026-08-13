@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
@@ -126,22 +126,27 @@ export default function OnboardingScreen() {
     [width, scrollX, total, finish],
   );
 
+  const insets = useSafeAreaInsets();
+
   const keyExtractor = useCallback(
     (item: (typeof ONBOARDING_SLIDES)[number]) => item.id,
     [],
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: currentSlide.accentBg }]} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: currentSlide.accentBg }]}
+      edges={['bottom']}
+    >
       {/* Top Header Overlay with Skip */}
       {!isLast ? (
-        <View style={styles.topHeader}>
+        <View style={[styles.topHeader, { top: insets.top + 10 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Skip onboarding"
             onPress={skip}
             hitSlop={12}
-            style={styles.skipBtn}
+            style={({ pressed }) => [styles.skipBtn, pressed && styles.skipBtnPressed]}
           >
             <Text style={styles.skipText}>Skip</Text>
           </Pressable>
@@ -176,19 +181,30 @@ const styles = StyleSheet.create({
   },
   topHeader: {
     position: 'absolute',
-    top: 14,
     right: 20,
-    zIndex: 20,
+    zIndex: 30,
   },
   skipBtn: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    shadowColor: '#071D19',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  skipBtnPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.96 }],
   },
   skipText: {
     ...typography.captionBold,
-    color: colors.textSecondary,
+    color: colors.primaryDark,
+    fontSize: 13,
   },
   slideFooter: {
     alignItems: 'center',

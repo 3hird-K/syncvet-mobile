@@ -156,7 +156,7 @@ export default function ForgotPasswordScreen() {
         <View style={styles.absoluteBottomImageWrap} pointerEvents="none">
           <Image
             source={require('@assets/no-backgrounds/fam1-removebg-preview.png')}
-            style={[styles.absoluteBottomImage, { width }]}
+            style={styles.absoluteBottomImage}
             resizeMode="contain"
           />
         </View>
@@ -211,6 +211,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   absoluteBottomImage: {
+    width: '100%',
     height: 145,
     maxHeight: 165,
   },
