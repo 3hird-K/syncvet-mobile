@@ -4,7 +4,7 @@ export type ValidationRule = {
 };
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const PHONE_RE = /^(\+?[0-9]{1,3})?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}$/;
+export const PH_PHONE_RE = /^(09|\+639|639)\d{9}$/;
 
 export const required =
   (message = 'This field is required.'): ValidationRule => ({
@@ -24,8 +24,11 @@ export const minLength =
   });
 
 export const phoneRule: ValidationRule = {
-  validate: (value) => PHONE_RE.test(value.trim()),
-  message: 'Enter a valid mobile number.',
+  validate: (value) => {
+    const cleaned = value.replace(/[\s\-().]/g, '');
+    return PH_PHONE_RE.test(cleaned);
+  },
+  message: 'Enter a valid 11-digit Philippine mobile number (e.g. 09171234567).',
 };
 
 export const matchRule =

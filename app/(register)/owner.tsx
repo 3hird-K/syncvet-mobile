@@ -96,18 +96,16 @@ export default function OwnerRegistrationScreen() {
 
             <View style={styles.form}>
               <Input
-                label="Full name"
                 value={fields.fullName.value}
                 onChangeText={(v) => setValue('fullName', v)}
                 onBlur={() => validateField('fullName')}
                 error={fields.fullName.error}
                 returnKeyType="next"
                 leftIcon={<Ionicons name="person-outline" size={20} color={colors.primary} />}
-                placeholder="Your full name"
+                placeholder="Full name"
                 editable={!submitting}
               />
               <Input
-                label="Mobile number"
                 value={fields.mobileNumber.value}
                 onChangeText={(v) => setValue('mobileNumber', v)}
                 onBlur={() => validateField('mobileNumber')}
@@ -116,12 +114,12 @@ export default function OwnerRegistrationScreen() {
                 textContentType="telephoneNumber"
                 autoComplete="tel"
                 returnKeyType="next"
+                maxLength={13}
                 leftIcon={<Ionicons name="call-outline" size={20} color={colors.primary} />}
-                placeholder="09xx xxx xxxx"
+                placeholder="Mobile number (09xxxxxxxxx)"
                 editable={!submitting}
               />
               <Input
-                label="Home address"
                 value={fields.address.value}
                 onChangeText={(v) => setValue('address', v)}
                 onBlur={() => validateField('address')}
@@ -130,7 +128,7 @@ export default function OwnerRegistrationScreen() {
                 textContentType="fullStreetAddress"
                 returnKeyType="done"
                 leftIcon={<Ionicons name="location-outline" size={20} color={colors.primary} />}
-                placeholder="Street, barangay, city"
+                placeholder="Complete home address"
                 editable={!submitting}
                 style={styles.multilineInput}
               />

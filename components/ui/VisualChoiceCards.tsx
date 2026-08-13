@@ -16,27 +16,50 @@ export interface VisualCardOption<T extends string> {
   title: string;
   subtitle?: string;
   iconName?: keyof typeof Ionicons.glyphMap;
-  emoji?: string;
   badgeBg?: string;
+  badgeColor?: string;
 }
 
 interface VisualChoiceCardsProps<T extends string> {
   options: VisualCardOption<T>[];
   value: T;
   onChange: (value: T) => void;
+  layout?: 'row' | 'stack';
 }
 
 export function VisualChoiceCards<T extends string>({
   options,
   value,
   onChange,
+  layout = 'row',
 }: VisualChoiceCardsProps<T>) {
+  if (layout === 'stack') {
+    return (
+      <View style={styles.stackContainer}>
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <StackCardOption
+              key={option.value}
+              option={option}
+              active={active}
+              onPress={() => {
+                haptic.light();
+                onChange(option.value);
+              }}
+            />
+          );
+        })}
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.grid}>
+    <View style={styles.rowContainer}>
       {options.map((option) => {
         const active = option.value === value;
         return (
-          <CardOption
+          <RowCardOption
             key={option.value}
             option={option}
             active={active}
@@ -51,7 +74,8 @@ export function VisualChoiceCards<T extends string>({
   );
 }
 
-function CardOption<T extends string>({
+/** Vertical-centered card for 2-column side-by-side choices (e.g. Dog/Cat, Male/Female) */
+function RowCardOption<T extends string>({
   option,
   active,
   onPress,
@@ -67,10 +91,12 @@ function CardOption<T extends string>({
     transform: [{ scale: scale.value }],
   }));
 
-  const defaultBadgeBg = active ? colors.primary : colors.surfaceMuted;
+  const iconColor = active
+    ? colors.primaryDark
+    : option.badgeColor ?? colors.textSecondary;
 
   return (
-    <Animated.View style={[{ flex: 1 }, animatedStyle]}>
+    <Animated.View style={[styles.rowItem, animatedStyle]}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
@@ -83,37 +109,45 @@ function CardOption<T extends string>({
         }}
         onPress={onPress}
         style={({ pressed }) => [
-          styles.card,
+          styles.rowCard,
           active && styles.cardActive,
           pressed && styles.cardPressed,
           shadows.sm,
         ]}
       >
-        {/* Active Checkmark Badge */}
         {active ? (
           <View style={styles.checkBadge}>
-            <Ionicons name="checkmark" size={13} color={colors.white} />
+            <Ionicons name="checkmark" size={11} color={colors.white} />
           </View>
         ) : null}
 
-        {/* Option Icon / Emoji Badge */}
-        <View style={[styles.iconBadge, { backgroundColor: option.badgeBg ?? defaultBadgeBg }]}>
-          {option.emoji ? (
-            <Text style={styles.emoji}>{option.emoji}</Text>
-          ) : option.iconName ? (
-            <Ionicons
-              name={option.iconName}
-              size={24}
-              color={active ? colors.white : colors.primary}
-            />
-          ) : null}
-        </View>
+        {option.iconName ? (
+          <View
+            style={[
+              styles.rowIconBadge,
+              {
+                backgroundColor: active
+                  ? colors.primaryLight
+                  : option.badgeBg ?? colors.surfaceMuted,
+              },
+            ]}
+          >
+            <Ionicons name={option.iconName} size={20} color={iconColor} />
+          </View>
+        ) : null}
 
-        {/* Text Content */}
-        <View style={styles.textWrap}>
-          <Text style={[styles.title, active && styles.titleActive]}>{option.title}</Text>
+        <View style={styles.rowTextWrap}>
+          <Text
+            style={[styles.rowTitle, active && styles.titleActive]}
+            numberOfLines={1}
+          >
+            {option.title}
+          </Text>
           {option.subtitle ? (
-            <Text style={[styles.subtitle, active && styles.subtitleActive]}>
+            <Text
+              style={[styles.rowSubtitle, active && styles.subtitleActive]}
+              numberOfLines={1}
+            >
               {option.subtitle}
             </Text>
           ) : null}
@@ -123,70 +157,207 @@ function CardOption<T extends string>({
   );
 }
 
+/** Full-width horizontal row card for 3+ item choices (e.g. Anti-Rabies, Spay/Neuter, Weight) */
+function StackCardOption<T extends string>({
+  option,
+  active,
+  onPress,
+}: {
+  option: VisualCardOption<T>;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const reducedMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const iconColor = active
+    ? colors.primaryDark
+    : option.badgeColor ?? colors.textSecondary;
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={option.title}
+        onPressIn={() => {
+          scale.value = withSpring(reducedMotion ? 1 : 0.98, { damping: 18, stiffness: 320 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 18, stiffness: 320 });
+        }}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.stackCard,
+          active && styles.cardActive,
+          pressed && styles.cardPressed,
+          shadows.sm,
+        ]}
+      >
+        {option.iconName ? (
+          <View
+            style={[
+              styles.stackIconBadge,
+              {
+                backgroundColor: active
+                  ? colors.primaryLight
+                  : option.badgeBg ?? colors.surfaceMuted,
+              },
+            ]}
+          >
+            <Ionicons name={option.iconName} size={18} color={iconColor} />
+          </View>
+        ) : null}
+
+        <View style={styles.stackTextWrap}>
+          <Text style={[styles.stackTitle, active && styles.titleActive]}>
+            {option.title}
+          </Text>
+          {option.subtitle ? (
+            <Text style={[styles.stackSubtitle, active && styles.subtitleActive]}>
+              {option.subtitle}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Radio Indicator */}
+        <View style={[styles.radioCircle, active && styles.radioCircleActive]}>
+          {active ? <View style={styles.radioDot} /> : null}
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
-  grid: {
+  rowContainer: {
     flexDirection: 'row',
     gap: spacing.md,
+    width: '100%',
   },
-  card: {
+  rowItem: {
     flex: 1,
-    flexDirection: 'row',
+  },
+  rowCard: {
     alignItems: 'center',
-    padding: spacing.md,
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.xl,
     backgroundColor: colors.surface,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.border,
+    minHeight: 88,
     position: 'relative',
-    minHeight: 74,
+    gap: 6,
+  },
+  rowIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowTextWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowTitle: {
+    ...typography.captionBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  rowSubtitle: {
+    ...typography.small,
+    fontSize: 11,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 1,
+  },
+  stackContainer: {
+    gap: spacing.sm,
+    width: '100%',
+  },
+  stackCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    minHeight: 56,
     gap: spacing.md,
+  },
+  stackIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stackTextWrap: {
+    flex: 1,
+  },
+  stackTitle: {
+    ...typography.captionBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  stackSubtitle: {
+    ...typography.small,
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  radioCircleActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  radioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.white,
   },
   cardActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: '#F0FAF8',
   },
   cardPressed: {
     opacity: 0.9,
   },
   checkBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
   },
-  iconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: {
-    fontSize: 22,
-  },
-  textWrap: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  title: {
-    ...typography.captionBold,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
   titleActive: {
     color: colors.primaryDark,
-  },
-  subtitle: {
-    ...typography.small,
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
+    fontWeight: '700',
   },
   subtitleActive: {
     color: colors.primary,

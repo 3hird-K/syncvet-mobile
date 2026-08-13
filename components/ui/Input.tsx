@@ -1,5 +1,6 @@
 import React, { forwardRef, useCallback, useState } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -113,11 +114,16 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
 
         <TextInput
           ref={ref}
-          style={[styles.input, style]}
-          placeholderTextColor={colors.textDisabled}
+          style={[
+            styles.input,
+            rest.multiline && styles.inputMultiline,
+            style,
+          ]}
+          placeholderTextColor={rest.placeholderTextColor ?? '#8A9E99'}
           onFocus={handleFocus}
           onBlur={handleBlur}
           editable={editable}
+          textAlignVertical={rest.multiline ? 'top' : 'center'}
           {...rest}
         />
 
@@ -169,7 +175,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
-    minHeight: 54,
+    minHeight: 52,
     paddingHorizontal: spacing.lg,
   },
   fieldError: {
@@ -184,10 +190,16 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    ...typography.body,
+    fontFamily: typography.font.medium,
+    fontSize: 15,
     color: colors.textPrimary,
-    paddingVertical: spacing.md,
+    paddingVertical: Platform.OS === 'android' ? 6 : 10,
     includeFontPadding: false,
+  },
+  inputMultiline: {
+    minHeight: 64,
+    paddingTop: Platform.OS === 'android' ? 8 : 10,
+    paddingBottom: 8,
   },
   helperRow: {
     flexDirection: 'row',
