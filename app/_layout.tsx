@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StatusBar as RNStatusBar, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -33,6 +33,13 @@ export default function RootLayout() {
   });
 
   const restoreSession = useAuthStore((state) => state.restoreSession);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      RNStatusBar.setTranslucent(true);
+      RNStatusBar.setBackgroundColor('transparent');
+    }
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {

@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   topHeader: {
     position: 'absolute',
-    top: 50,
+    top: 14,
     right: 20,
     zIndex: 20,
   },

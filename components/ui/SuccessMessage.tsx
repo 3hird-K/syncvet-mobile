@@ -18,12 +18,21 @@ import { colors, radius, spacing, typography } from '@theme';
 interface SuccessMessageProps {
   title: string;
   message?: string;
+  variant?: 'success' | 'error';
 }
 
-export function SuccessMessage({ title, message }: SuccessMessageProps) {
+export function SuccessMessage({
+  title,
+  message,
+  variant = 'success',
+}: SuccessMessageProps) {
   const reducedMotion = useReducedMotion();
   const scale = useSharedValue(0);
   const check = useSharedValue(0);
+
+  const isError = variant === 'error';
+  const mainColor = isError ? colors.error : colors.success;
+  const bgColor = isError ? colors.errorLight : colors.successLight;
 
   useEffect(() => {
     if (reducedMotion) {
@@ -53,16 +62,14 @@ export function SuccessMessage({ title, message }: SuccessMessageProps) {
       style={styles.container}
       accessibilityRole="summary"
     >
-      <View style={styles.iconContainer}>
-        <Animated.View style={[styles.iconWrap, ringStyle]}>
-          <Animated.View style={checkStyle}>
-            <Text style={styles.check}>✓</Text>
-          </Animated.View>
+      <Animated.View
+        style={[styles.iconWrap, { backgroundColor: bgColor, borderColor: mainColor }, ringStyle]}
+      >
+        <Animated.View style={checkStyle}>
+          <Ionicons name="paw" size={36} color={mainColor} />
         </Animated.View>
-        <Animated.View style={[styles.pawBadge, checkStyle]}>
-          <Ionicons name="paw" size={14} color={colors.white} />
-        </Animated.View>
-      </View>
+      </Animated.View>
+
       <Text style={styles.title}>{title}</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
     </Animated.View>
@@ -72,40 +79,17 @@ export function SuccessMessage({ title, message }: SuccessMessageProps) {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
   },
-  iconContainer: {
-    position: 'relative',
-    marginBottom: spacing.lg,
-  },
   iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.successLight,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     borderWidth: 2.5,
-    borderColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pawBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  check: {
-    fontSize: 34,
-    color: colors.success,
-    fontWeight: '700',
+    marginBottom: spacing.lg,
   },
   title: {
     ...typography.heading3,
@@ -117,5 +101,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.sm,
+    lineHeight: 22,
   },
 });

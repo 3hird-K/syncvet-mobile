@@ -78,18 +78,26 @@ export default function ForgotPasswordScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.headerRow}>
-          <BackButton />
+        <View style={styles.headerBlockWrap}>
+          {!sent ? (
+            <View style={styles.headerRow}>
+              <BackButton />
+            </View>
+          ) : null}
+
+          <AuthHeader
+            title={sent ? 'Check your email' : 'Forgot password?'}
+            subtitle={
+              sent
+                ? 'We sent a password reset link to your email address.'
+                : 'Enter the email associated with your account and we’ll send you a reset link.'
+            }
+            showLogo={false}
+          />
         </View>
 
-        <AuthHeader
-          title="Forgot password?"
-          subtitle="Enter the email associated with your account and we’ll send you a reset link."
-          showLogo={false}
-        />
-
         {sent ? (
-          <View style={styles.body}>
+          <View style={styles.successBody}>
             <SuccessMessage
               title="Reset link sent"
               message={`If an account exists for ${fields.email.value}, you’ll receive a link shortly.`}
@@ -143,8 +151,8 @@ export default function ForgotPasswordScreen() {
         )}
       </KeyboardAvoidingView>
 
-      {/* Absolute Bottom Full-Width Illustration */}
-      {!keyboardVisible ? (
+      {/* Absolute Bottom Full-Width Illustration (Hidden on success screen or when keyboard active) */}
+      {!sent && !keyboardVisible ? (
         <View style={styles.absoluteBottomImageWrap} pointerEvents="none">
           <Image
             source={require('@assets/no-backgrounds/fam1-removebg-preview.png')}
@@ -162,10 +170,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.lg,
   },
   flex: {
     flex: 1,
+  },
+  headerBlockWrap: {
+    paddingTop: spacing.md,
   },
   headerRow: {
     marginBottom: spacing.md,
@@ -174,6 +184,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     paddingBottom: 130,
+  },
+  successBody: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    gap: spacing.xxl,
   },
   form: {
     marginTop: spacing.lg,
