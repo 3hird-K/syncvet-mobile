@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -304,6 +304,18 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleRefresh = useCallback(async () => {
+    haptic.light();
+    try {
+      await clerkUser?.reload();
+      if (user?.id) {
+        await useDataStore.getState().loadAll(user.id);
+      }
+    } catch (e) {
+      console.log('Profile refresh error:', e);
+    }
+  }, [clerkUser, user?.id]);
+
   if (loading && !loaded && !user && !clerkUser) {
     return (
       <AnimatedScreen animation="zoom">
@@ -314,7 +326,7 @@ export default function ProfileScreen() {
 
   return (
     <AnimatedScreen animation="zoom">
-      <Screen scroll>
+      <Screen scroll onRefresh={handleRefresh}>
         {/* Compact Screen Header with Edit and Logout */}
         <View style={styles.topHeader}>
           <Text style={styles.screenHeading}>Profile</Text>

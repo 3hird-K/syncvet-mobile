@@ -116,6 +116,18 @@ export default function HomeScreen() {
     void Linking.openURL('tel:0888572260').catch(() => {});
   };
 
+  const handleRefresh = useCallback(async () => {
+    haptic.light();
+    try {
+      await clerkUser?.reload();
+      if (user?.id) {
+        await useDataStore.getState().loadAll(user.id);
+      }
+    } catch (e) {
+      console.log('Refresh error:', e);
+    }
+  }, [clerkUser, user?.id]);
+
   if (loading && !loaded && allPets.length === 0) {
     return (
       <AnimatedScreen animation="zoom">
@@ -126,7 +138,7 @@ export default function HomeScreen() {
 
   return (
     <AnimatedScreen animation="zoom">
-      <Screen scroll>
+      <Screen scroll onRefresh={handleRefresh}>
         {/* 1. Senior Executive Municipal Top Header */}
         <Animated.View entering={FadeInDown.duration(240)} style={styles.topHeader}>
           <View style={styles.headerLeft}>

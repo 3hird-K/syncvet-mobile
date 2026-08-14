@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -75,6 +75,18 @@ export default function ServicesScreen() {
     } as never);
   };
 
+  const handleRefresh = useCallback(async () => {
+    haptic.light();
+    try {
+      await clerkUser?.reload();
+      if (clerkUser?.id) {
+        await useDataStore.getState().loadAll(clerkUser.id);
+      }
+    } catch (e) {
+      console.log('Services refresh error:', e);
+    }
+  }, [clerkUser]);
+
   if (loading && !loaded && userPets.length === 0) {
     return (
       <AnimatedScreen animation="zoom">
@@ -85,7 +97,7 @@ export default function ServicesScreen() {
 
   return (
     <AnimatedScreen animation="zoom">
-      <Screen scroll>
+      <Screen scroll onRefresh={handleRefresh}>
         {/* 1. Senior Executive Municipal Header */}
         <View style={styles.topHeader}>
           {/* Eyebrow badge */}

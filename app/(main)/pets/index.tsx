@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -43,6 +43,7 @@ type FilterCategory = 'all' | 'dog' | 'cat' | 'needs_vaccine';
 export default function PetsScreen() {
   const router = useRouter();
   const { user: clerkUser } = useUser();
+  const user = useAuthStore((state) => state.user);
   const ownerId = useAuthStore((state) => state.user?.id);
   const { loading, loaded } = useResidentData();
   const localPets = useDataStore((state) => state.pets);
@@ -98,6 +99,18 @@ export default function PetsScreen() {
   const catCount = allPets.filter((p) => p.species?.toLowerCase() === 'cat').length;
   const needsVaccineCount = allPets.filter((p) => !p.isVaccinated).length;
 
+  const handleRefresh = useCallback(async () => {
+    haptic.light();
+    try {
+      await clerkUser?.reload();
+      if (user?.id) {
+        await useDataStore.getState().loadAll(user.id);
+      }
+    } catch (e) {
+      console.log('Pets refresh error:', e);
+    }
+  }, [clerkUser, user?.id]);
+
   if (loading && !loaded && allPets.length === 0) {
     return (
       <AnimatedScreen animation="zoom">
@@ -108,7 +121,7 @@ export default function PetsScreen() {
 
   return (
     <AnimatedScreen animation="zoom">
-      <Screen scroll>
+      <Screen scroll onRefresh={handleRefresh}>
         {/* 1. Senior Executive Municipal Header */}
         <View style={styles.topHeader}>
           {/* Eyebrow badge */}

@@ -4,6 +4,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -80,6 +81,23 @@ export default function AppointmentsScreen() {
 
   const [activeTab, setActiveTab] = useState<AppointmentTab>('upcoming');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    haptic.light();
+    setRefreshing(true);
+    try {
+      await clerkUser?.reload();
+      if (clerkUser?.id) {
+        await useDataStore.getState().loadAll(clerkUser.id);
+      }
+    } catch (e) {
+      console.log('Appointments refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [clerkUser]);
 
   const listRef = useRef<FlatList<AppointmentTab>>(null);
   const scrollX = useSharedValue(0);
@@ -169,6 +187,17 @@ export default function AppointmentsScreen() {
           <ScrollView
             contentContainerStyle={styles.tabScrollContent}
             showsVerticalScrollIndicator={false}
+            bounces={true}
+            alwaysBounceVertical={true}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary, colors.primaryDark]}
+                progressBackgroundColor={colors.surface}
+              />
+            }
           >
             {/* Context subtitle bar */}
             <View style={styles.tabContextRow}>
@@ -220,7 +249,7 @@ export default function AppointmentsScreen() {
         </SlideWrapper>
       );
     },
-    [upcoming, past, scrollX, width, router],
+    [upcoming, past, scrollX, width, router, refreshing, handleRefresh],
   );
 
   if (loading && !loaded && userPets.length === 0) {
