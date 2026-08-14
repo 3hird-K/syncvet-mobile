@@ -34,6 +34,7 @@ import { AddressPicker } from '@components/ui/AddressPicker';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { toast } from '@components/ui/Sonner';
+import { ProfileScreenSkeleton } from '@components/ui/Skeleton';
 
 interface MetadataPet {
   id?: string;
@@ -58,7 +59,7 @@ export default function ProfileScreen() {
   const signOut = useAuthStore((state) => state.signOut);
   const localPets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
-  useResidentData();
+  const { loading, loaded } = useResidentData();
 
   // Extract Profile Data
   const fullName =
@@ -245,8 +246,16 @@ export default function ProfileScreen() {
     void Linking.openURL('tel:0888572260').catch(() => {});
   };
 
+  if (loading && !loaded && !user && !clerkUser) {
+    return (
+      <AnimatedScreen animation="zoom">
+        <ProfileScreenSkeleton />
+      </AnimatedScreen>
+    );
+  }
+
   return (
-    <AnimatedScreen animation="fade">
+    <AnimatedScreen animation="zoom">
       <Screen scroll>
         {/* Compact Screen Header */}
         <View style={styles.topHeader}>

@@ -7,6 +7,7 @@ import { getService } from '@lib/services';
 import { formatWeekdayDate } from '@lib/format';
 import { useDataStore } from '@store/useDataStore';
 import type { Appointment } from '@services/data';
+import { useUser } from '@clerk/expo';
 import { PopoutPetAvatar } from './PopoutPetAvatar';
 import { StatusBadge } from './StatusBadge';
 
@@ -21,15 +22,20 @@ export function AppointmentCard({
   onPress,
   showFooterAction = true,
 }: AppointmentCardProps) {
+  const { user: clerkUser } = useUser();
   const service = getService(appointment.serviceId);
   const formattedDate = formatWeekdayDate(appointment.date);
 
-  // Look up pet from data store for real avatar and species
-  const pets = useDataStore((state) => state.pets);
-  const pet = pets.find(
-    (p) =>
+  // Look up pet from Clerk metadata and data store for real avatar and species
+  const localPets = useDataStore((state) => state.pets);
+  const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
+  const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
+  const petPool = metaPets.length > 0 ? metaPets : localPets;
+
+  const pet = petPool.find(
+    (p: any) =>
       p.id === appointment.petId ||
-      p.name.toLowerCase() === appointment.petName.toLowerCase(),
+      p.name?.toLowerCase().trim() === appointment.petName?.toLowerCase().trim(),
   );
 
   const species = pet?.species || 'dog';
@@ -47,32 +53,16 @@ export function AppointmentCard({
         pressed && styles.pressed,
       ]}
     >
-      {/* 1. Header: Service Type Pill & Status Badge */}
-      <View style={styles.topRow}>
-        <View style={styles.servicePill}>
-          <Ionicons
-            name={service?.icon ?? 'medkit-outline'}
-            size={13}
-            color={colors.primary}
-          />
-          <Text style={styles.servicePillText} numberOfLines={1}>
-            {service?.name ?? 'Veterinary Service'}
-          </Text>
-        </View>
-
-        <StatusBadge status={appointment.status} />
-      </View>
-
-      {/* 2. Pet Identity Row with 3D Avatar */}
-      <View style={styles.petIdentityRow}>
+      {/* 1. Header: Pet Avatar + Name & Breed + Status Badge */}
+      <View style={styles.headerRow}>
         <View style={styles.avatarWrap}>
           {pet ? (
             <PopoutPetAvatar
               avatarId={pet.avatarId}
               species={pet.species}
               photoUrl={pet.photoUrl}
-              size={46}
-              scale={1.3}
+              size={40}
+              scale={1.25}
             />
           ) : (
             <View
@@ -83,7 +73,7 @@ export function AppointmentCard({
             >
               <Ionicons
                 name="paw"
-                size={22}
+                size={18}
                 color={isDog ? colors.primary : '#DB2777'}
               />
             </View>
@@ -97,36 +87,44 @@ export function AppointmentCard({
           <Text style={styles.petBreedText} numberOfLines={1}>
             {breedText}
           </Text>
-          <View style={styles.clinicRow}>
-            <Ionicons name="location-sharp" size={11} color={colors.textMuted} />
-            <Text style={styles.clinicText} numberOfLines={1}>
+        </View>
+
+        <StatusBadge status={appointment.status} />
+      </View>
+
+      {/* 2. Compact Service & Schedule Bar */}
+      <View style={styles.metaBar}>
+        <View style={styles.servicePill}>
+          <Ionicons
+            name={service?.icon ?? 'medkit-outline'}
+            size={12}
+            color={colors.primaryDark}
+          />
+          <Text style={styles.servicePillText} numberOfLines={1}>
+            {service?.name ?? 'Veterinary Service'}
+          </Text>
+        </View>
+
+        <View style={styles.schedulePill}>
+          <Ionicons name="calendar-outline" size={11} color={colors.textSecondary} />
+          <Text style={styles.scheduleText} numberOfLines={1}>
+            {formattedDate} · {appointment.timeSlot}
+          </Text>
+        </View>
+      </View>
+
+      {/* 3. Bottom Compact Action Footer */}
+      {showFooterAction ? (
+        <View style={styles.footerRow}>
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={11} color={colors.textMuted} />
+            <Text style={styles.locationText} numberOfLines={1}>
               {appointment.location || 'City Veterinary Office'}
             </Text>
           </View>
-        </View>
-      </View>
-
-      {/* 3. Modern Schedule Box */}
-      <View style={styles.scheduleBox}>
-        <View style={styles.scheduleItem}>
-          <Ionicons name="calendar" size={14} color={colors.primary} />
-          <Text style={styles.scheduleDateText}>{formattedDate}</Text>
-        </View>
-
-        <View style={styles.scheduleDivider} />
-
-        <View style={styles.scheduleItem}>
-          <Ionicons name="time" size={14} color={colors.primary} />
-          <Text style={styles.scheduleTimeText}>{appointment.timeSlot}</Text>
-        </View>
-      </View>
-
-      {/* 4. Bottom Clinical Slip Action */}
-      {showFooterAction ? (
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>View Appointment Details</Text>
-          <View style={styles.chevronCircle}>
-            <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+          <View style={styles.detailsAction}>
+            <Text style={styles.footerText}>Details</Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.primary} />
           </View>
         </View>
       ) : null}
@@ -137,134 +135,111 @@ export function AppointmentCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xxl,
-    padding: spacing.md,
+    borderRadius: radius.xl,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
     borderWidth: 1,
-    borderColor: 'rgba(7, 30, 38, 0.08)',
-    gap: 12,
+    borderColor: 'rgba(7, 30, 38, 0.06)',
+    gap: 8,
   },
   pressed: {
     backgroundColor: '#F8FAFA',
-    transform: [{ scale: 0.99 }],
+    transform: [{ scale: 0.995 }],
   },
-  topRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  servicePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(0, 168, 150, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 4.5,
-    borderRadius: radius.pill,
-    flexShrink: 1,
-  },
-  servicePillText: {
-    ...typography.captionBold,
-    color: colors.primaryDark,
-    fontSize: 11.5,
-    fontWeight: '700',
-    flexShrink: 1,
-  },
-  petIdentityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   avatarWrap: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fallbackAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
   petTextCol: {
     flex: 1,
-    gap: 1.5,
+    gap: 1,
   },
   petName: {
-    ...typography.heading2,
+    ...typography.title,
     color: colors.textPrimary,
-    fontSize: 17.5,
+    fontSize: 15.5,
     fontWeight: '800',
   },
   petBreedText: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
-  },
-  clinicRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3.5,
-    marginTop: 1,
-  },
-  clinicText: {
-    ...typography.small,
-    color: colors.textMuted,
     fontSize: 11.5,
-    flex: 1,
   },
-  scheduleBox: {
+  metaBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(7, 30, 38, 0.035)',
-    borderRadius: radius.lg,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-  },
-  scheduleItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: 'rgba(7, 30, 38, 0.025)',
+    borderRadius: radius.md,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
     gap: 6,
   },
-  scheduleDateText: {
+  servicePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 1,
+  },
+  servicePillText: {
+    ...typography.captionBold,
+    color: colors.primaryDark,
+    fontSize: 11,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  schedulePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  scheduleText: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: '700',
-  },
-  scheduleDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: 'rgba(7, 30, 38, 0.10)',
-  },
-  scheduleTimeText: {
-    ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 12.5,
-    fontWeight: '800',
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 8,
+    paddingTop: 5,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(7, 30, 38, 0.05)',
+    borderTopColor: 'rgba(7, 30, 38, 0.04)',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flex: 1,
+  },
+  locationText: {
+    ...typography.small,
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  detailsAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   footerText: {
     ...typography.captionBold,
-    color: colors.textPrimary,
-    fontSize: 12,
-  },
-  chevronCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(0, 168, 150, 0.09)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    color: colors.primary,
+    fontSize: 11,
   },
 });

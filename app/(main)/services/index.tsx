@@ -15,9 +15,11 @@ import { SERVICES, SERVICE_LOCATION, type ServiceDef } from '@lib/services';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
+import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
+import { ServicesScreenSkeleton } from '@components/ui/Skeleton';
 
 const SERVICE_TAGS: Record<string, { label: string; bg: string; color: string }> = {
   vaccination: { label: 'Free City Program', bg: 'rgba(16, 185, 129, 0.12)', color: colors.success },
@@ -32,6 +34,7 @@ export default function ServicesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ pet?: string }>();
   const { user: clerkUser } = useUser();
+  const { loading, loaded } = useResidentData();
   const ownerId = useAuthStore((state) => state.user?.id) || 'cdo-resident-user';
   const localPets = useDataStore((state) => state.pets);
 
@@ -78,23 +81,61 @@ export default function ServicesScreen() {
     } as never);
   };
 
+  if (loading && !loaded && userPets.length === 0) {
+    return (
+      <AnimatedScreen animation="zoom">
+        <ServicesScreenSkeleton />
+      </AnimatedScreen>
+    );
+  }
+
   return (
-    <AnimatedScreen animation="fade">
+    <AnimatedScreen animation="zoom">
       <Screen scroll>
-        {/* Top Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerEyebrow}>City Veterinary Office · CDO</Text>
-          <Text style={styles.title}>Municipal Services</Text>
-          <Text style={styles.subtitle}>
-            Official pet health, immunization, and clinical programs for residents.
-          </Text>
+        {/* 1. Senior Executive Municipal Header */}
+        <View style={styles.topHeader}>
+          {/* Eyebrow badge */}
+          <View style={styles.eyebrowBadge}>
+            <Ionicons name="shield-checkmark" size={11} color={colors.primary} />
+            <Text style={styles.eyebrowText}>CITY VETERINARY OFFICE · CDO</Text>
+          </View>
+
+          {/* Title & Book Visit Action Row */}
+          <View style={styles.headerTitleRow}>
+            <View style={styles.titleCol}>
+              <Text style={styles.heroTitle}>Services</Text>
+              <Text style={styles.heroSubtitle}>
+                Official municipal pet health, immunization, and clinical programs
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Book new visit"
+              onPress={() => {
+                haptic.light();
+                router.push({
+                  pathname: '/appointments/new',
+                  params: {
+                    petId: selectedPetId || undefined,
+                    petName: selectedPet?.name || undefined,
+                  },
+                } as never);
+              }}
+              hitSlop={6}
+              style={({ pressed }) => [styles.headerCtaBtn, pressed && styles.headerCtaBtnPressed]}
+            >
+              <Ionicons name="add" size={18} color={colors.white} />
+              <Text style={styles.headerCtaBtnText}>Book Visit</Text>
+            </Pressable>
+          </View>
         </View>
 
-        {/* User's Registered Pets Messenger-Style Circular Stories Row */}
+        {/* 2. Registered Patient Selector Carousel */}
         {userPets.length > 0 && (
-          <View style={styles.petStoriesSection}>
-            <View style={styles.petStoriesHeader}>
-              <Text style={styles.petStoriesTitle}>Select Patient</Text>
+          <View style={styles.patientSelectorSection}>
+            <View style={styles.patientSelectorHeader}>
+              <Text style={styles.patientSelectorTitle}>Select Patient</Text>
               {selectedPet && (
                 <Pressable
                   onPress={() => {
@@ -103,7 +144,7 @@ export default function ServicesScreen() {
                   }}
                   hitSlop={8}
                 >
-                  <Text style={styles.clearSelectionText}>Clear</Text>
+                  <Text style={styles.clearSelectionText}>Clear selection</Text>
                 </Pressable>
               )}
             </View>
@@ -125,7 +166,10 @@ export default function ServicesScreen() {
                       haptic.light();
                       setSelectedPetId(isSelected ? undefined : pet.id);
                     }}
-                    style={styles.storyItem}
+                    style={[
+                      styles.patientPill,
+                      isSelected && styles.patientPillActive,
+                    ]}
                   >
                     <View
                       style={[
@@ -137,8 +181,8 @@ export default function ServicesScreen() {
                         avatarId={pet.avatarId}
                         species={pet.species}
                         photoUrl={pet.photoUrl}
-                        size={56}
-                        scale={1.45}
+                        size={52}
+                        scale={1.35}
                       />
                       {isSelected && (
                         <View
@@ -171,18 +215,27 @@ export default function ServicesScreen() {
                   haptic.light();
                   router.push('/pets/add' as never);
                 }}
-                style={styles.storyItem}
+                style={styles.addPatientPill}
               >
                 <View style={styles.addStoryCircle}>
-                  <Ionicons name="add" size={22} color={colors.primary} />
+                  <Ionicons name="add" size={20} color={colors.primary} />
                 </View>
                 <Text style={styles.addStoryName}>Add Pet</Text>
               </Pressable>
             </ScrollView>
+
+            {/* Selected Patient Banner Hint */}
+            {selectedPet && (
+              <View style={styles.selectedPatientBanner}>
+                <Text style={styles.selectedPatientBannerText}>
+                  Booking for <Text style={styles.selectedPatientHighlight}>{selectedPet.name}</Text> ({selectedPet.breed || (selectedPet.species === 'dog' ? 'Canine' : 'Feline')})
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
-        {/* Modern Municipal Ordinance Highlight Banner (No Icon, Crisp Typography) */}
+        {/* 3. Modern Municipal Ordinance Highlight Banner */}
         <View style={[styles.modernOrdinanceCard, shadows.sm]}>
           <View style={styles.ordinanceTagRow}>
             <View style={styles.ordinanceTagPill}>
@@ -285,40 +338,79 @@ export default function ServicesScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
+  topHeader: {
     marginBottom: spacing.md,
+    paddingTop: 4,
+    gap: 6,
   },
-  headerEyebrow: {
-    ...typography.smallBold,
+  eyebrowBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: radius.pill,
+  },
+  eyebrowText: {
+    ...typography.captionBold,
     color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    fontSize: 11,
-    marginBottom: 2,
+    fontSize: 10,
+    letterSpacing: 0.6,
   },
-  title: {
+  headerTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  titleCol: {
+    flex: 1,
+    gap: 2,
+  },
+  heroTitle: {
     ...typography.heading1,
     color: colors.textPrimary,
     fontSize: 26,
     fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  subtitle: {
-    ...typography.body,
+  heroSubtitle: {
+    ...typography.caption,
     color: colors.textSecondary,
-    marginTop: 4,
-    fontSize: 13.5,
-    lineHeight: 19,
+    fontSize: 12.5,
+    lineHeight: 16,
   },
-  petStoriesSection: {
-    marginBottom: spacing.lg,
+  headerCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8.5,
+    borderRadius: radius.pill,
+    ...shadows.sm,
+  },
+  headerCtaBtnPressed: {
+    backgroundColor: colors.primaryDark,
+    transform: [{ scale: 0.98 }],
+  },
+  headerCtaBtnText: {
+    ...typography.captionBold,
+    color: colors.white,
+    fontSize: 12.5,
+  },
+  patientSelectorSection: {
+    marginBottom: spacing.md,
     gap: 8,
   },
-  petStoriesHeader: {
+  patientSelectorHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  petStoriesTitle: {
+  patientSelectorTitle: {
     ...typography.captionBold,
     color: colors.textPrimary,
     fontSize: 13,
@@ -330,24 +422,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   storiesScroll: {
-    gap: 14,
+    gap: 10,
     paddingVertical: 4,
     paddingHorizontal: 2,
   },
-  storyItem: {
+  patientPill: {
     alignItems: 'center',
-    gap: 6,
-    width: 66,
+    gap: 5,
+    width: 64,
+  },
+  patientPillActive: {
+    transform: [{ scale: 1.04 }],
+  },
+  addPatientPill: {
+    alignItems: 'center',
+    gap: 5,
+    width: 64,
   },
   avatarWrap: {
-    width: 58,
-    height: 58,
+    width: 54,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   avatarWrapActive: {
-    transform: [{ scale: 1.09 }],
+    transform: [{ scale: 1.06 }],
   },
   activeCheckmarkBadge: {
     position: 'absolute',
@@ -365,17 +465,13 @@ const styles = StyleSheet.create({
   storyPetName: {
     ...typography.captionBold,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
     textAlign: 'center',
   },
-  storyPetNameActive: {
-    color: colors.primaryDark,
-    fontWeight: '800',
-  },
   addStoryCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderColor: colors.primary,
@@ -386,9 +482,30 @@ const styles = StyleSheet.create({
   addStoryName: {
     ...typography.small,
     color: colors.primary,
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  selectedPatientBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 168, 150, 0.07)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.15)',
+    marginTop: 2,
+  },
+  selectedPatientBannerText: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    fontSize: 12,
+  },
+  selectedPatientHighlight: {
+    color: colors.primaryDark,
+    fontWeight: '700',
   },
   modernOrdinanceCard: {
     backgroundColor: '#F0FAF7',
@@ -396,7 +513,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(0, 168, 150, 0.18)',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
     gap: 6,
   },
   ordinanceTagRow: {

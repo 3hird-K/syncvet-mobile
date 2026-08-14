@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -7,12 +8,22 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  ZoomIn,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useUser } from '@clerk/expo';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -41,10 +52,22 @@ import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { Button } from '@components/ui/Button';
+import { BackButton } from '@components/ui/BackButton';
+import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { toast } from '@components/ui/Sonner';
 import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 
-const TOTAL_STEPS = 4;
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<BookingStepIndex>);
+
+const BOOKING_STEPS = [1, 2, 3, 4] as const;
+type BookingStepIndex = (typeof BOOKING_STEPS)[number];
+
+const STEP_SUBTITLES: Record<BookingStepIndex, string> = {
+  1: 'Select Pet',
+  2: 'Choose Service',
+  3: 'Select Schedule',
+  4: 'Review Booking',
+};
 
 const CLINICAL_REASONS: Record<string, string[]> = {
   vaccination: [
@@ -91,7 +114,6 @@ function calculatePetVaccineTimeline(
   pet: any,
   appointments: any[] = [],
 ): PetVaccinationTimeline {
-  // Find all vaccination appointments for this specific pet
   const vaxAppts = (appointments || [])
     .filter(
       (a) => a.petId === pet.id && a.serviceId === 'vaccination' && a.status !== 'cancelled',
@@ -104,7 +126,6 @@ function calculatePetVaccineTimeline(
 
   let lastVaccineDate = vaxAppts[0]?.date || pet.lastVaccinationDate;
   if (!lastVaccineDate && isVaccinated) {
-    // If marked vaccinated but no specific date was set, use pet's registration date or 6 months ago
     lastVaccineDate = pet.createdAt ? pet.createdAt.split('T')[0] : '2025-08-14';
   }
 
@@ -133,8 +154,48 @@ function calculatePetVaccineTimeline(
   };
 }
 
+interface SlideWrapperProps {
+  index: number;
+  scrollX: SharedValue<number>;
+  width: number;
+  children: React.ReactNode;
+}
+
+function SlideWrapper({ index, scrollX, width, children }: SlideWrapperProps) {
+  const reducedMotion = useReducedMotion();
+  const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+
+  const animatedStyle = useAnimatedStyle(() => {
+    if (reducedMotion) return {};
+    return {
+      opacity: interpolate(scrollX.value, inputRange, [0.4, 1, 0.4], Extrapolation.CLAMP),
+      transform: [
+        {
+          scale: interpolate(scrollX.value, inputRange, [0.92, 1, 0.92], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  });
+
+  return (
+    <View style={{ width }}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <Animated.View style={[styles.slideInner, animatedStyle]}>
+          {children}
+        </Animated.View>
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function NewAppointmentScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{
     petId?: string;
     petName?: string;
@@ -147,7 +208,14 @@ export default function NewAppointmentScreen() {
   const appointments = useDataStore((state) => state.appointments);
   const bookAppointment = useDataStore((state) => state.bookAppointment);
 
-  // Load STRICTLY the signed-in resident's pets (Clerk metadata priority, fallback to local user store)
+  const listRef = useRef<FlatList<BookingStepIndex>>(null);
+  const scrollX = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler((e) => {
+    scrollX.value = e.contentOffset.x;
+  });
+
+  // Load resident's pets
   const allPets = useMemo(() => {
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
@@ -184,7 +252,7 @@ export default function NewAppointmentScreen() {
   const initialPetId = params.petId || (allPets.length > 0 ? allPets[0].id : undefined);
   const initialServiceId = params.serviceId || 'vaccination';
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<BookingStepIndex>(1);
   const [selectedPetId, setSelectedPetId] = useState<string | undefined>(initialPetId);
   const [selectedServiceId, setSelectedServiceId] = useState<string>(initialServiceId);
   const [clinicalReason, setClinicalReason] = useState<string>('');
@@ -202,6 +270,8 @@ export default function NewAppointmentScreen() {
     timeSlot: string;
   } | null>(null);
 
+  const lastToastTimeRef = useRef<number>(0);
+
   const selectedPet = useMemo(
     () => allPets.find((p) => p.id === selectedPetId),
     [allPets, selectedPetId],
@@ -212,7 +282,7 @@ export default function NewAppointmentScreen() {
     [selectedServiceId],
   );
 
-  // Available dates (Next 10 official municipal business days: Monday to Friday)
+  // Available dates (Next 10 municipal business days: Monday to Friday)
   const dateOptions = useMemo(() => {
     const today = todayISO();
     const tomorrow = toISODate(addDays(1));
@@ -229,7 +299,7 @@ export default function NewAppointmentScreen() {
     while (daysAdded < 10) {
       const dateObj = addDays(offset);
       const dayOfWeek = dateObj.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday = 0, Saturday = 6
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
       const iso = toISODate(dateObj);
 
       if (!isWeekend) {
@@ -269,42 +339,129 @@ export default function NewAppointmentScreen() {
     }
   }, [dateISO, timeSlot]);
 
-  const canContinue = useMemo(() => {
-    if (step === 1) return Boolean(selectedPetId);
-    if (step === 2) return Boolean(selectedServiceId);
-    if (step === 3) return Boolean(dateISO && timeSlot);
-    return true;
-  }, [step, selectedPetId, selectedServiceId, dateISO, timeSlot]);
+  const canAdvanceFromStep = useCallback(
+    (currentStep: number): boolean => {
+      if (currentStep === 1) {
+        if (!selectedPetId) {
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Pet Selection Required', {
+              id: 'booking-pet-required',
+              description: 'Please select a pet to schedule this appointment.',
+            });
+          }
+          return false;
+        }
+        return true;
+      }
+      if (currentStep === 2) {
+        if (!selectedServiceId) {
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Service Required', {
+              id: 'booking-service-required',
+              description: 'Please choose a veterinary service for this visit.',
+            });
+          }
+          return false;
+        }
+        return true;
+      }
+      if (currentStep === 3) {
+        if (!dateISO || !timeSlot) {
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Schedule Required', {
+              id: 'booking-schedule-required',
+              description: 'Please select an appointment date and preferred time slot.',
+            });
+          }
+          return false;
+        }
+        return true;
+      }
+      return true;
+    },
+    [selectedPetId, selectedServiceId, dateISO, timeSlot],
+  );
 
-  const handleBack = useCallback(() => {
+  const goToSlide = useCallback(
+    (index: number) => {
+      setStep((index + 1) as BookingStepIndex);
+      listRef.current?.scrollToOffset({ offset: index * width, animated: true });
+    },
+    [width],
+  );
+
+  const handleNextStep = useCallback(
+    (currentPart: number) => {
+      if (!canAdvanceFromStep(currentPart)) return;
+      haptic.light();
+      goToSlide(currentPart);
+    },
+    [canAdvanceFromStep, goToSlide],
+  );
+
+  const handlePrevStep = useCallback(
+    (currentPart: number) => {
+      haptic.light();
+      goToSlide(currentPart - 2);
+    },
+    [goToSlide],
+  );
+
+  const handleStepPress = (targetStep: BookingStepIndex) => {
     haptic.light();
-    if (step > 1) {
-      setStep((s) => s - 1);
-      setError(undefined);
+    if (targetStep < step) {
+      goToSlide(targetStep - 1);
+      return;
+    }
+    for (let s = step; s < targetStep; s++) {
+      if (!canAdvanceFromStep(s)) {
+        return;
+      }
+    }
+    goToSlide(targetStep - 1);
+  };
+
+  const handleBack = () => {
+    if (confirmedTicket) {
+      router.replace('/appointments' as never);
+    } else if (step > 1) {
+      handlePrevStep(step);
     } else if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/appointments' as never);
     }
-  }, [step, router]);
+  };
 
-  const handleContinue = useCallback(() => {
-    haptic.light();
-    setError(undefined);
-    if (step === 1 && !selectedPetId) {
-      setError('Please select a pet to proceed.');
-      return;
-    }
-    if (step === 2 && !selectedServiceId) {
-      setError('Please choose a veterinary service.');
-      return;
-    }
-    if (step === 3 && (!dateISO || !timeSlot)) {
-      setError('Please select an appointment date and preferred time slot.');
-      return;
-    }
-    setStep((s) => Math.min(TOTAL_STEPS, s + 1));
-  }, [step, selectedPetId, selectedServiceId, dateISO, timeSlot]);
+  const onMomentumScrollEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      const targetIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+      const targetStep = Math.max(1, Math.min(4, targetIndex + 1)) as BookingStepIndex;
+
+      if (targetStep > step) {
+        for (let s = step; s < targetStep; s++) {
+          if (!canAdvanceFromStep(s)) {
+            // Validation failed! Snap back to incomplete step
+            listRef.current?.scrollToOffset({
+              offset: (s - 1) * width,
+              animated: true,
+            });
+            setStep(s as BookingStepIndex);
+            return;
+          }
+        }
+      }
+
+      setStep(targetStep);
+    },
+    [width, step, canAdvanceFromStep],
+  );
 
   const handleConfirmBooking = useCallback(async () => {
     if (!selectedPet || !selectedService || !dateISO || !timeSlot) {
@@ -362,6 +519,7 @@ export default function NewAppointmentScreen() {
       });
 
       toast.success('Appointment Scheduled!', {
+        id: 'appointment-scheduled-success',
         description: `${selectedService.name} for ${selectedPet.name} on ${formatShortDate(dateISO)}.`,
       });
     } catch (err: any) {
@@ -369,6 +527,7 @@ export default function NewAppointmentScreen() {
       setError('Could not confirm booking. Please try again.');
       haptic.error();
       toast.error('Booking Failed', {
+        id: 'booking-failed-error',
         description: 'Unable to schedule this visit. Please check your connection and try again.',
       });
     } finally {
@@ -386,63 +545,532 @@ export default function NewAppointmentScreen() {
     clerkUser,
   ]);
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.container}
-      >
-        {/* Top Header Bar */}
-        <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            onPress={handleBack}
-            hitSlop={10}
-            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-          >
-            <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
-          </Pressable>
+  const renderItem = useCallback(
+    ({ item }: { item: BookingStepIndex }) => {
+      const index = item - 1;
 
-          {confirmedTicket ? (
-            <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle}>Booking Confirmed</Text>
-              <Text style={styles.headerSubtitle}>Official Municipal Ticket</Text>
+      if (item === 1) {
+        return (
+          <SlideWrapper index={index} scrollX={scrollX} width={width}>
+            <View style={styles.sectionHeadingWrap}>
+              <Text style={styles.sectionTitle}>Select Pet</Text>
+              <Text style={styles.sectionDesc}>
+                Choose your registered pet for this veterinary appointment.
+              </Text>
             </View>
-          ) : (
-            <View style={styles.headerProgress}>
-              <View style={styles.headerProgressRow}>
-                <Text style={styles.stepTitle}>
-                  {step === 1
-                    ? 'Select Pet'
-                    : step === 2
-                      ? 'Choose Service'
-                      : step === 3
-                        ? 'Select Schedule'
-                        : 'Review Booking'}
+
+            <View style={styles.petsGrid}>
+              {allPets.map((p) => {
+                const isSelected = p.id === selectedPetId;
+                const isDog = p.species?.toLowerCase() === 'dog';
+                const vax = calculatePetVaccineTimeline(p, appointments);
+                const ageDisplay = p.birthYear ? formatAge(ageFromBirthYear(p.birthYear)) : '';
+
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => {
+                      haptic.light();
+                      setSelectedPetId(p.id);
+                      setError(undefined);
+                    }}
+                    style={[
+                      styles.petSelectCard,
+                      isSelected && styles.petSelectCardActive,
+                      shadows.sm,
+                    ]}
+                  >
+                    <PopoutPetAvatar
+                      avatarId={p.avatarId}
+                      species={p.species}
+                      photoUrl={p.photoUrl}
+                      size={76}
+                      scale={1.55}
+                    />
+
+                    <View style={styles.petSelectInfo}>
+                      <View style={styles.petNameRow}>
+                        <Text style={styles.petCardName}>{p.name}</Text>
+                        <View
+                          style={[
+                            styles.speciesChip,
+                            isDog ? styles.speciesChipDog : styles.speciesChipCat,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.speciesChipText,
+                              isDog ? styles.speciesChipTextDog : styles.speciesChipTextCat,
+                            ]}
+                          >
+                            {isDog ? 'Canine' : 'Feline'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.petCardBreed} numberOfLines={1}>
+                        {p.breed || (isDog ? 'Canine' : 'Feline')}
+                        {ageDisplay ? ` · ${ageDisplay}` : ''}
+                      </Text>
+
+                      <View style={styles.vaxStatusBox}>
+                        <View style={styles.vaxBadgeRow}>
+                          <View
+                            style={[
+                              styles.vaxDoseBadge,
+                              vax.isVaccinated
+                                ? styles.vaxDoseBadgeGreen
+                                : styles.vaxDoseBadgeAmber,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.vaxDoseBadgeText,
+                                vax.isVaccinated
+                                  ? styles.vaxDoseBadgeTextGreen
+                                  : styles.vaxDoseBadgeTextAmber,
+                              ]}
+                            >
+                              {vax.isVaccinated
+                                ? `${vax.totalDoses} ${vax.totalDoses === 1 ? 'Dose' : 'Doses'} Recorded`
+                                : '0 Doses (Vaccine Due)'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {vax.isVaccinated && vax.nextBoosterDate ? (
+                          <Text style={styles.vaxTimingNext} numberOfLines={1}>
+                            Next Booster: {formatDateWithYear(vax.nextBoosterDate)}
+                          </Text>
+                        ) : !vax.isVaccinated ? (
+                          <Text style={styles.vaxTimingDue} numberOfLines={1}>
+                            Anti-Rabies due · Schedule now
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.radioCircle,
+                        isSelected && styles.radioCircleSelected,
+                      ]}
+                    >
+                      {isSelected && <View style={styles.radioDot} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+
+              <Pressable
+                onPress={() => {
+                  haptic.light();
+                  router.push('/pets/add' as never);
+                }}
+                style={styles.addPetBtn}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+                <Text style={styles.addPetBtnText}>Register Another Pet</Text>
+              </Pressable>
+            </View>
+
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={() => handleNextStep(1)}
+              style={styles.swipePromptPill}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Service Selection"
+            >
+              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <View style={styles.swipePromptIconWrap}>
+                <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+              </View>
+            </Pressable>
+          </SlideWrapper>
+        );
+      }
+
+      if (item === 2) {
+        return (
+          <SlideWrapper index={index} scrollX={scrollX} width={width}>
+            <View style={styles.sectionHeadingWrap}>
+              <Text style={styles.sectionTitle}>Veterinary Service</Text>
+              <Text style={styles.sectionDesc}>
+                Choose municipal service needed for {selectedPet?.name || 'your pet'}.
+              </Text>
+            </View>
+
+            <View style={styles.servicesGrid}>
+              {SERVICES.map((s) => {
+                const isSelected = s.id === selectedServiceId;
+                const isVaccine = s.id === 'vaccination';
+                return (
+                  <Pressable
+                    key={s.id}
+                    onPress={() => {
+                      haptic.light();
+                      setSelectedServiceId(s.id);
+                      setClinicalReason('');
+                      setError(undefined);
+                    }}
+                    style={[
+                      styles.serviceOptionCard,
+                      isSelected && styles.serviceOptionCardActive,
+                      shadows.sm,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.serviceIconWrap,
+                        { backgroundColor: s.bg },
+                      ]}
+                    >
+                      <Ionicons name={s.icon} size={24} color={s.color} />
+                    </View>
+
+                    <View style={styles.serviceTextWrap}>
+                      <View style={styles.serviceTitleRow}>
+                        <Text style={styles.serviceOptionTitle}>{s.name}</Text>
+                        {isVaccine && (
+                          <View style={styles.freeBadge}>
+                            <Text style={styles.freeBadgeText}>Free Ordinance</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.serviceOptionDesc}>{s.tagline}</Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.radioCircle,
+                        isSelected && styles.radioCircleSelected,
+                      ]}
+                    >
+                      {isSelected && <View style={styles.radioDot} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Quick Clinical Reasons */}
+            {CLINICAL_REASONS[selectedServiceId] ? (
+              <View style={styles.reasonsSection}>
+                <Text style={styles.reasonsTitle}>Common Reasons for Visit:</Text>
+                <View style={styles.reasonsChips}>
+                  {CLINICAL_REASONS[selectedServiceId].map((reason) => {
+                    const isChipSelected = clinicalReason === reason;
+                    return (
+                      <Pressable
+                        key={reason}
+                        onPress={() => {
+                          haptic.light();
+                          setClinicalReason(isChipSelected ? '' : reason);
+                        }}
+                        style={[
+                          styles.reasonChip,
+                          isChipSelected && styles.reasonChipActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.reasonChipText,
+                            isChipSelected && styles.reasonChipTextActive,
+                          ]}
+                        >
+                          {reason}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Notes input */}
+            <View style={styles.notesSection}>
+              <Text style={styles.notesLabel}>Notes for the Veterinarian (Optional)</Text>
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="e.g. Pet has slight cough, needs booster stamp on passport..."
+                placeholderTextColor={colors.textMuted}
+                multiline
+                numberOfLines={3}
+                style={styles.notesInput}
+              />
+            </View>
+
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={() => handleNextStep(2)}
+              style={styles.swipePromptPill}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Schedule Selection"
+            >
+              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <View style={styles.swipePromptIconWrap}>
+                <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+              </View>
+            </Pressable>
+          </SlideWrapper>
+        );
+      }
+
+      if (item === 3) {
+        return (
+          <SlideWrapper index={index} scrollX={scrollX} width={width}>
+            <View style={styles.sectionHeadingWrap}>
+              <Text style={styles.sectionTitle}>Date & Time Schedule</Text>
+              <Text style={styles.sectionDesc}>
+                Official clinic hours are Monday to Friday, 8:00 AM – 5:00 PM.
+              </Text>
+            </View>
+
+            {/* Date Selector */}
+            <Text style={styles.scheduleGroupLabel}>Select Date (Monday – Friday)</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.datesScroll}
+            >
+              {dateOptions.map((opt) => {
+                const isSelected = opt.iso === dateISO;
+                const isClosed = !opt.hasAvailableSlots;
+
+                return (
+                  <Pressable
+                    key={opt.iso}
+                    onPress={() => {
+                      if (isClosed) {
+                        haptic.warning();
+                        return;
+                      }
+                      haptic.light();
+                      setDateISO(opt.iso);
+                      setError(undefined);
+                    }}
+                    style={[
+                      styles.datePill,
+                      isSelected && styles.datePillActive,
+                      isClosed && styles.datePillDisabled,
+                      shadows.sm,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.dateWeekday,
+                        isSelected && styles.dateWeekdayActive,
+                        isClosed && styles.dateWeekdayDisabled,
+                      ]}
+                    >
+                      {opt.weekday}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.dateLabel,
+                        isSelected && styles.dateLabelActive,
+                        isClosed && styles.dateLabelDisabled,
+                      ]}
+                    >
+                      {isClosed && opt.isToday ? 'Closed Today' : opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* Morning Session Time Slots */}
+            <View style={styles.sessionHeaderRow}>
+              <Ionicons name="sunny-outline" size={16} color={colors.warning} />
+              <Text style={styles.sessionHeaderTitle}>Morning Session (8:30 AM – 11:30 AM)</Text>
+            </View>
+            <View style={styles.timeSlotsGrid}>
+              {MORNING_SLOTS.map((slot) => {
+                const isSelected = slot === timeSlot;
+                const available = isSlotAvailable(dateISO || '', slot);
+
+                return (
+                  <Pressable
+                    key={slot}
+                    onPress={() => {
+                      if (!available) {
+                        haptic.warning();
+                        return;
+                      }
+                      haptic.light();
+                      setTimeSlot(slot);
+                      setError(undefined);
+                    }}
+                    style={[
+                      styles.timeSlotCard,
+                      isSelected && styles.timeSlotCardActive,
+                      !available && styles.timeSlotCardDisabled,
+                      shadows.sm,
+                    ]}
+                  >
+                    <Ionicons
+                      name={available ? 'time-outline' : 'close-circle-outline'}
+                      size={16}
+                      color={
+                        !available
+                          ? colors.textDisabled
+                          : isSelected
+                          ? colors.primary
+                          : colors.textSecondary
+                      }
+                    />
+                    <View style={styles.slotTextWrap}>
+                      <Text
+                        style={[
+                          styles.timeSlotText,
+                          isSelected && styles.timeSlotTextActive,
+                          !available && styles.timeSlotTextDisabled,
+                        ]}
+                      >
+                        {slot}
+                      </Text>
+                      {!available && (
+                        <Text style={styles.slotUnavailableTag}>Passed</Text>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Afternoon Session Time Slots */}
+            <View style={[styles.sessionHeaderRow, { marginTop: spacing.sm }]}>
+              <Ionicons name="partly-sunny-outline" size={16} color={colors.primary} />
+              <Text style={styles.sessionHeaderTitle}>Afternoon Session (1:30 PM – 4:30 PM)</Text>
+            </View>
+            <View style={styles.timeSlotsGrid}>
+              {AFTERNOON_SLOTS.map((slot) => {
+                const isSelected = slot === timeSlot;
+                const available = isSlotAvailable(dateISO || '', slot);
+
+                return (
+                  <Pressable
+                    key={slot}
+                    onPress={() => {
+                      if (!available) {
+                        haptic.warning();
+                        return;
+                      }
+                      haptic.light();
+                      setTimeSlot(slot);
+                      setError(undefined);
+                    }}
+                    style={[
+                      styles.timeSlotCard,
+                      isSelected && styles.timeSlotCardActive,
+                      !available && styles.timeSlotCardDisabled,
+                      shadows.sm,
+                    ]}
+                  >
+                    <Ionicons
+                      name={available ? 'time-outline' : 'close-circle-outline'}
+                      size={16}
+                      color={
+                        !available
+                          ? colors.textDisabled
+                          : isSelected
+                          ? colors.primary
+                          : colors.textSecondary
+                      }
+                    />
+                    <View style={styles.slotTextWrap}>
+                      <Text
+                        style={[
+                          styles.timeSlotText,
+                          isSelected && styles.timeSlotTextActive,
+                          !available && styles.timeSlotTextDisabled,
+                        ]}
+                      >
+                        {slot}
+                      </Text>
+                      {!available && (
+                        <Text style={styles.slotUnavailableTag}>Passed</Text>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={() => handleNextStep(3)}
+              style={styles.swipePromptPill}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Review Details"
+            >
+              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <View style={styles.swipePromptIconWrap}>
+                <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+              </View>
+            </Pressable>
+          </SlideWrapper>
+        );
+      }
+
+      // Step 4: Review Summary
+      return (
+        <SlideWrapper index={index} scrollX={scrollX} width={width}>
+          <View style={styles.sectionHeadingWrap}>
+            <Text style={styles.sectionTitle}>Review & Confirm</Text>
+            <Text style={styles.sectionDesc}>
+              Please verify your booking details before final scheduling.
+            </Text>
+          </View>
+
+          <View style={[styles.summaryCard, shadows.sm]}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Patient</Text>
+              <View style={styles.summaryValueCol}>
+                <Text style={styles.summaryValueBold}>{selectedPet?.name}</Text>
+                <Text style={styles.summaryValueSub}>{selectedPet?.breed}</Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Service</Text>
+              <View style={styles.summaryValueCol}>
+                <Text style={styles.summaryValueBold}>{selectedService.name}</Text>
+                <Text style={styles.summaryValueSub}>{selectedService.tagline}</Text>
+              </View>
+            </View>
+
+            {clinicalReason ? (
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Reason</Text>
+                <Text style={styles.summaryValueBold}>{clinicalReason}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Schedule</Text>
+              <View style={styles.summaryValueCol}>
+                <Text style={styles.summaryValueHighlight}>
+                  {dateISO ? formatLongDate(dateISO) : ''}
                 </Text>
-                <Text style={styles.stepCounter}>Step {step} of {TOTAL_STEPS}</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${(step / TOTAL_STEPS) * 100}%` },
-                  ]}
-                />
+                <Text style={styles.summaryValueSub}>{timeSlot}</Text>
               </View>
             </View>
-          )}
 
-          <View style={styles.headerRightPlaceholder} />
-        </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Location</Text>
+              <Text style={styles.summaryValueBold}>{SERVICE_LOCATION}, CDO</Text>
+            </View>
 
-        {/* Form Body Scroll Area */}
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+            {notes.trim() ? (
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Notes</Text>
+                <Text style={styles.summaryValueSub}>{notes.trim()}</Text>
+              </View>
+            ) : null}
+          </View>
+
           {error ? (
             <View style={styles.errorBanner}>
               <Ionicons name="alert-circle" size={16} color={colors.error} />
@@ -450,8 +1078,63 @@ export default function NewAppointmentScreen() {
             </View>
           ) : null}
 
-          {confirmedTicket ? (
-            /* Confirmation Ticket Slip */
+          <View style={styles.finalSubmitRow}>
+            <Button
+              title="Confirm & Book Appointment"
+              variant="primary"
+              size="lg"
+              onPress={handleConfirmBooking}
+              loading={submitting}
+              disabled={submitting}
+              showPaw
+              fullWidth
+            />
+          </View>
+        </SlideWrapper>
+      );
+    },
+    [
+      scrollX,
+      width,
+      allPets,
+      selectedPetId,
+      appointments,
+      selectedPet,
+      selectedService,
+      selectedServiceId,
+      clinicalReason,
+      notes,
+      dateOptions,
+      dateISO,
+      timeSlot,
+      submitting,
+      error,
+      handleNextStep,
+      handleConfirmBooking,
+      router,
+    ],
+  );
+
+  if (confirmedTicket) {
+    return (
+      <AnimatedScreen animation="zoom">
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          {/* Top Header Bar */}
+          <View style={styles.topBar}>
+            <View style={styles.topBarRow}>
+              <BackButton onPress={() => router.replace('/appointments' as never)} />
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.topBarTitle}>Booking Confirmed</Text>
+                <Text style={styles.topBarSubtitle}>Official Municipal Ticket</Text>
+              </View>
+            </View>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Confirmation Ticket Slip */}
             <Animated.View entering={ZoomIn.duration(260)} style={styles.ticketCard}>
               <View style={styles.ticketHeader}>
                 <View style={styles.ticketBadge}>
@@ -528,511 +1211,80 @@ export default function NewAppointmentScreen() {
                 />
               </View>
             </Animated.View>
-          ) : (
-            <Animated.View
-              key={step}
-              entering={FadeInDown.duration(220)}
-              exiting={FadeOut.duration(100)}
-              style={styles.stepContainer}
-            >
-              {/* STEP 1: Select Pet */}
-              {step === 1 && (
-                <View style={styles.stepBlock}>
-                  <Text style={styles.sectionHeading}>Who is this appointment for?</Text>
-                  <Text style={styles.sectionSub}>
-                    Select your registered pet to schedule their veterinary visit.
-                  </Text>
+          </ScrollView>
+        </SafeAreaView>
+      </AnimatedScreen>
+    );
+  }
 
-                  <View style={styles.petsGrid}>
-                    {allPets.map((p) => {
-                      const isSelected = p.id === selectedPetId;
-                      const isDog = p.species?.toLowerCase() === 'dog';
-                      const vax = calculatePetVaccineTimeline(p, appointments);
-                      const ageDisplay = p.birthYear ? formatAge(ageFromBirthYear(p.birthYear)) : '';
+  return (
+    <AnimatedScreen animation="zoom">
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.container}
+        >
+          {/* Top Header with Back Navigation & Step Capsule */}
+          <View style={styles.topBar}>
+            <View style={styles.topBarRow}>
+              <BackButton onPress={handleBack} />
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.topBarTitle}>Schedule Clinic Visit</Text>
+                <Text style={styles.topBarSubtitle}>
+                  {step === 1
+                    ? 'Step 1 of 4: Select Pet'
+                    : step === 2
+                    ? 'Step 2 of 4: Choose Service'
+                    : step === 3
+                    ? 'Step 3 of 4: Select Schedule'
+                    : 'Step 4 of 4: Review Booking'}
+                </Text>
+              </View>
+              <View style={styles.stepCapsule}>
+                <Text style={styles.stepCapsuleText}>Step {step} of 4</Text>
+              </View>
+            </View>
 
-                      return (
-                        <Pressable
-                          key={p.id}
-                          onPress={() => {
-                            haptic.light();
-                            setSelectedPetId(p.id);
-                            setError(undefined);
-                          }}
-                          style={[
-                            styles.petSelectCard,
-                            isSelected && styles.petSelectCardActive,
-                            shadows.sm,
-                          ]}
-                        >
-                          <PopoutPetAvatar
-                            avatarId={p.avatarId}
-                            species={p.species}
-                            photoUrl={p.photoUrl}
-                            size={76}
-                            scale={1.55}
-                          />
-
-                          <View style={styles.petSelectInfo}>
-                            {/* Top row: Name + Species */}
-                            <View style={styles.petNameRow}>
-                              <Text style={styles.petCardName}>{p.name}</Text>
-                              <View
-                                style={[
-                                  styles.speciesChip,
-                                  isDog ? styles.speciesChipDog : styles.speciesChipCat,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.speciesChipText,
-                                    isDog ? styles.speciesChipTextDog : styles.speciesChipTextCat,
-                                  ]}
-                                >
-                                  {isDog ? 'Canine' : 'Feline'}
-                                </Text>
-                              </View>
-                            </View>
-
-                            {/* Subtitle: Breed and Age */}
-                            <Text style={styles.petCardBreed} numberOfLines={1}>
-                              {p.breed || (isDog ? 'Canine' : 'Feline')}
-                              {ageDisplay ? ` · ${ageDisplay}` : ''}
-                            </Text>
-
-                            {/* Clinical Vaccination Status & Frequency */}
-                            <View style={styles.vaxStatusBox}>
-                              <View style={styles.vaxBadgeRow}>
-                                <View
-                                  style={[
-                                    styles.vaxDoseBadge,
-                                    vax.isVaccinated
-                                      ? styles.vaxDoseBadgeGreen
-                                      : styles.vaxDoseBadgeAmber,
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.vaxDoseBadgeText,
-                                      vax.isVaccinated
-                                        ? styles.vaxDoseBadgeTextGreen
-                                        : styles.vaxDoseBadgeTextAmber,
-                                    ]}
-                                  >
-                                    {vax.isVaccinated
-                                      ? `${vax.totalDoses} ${vax.totalDoses === 1 ? 'Dose' : 'Doses'} Recorded`
-                                      : '0 Doses (Vaccine Due)'}
-                                  </Text>
-                                </View>
-                              </View>
-
-                              {/* Vaccination Timing: Next Due Date or Alert */}
-                              {vax.isVaccinated && vax.nextBoosterDate ? (
-                                <Text style={styles.vaxTimingNext} numberOfLines={1}>
-                                  Next Booster: {formatDateWithYear(vax.nextBoosterDate)}
-                                </Text>
-                              ) : !vax.isVaccinated ? (
-                                <Text style={styles.vaxTimingDue} numberOfLines={1}>
-                                  Anti-Rabies due · Schedule now
-                                </Text>
-                              ) : null}
-                            </View>
-                          </View>
-
-                          <View
-                            style={[
-                              styles.radioCircle,
-                              isSelected && styles.radioCircleSelected,
-                            ]}
-                          >
-                            {isSelected && <View style={styles.radioDot} />}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-
-                    <Pressable
-                      onPress={() => {
-                        haptic.light();
-                        router.push('/pets/add' as never);
-                      }}
-                      style={styles.addPetBtn}
-                    >
-                      <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-                      <Text style={styles.addPetBtnText}>Register Another Pet</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-
-              {/* STEP 2: Service Selection */}
-              {step === 2 && (
-                <View style={styles.stepBlock}>
-                  <Text style={styles.sectionHeading}>Select Veterinary Service</Text>
-                  <Text style={styles.sectionSub}>
-                    Choose the municipal veterinary service needed for {selectedPet?.name}.
-                  </Text>
-
-                  <View style={styles.servicesGrid}>
-                    {SERVICES.map((s) => {
-                      const isSelected = s.id === selectedServiceId;
-                      const isVaccine = s.id === 'vaccination';
-                      return (
-                        <Pressable
-                          key={s.id}
-                          onPress={() => {
-                            haptic.light();
-                            setSelectedServiceId(s.id);
-                            setClinicalReason('');
-                            setError(undefined);
-                          }}
-                          style={[
-                            styles.serviceOptionCard,
-                            isSelected && styles.serviceOptionCardActive,
-                            shadows.sm,
-                          ]}
-                        >
-                          <View
-                            style={[
-                              styles.serviceIconWrap,
-                              { backgroundColor: s.bg },
-                            ]}
-                          >
-                            <Ionicons name={s.icon} size={24} color={s.color} />
-                          </View>
-
-                          <View style={styles.serviceTextWrap}>
-                            <View style={styles.serviceTitleRow}>
-                              <Text style={styles.serviceOptionTitle}>{s.name}</Text>
-                              {isVaccine && (
-                                <View style={styles.freeBadge}>
-                                  <Text style={styles.freeBadgeText}>Free Ordinance</Text>
-                                </View>
-                              )}
-                            </View>
-                            <Text style={styles.serviceOptionDesc}>{s.tagline}</Text>
-                          </View>
-
-                          <View
-                            style={[
-                              styles.radioCircle,
-                              isSelected && styles.radioCircleSelected,
-                            ]}
-                          >
-                            {isSelected && <View style={styles.radioDot} />}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-
-                  {/* Quick Clinical Reasons */}
-                  {CLINICAL_REASONS[selectedServiceId] ? (
-                    <View style={styles.reasonsSection}>
-                      <Text style={styles.reasonsTitle}>Common Reasons for Visit:</Text>
-                      <View style={styles.reasonsChips}>
-                        {CLINICAL_REASONS[selectedServiceId].map((reason) => {
-                          const isChipSelected = clinicalReason === reason;
-                          return (
-                            <Pressable
-                              key={reason}
-                              onPress={() => {
-                                haptic.light();
-                                setClinicalReason(isChipSelected ? '' : reason);
-                              }}
-                              style={[
-                                styles.reasonChip,
-                                isChipSelected && styles.reasonChipActive,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.reasonChipText,
-                                  isChipSelected && styles.reasonChipTextActive,
-                                ]}
-                              >
-                                {reason}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {/* Notes input */}
-                  <View style={styles.notesSection}>
-                    <Text style={styles.notesLabel}>Notes for the Veterinarian (Optional)</Text>
-                    <TextInput
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="e.g. Pet has slight cough, needs booster stamp on passport..."
-                      placeholderTextColor={colors.textMuted}
-                      multiline
-                      numberOfLines={3}
-                      style={styles.notesInput}
-                    />
-                  </View>
-                </View>
-              )}
-
-              {/* STEP 3: Date & Time Schedule */}
-              {step === 3 && (
-                <View style={styles.stepBlock}>
-                  <Text style={styles.sectionHeading}>Pick Appointment Date & Time</Text>
-                  <Text style={styles.sectionSub}>
-                    Official veterinary clinic hours are Monday to Friday, 8:00 AM – 5:00 PM.
-                  </Text>
-
-                  {/* Date Selector */}
-                  <Text style={styles.scheduleGroupLabel}>Select Date (Monday – Friday)</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.datesScroll}
+            {/* Multi-Segment Connected Progress Track */}
+            <View style={styles.progressTrackRow}>
+              {BOOKING_STEPS.map((s) => {
+                const isFilled = s <= step;
+                return (
+                  <Pressable
+                    key={s}
+                    onPress={() => handleStepPress(s)}
+                    style={styles.progressSegmentTouch}
+                    hitSlop={8}
                   >
-                    {dateOptions.map((opt) => {
-                      const isSelected = opt.iso === dateISO;
-                      const isClosed = !opt.hasAvailableSlots;
-
-                      return (
-                        <Pressable
-                          key={opt.iso}
-                          onPress={() => {
-                            if (isClosed) {
-                              haptic.warning();
-                              return;
-                            }
-                            haptic.light();
-                            setDateISO(opt.iso);
-                            setError(undefined);
-                          }}
-                          style={[
-                            styles.datePill,
-                            isSelected && styles.datePillActive,
-                            isClosed && styles.datePillDisabled,
-                            shadows.sm,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.dateWeekday,
-                              isSelected && styles.dateWeekdayActive,
-                              isClosed && styles.dateWeekdayDisabled,
-                            ]}
-                          >
-                            {opt.weekday}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.dateLabel,
-                              isSelected && styles.dateLabelActive,
-                              isClosed && styles.dateLabelDisabled,
-                            ]}
-                          >
-                            {isClosed && opt.isToday ? 'Closed Today' : opt.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  {/* Morning Session Time Slots */}
-                  <View style={styles.sessionHeaderRow}>
-                    <Ionicons name="sunny-outline" size={16} color={colors.warning} />
-                    <Text style={styles.sessionHeaderTitle}>Morning Session (8:30 AM – 11:30 AM)</Text>
-                  </View>
-                  <View style={styles.timeSlotsGrid}>
-                    {MORNING_SLOTS.map((slot) => {
-                      const isSelected = slot === timeSlot;
-                      const available = isSlotAvailable(dateISO || '', slot);
-
-                      return (
-                        <Pressable
-                          key={slot}
-                          onPress={() => {
-                            if (!available) {
-                              haptic.warning();
-                              return;
-                            }
-                            haptic.light();
-                            setTimeSlot(slot);
-                            setError(undefined);
-                          }}
-                          style={[
-                            styles.timeSlotCard,
-                            isSelected && styles.timeSlotCardActive,
-                            !available && styles.timeSlotCardDisabled,
-                            shadows.sm,
-                          ]}
-                        >
-                          <Ionicons
-                            name={available ? 'time-outline' : 'close-circle-outline'}
-                            size={16}
-                            color={
-                              !available
-                                ? colors.textDisabled
-                                : isSelected
-                                ? colors.primary
-                                : colors.textSecondary
-                            }
-                          />
-                          <View style={styles.slotTextWrap}>
-                            <Text
-                              style={[
-                                styles.timeSlotText,
-                                isSelected && styles.timeSlotTextActive,
-                                !available && styles.timeSlotTextDisabled,
-                              ]}
-                            >
-                              {slot}
-                            </Text>
-                            {!available && (
-                              <Text style={styles.slotUnavailableTag}>Passed</Text>
-                            )}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-
-                  {/* Afternoon Session Time Slots */}
-                  <View style={[styles.sessionHeaderRow, { marginTop: spacing.sm }]}>
-                    <Ionicons name="partly-sunny-outline" size={16} color={colors.primary} />
-                    <Text style={styles.sessionHeaderTitle}>Afternoon Session (1:30 PM – 4:30 PM)</Text>
-                  </View>
-                  <View style={styles.timeSlotsGrid}>
-                    {AFTERNOON_SLOTS.map((slot) => {
-                      const isSelected = slot === timeSlot;
-                      const available = isSlotAvailable(dateISO || '', slot);
-
-                      return (
-                        <Pressable
-                          key={slot}
-                          onPress={() => {
-                            if (!available) {
-                              haptic.warning();
-                              return;
-                            }
-                            haptic.light();
-                            setTimeSlot(slot);
-                            setError(undefined);
-                          }}
-                          style={[
-                            styles.timeSlotCard,
-                            isSelected && styles.timeSlotCardActive,
-                            !available && styles.timeSlotCardDisabled,
-                            shadows.sm,
-                          ]}
-                        >
-                          <Ionicons
-                            name={available ? 'time-outline' : 'close-circle-outline'}
-                            size={16}
-                            color={
-                              !available
-                                ? colors.textDisabled
-                                : isSelected
-                                ? colors.primary
-                                : colors.textSecondary
-                            }
-                          />
-                          <View style={styles.slotTextWrap}>
-                            <Text
-                              style={[
-                                styles.timeSlotText,
-                                isSelected && styles.timeSlotTextActive,
-                                !available && styles.timeSlotTextDisabled,
-                              ]}
-                            >
-                              {slot}
-                            </Text>
-                            {!available && (
-                              <Text style={styles.slotUnavailableTag}>Passed</Text>
-                            )}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* STEP 4: Review Summary */}
-              {step === 4 && (
-                <View style={styles.stepBlock}>
-                  <Text style={styles.sectionHeading}>Review Appointment Details</Text>
-                  <Text style={styles.sectionSub}>
-                    Please verify your booking information before final confirmation.
-                  </Text>
-
-                  <View style={[styles.summaryCard, shadows.sm]}>
-                    <View style={styles.summaryItem}>
-                      <Text style={styles.summaryLabel}>Patient</Text>
-                      <View style={styles.summaryValueCol}>
-                        <Text style={styles.summaryValueBold}>{selectedPet?.name}</Text>
-                        <Text style={styles.summaryValueSub}>{selectedPet?.breed}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.summaryItem}>
-                      <Text style={styles.summaryLabel}>Service</Text>
-                      <View style={styles.summaryValueCol}>
-                        <Text style={styles.summaryValueBold}>{selectedService.name}</Text>
-                        <Text style={styles.summaryValueSub}>{selectedService.tagline}</Text>
-                      </View>
-                    </View>
-
-                    {clinicalReason ? (
-                      <View style={styles.summaryItem}>
-                        <Text style={styles.summaryLabel}>Reason</Text>
-                        <Text style={styles.summaryValueBold}>{clinicalReason}</Text>
-                      </View>
-                    ) : null}
-
-                    <View style={styles.summaryItem}>
-                      <Text style={styles.summaryLabel}>Schedule</Text>
-                      <View style={styles.summaryValueCol}>
-                        <Text style={styles.summaryValueHighlight}>
-                          {dateISO ? formatLongDate(dateISO) : ''}
-                        </Text>
-                        <Text style={styles.summaryValueSub}>{timeSlot}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.summaryItem}>
-                      <Text style={styles.summaryLabel}>Location</Text>
-                      <Text style={styles.summaryValueBold}>{SERVICE_LOCATION}, CDO</Text>
-                    </View>
-
-                    {notes.trim() ? (
-                      <View style={styles.summaryItem}>
-                        <Text style={styles.summaryLabel}>Notes</Text>
-                        <Text style={styles.summaryValueSub}>{notes.trim()}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              )}
-            </Animated.View>
-          )}
-        </ScrollView>
-
-        {/* Footer Navigation Bar */}
-        {!confirmedTicket ? (
-          <View style={styles.footer}>
-            <Button
-              title={step === TOTAL_STEPS ? 'Confirm & Book Appointment' : 'Continue'}
-              variant="primary"
-              size="lg"
-              onPress={step === TOTAL_STEPS ? handleConfirmBooking : handleContinue}
-              disabled={!canContinue}
-              loading={submitting}
-              showPaw
-              fullWidth
-            />
+                    <View
+                      style={[
+                        styles.progressSegment,
+                        isFilled ? styles.progressSegmentFilled : styles.progressSegmentUnfilled,
+                      ]}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        ) : null}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+          {/* Animated Horizontal FlatList Wizard */}
+          <AnimatedFlatList
+            ref={listRef}
+            data={BOOKING_STEPS}
+            keyExtractor={(item) => String(item)}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={scrollHandler}
+            onMomentumScrollEnd={onMomentumScrollEnd}
+            renderItem={renderItem}
+            style={styles.flatList}
+          />
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </AnimatedScreen>
   );
 }
 
@@ -1044,83 +1296,93 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
+  topBar: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(7, 30, 38, 0.05)',
+  },
+  topBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(7, 30, 38, 0.06)',
-    backgroundColor: colors.surface,
+    gap: spacing.md,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(7, 30, 38, 0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-  headerCenter: {
+  headerTitleWrap: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 1,
   },
-  headerTitle: {
-    ...typography.heading2,
+  topBarTitle: {
+    ...typography.title,
     color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '800',
   },
-  headerSubtitle: {
+  topBarSubtitle: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 11.5,
   },
-  headerProgress: {
-    flex: 1,
-    marginHorizontal: spacing.md,
-    gap: 6,
+  stepCapsule: {
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.16)',
   },
-  headerProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  stepTitle: {
+  stepCapsuleText: {
     ...typography.captionBold,
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  stepCounter: {
-    ...typography.caption,
-    color: colors.textMuted,
+    color: colors.primary,
     fontSize: 11,
+    fontWeight: '700',
   },
-  progressTrack: {
+  progressTrackRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+  },
+  progressSegmentTouch: {
+    flex: 1,
+    paddingVertical: 4,
+  },
+  progressSegment: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(0, 168, 150, 0.15)',
-    overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
+  progressSegmentFilled: {
     backgroundColor: colors.primary,
   },
-  headerRightPlaceholder: {
-    width: 36,
+  progressSegmentUnfilled: {
+    backgroundColor: 'rgba(7, 30, 38, 0.08)',
   },
-  content: {
+  flatList: {
+    flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    paddingBottom: 40,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  slideInner: {
+    gap: spacing.md,
+  },
+  sectionHeadingWrap: {
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    ...typography.heading2,
+    color: colors.textPrimary,
+    fontSize: 19,
+    fontWeight: '700',
+  },
+  sectionDesc: {
+    ...typography.body,
+    color: colors.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+    lineHeight: 18,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -1132,31 +1394,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.20)',
-    marginBottom: spacing.md,
+    marginTop: 4,
   },
   errorText: {
     ...typography.captionBold,
     color: colors.error,
     fontSize: 12,
     flex: 1,
-  },
-  stepContainer: {
-    gap: spacing.lg,
-  },
-  stepBlock: {
-    gap: spacing.md,
-  },
-  sectionHeading: {
-    ...typography.heading2,
-    color: colors.textPrimary,
-    fontSize: 19,
-    fontWeight: '800',
-  },
-  sectionSub: {
-    ...typography.body,
-    color: colors.textSecondary,
-    fontSize: 13,
-    marginTop: -4,
   },
   petsGrid: {
     gap: 10,
@@ -1248,16 +1492,6 @@ const styles = StyleSheet.create({
   },
   vaxDoseBadgeTextAmber: {
     color: colors.warning,
-  },
-  vaxTimingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  vaxTimingSub: {
-    ...typography.small,
-    color: colors.textMuted,
-    fontSize: 11,
   },
   vaxTimingNext: {
     ...typography.captionBold,
@@ -1581,6 +1815,38 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'right',
   },
+  swipePromptPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.18)',
+    marginTop: spacing.md,
+  },
+  swipePromptText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  swipePromptIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.15)',
+  },
+  finalSubmitRow: {
+    marginTop: spacing.md,
+  },
   ticketCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xxl,
@@ -1667,13 +1933,5 @@ const styles = StyleSheet.create({
   ticketActions: {
     gap: 8,
     marginTop: 6,
-  },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: Platform.OS === 'ios' ? spacing.md : spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(7, 30, 38, 0.06)',
-    backgroundColor: colors.surface,
   },
 });

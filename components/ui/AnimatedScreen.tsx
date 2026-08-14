@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { PropsWithChildren } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInDown,
-  SlideInRight,
-  ZoomIn,
+  Easing,
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
   useReducedMotion,
+  useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
 
 import { colors } from '@theme';
@@ -22,8 +23,9 @@ interface AnimatedScreenProps extends PropsWithChildren {
 }
 
 /**
- * Standard full-screen entrance animation used across every SyncVet screen
- * so transitions feel smooth and consistent without unnatural bouncing.
+ * Ultra-smooth, cinematic full-screen entrance animation.
+ * Uses a subtle 0.95 -> 1.0 scale zoom with cubic bezier ease-out
+ * for a silky smooth page turn without harsh bounces.
  */
 export function AnimatedScreen({
   children,
@@ -33,34 +35,55 @@ export function AnimatedScreen({
 }: AnimatedScreenProps) {
   const reducedMotion = useReducedMotion();
   const enabled = animated && !reducedMotion;
+  const progress = useSharedValue(enabled ? 0 : 1);
 
-  if (!enabled) {
-    return <View style={[styles.container, style]}>{children}</View>;
-  }
+  useEffect(() => {
+    if (enabled) {
+      progress.value = 0;
+      progress.value = withTiming(1, {
+        duration: 260,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+      });
+    }
+  }, [enabled, progress]);
 
-  let entering;
-  switch (animation) {
-    case 'zoom':
-      entering = ZoomIn.duration(260);
-      break;
-    case 'slide-up':
-      entering = SlideInDown.duration(260);
-      break;
-    case 'slide-right':
-      entering = SlideInRight.duration(260);
-      break;
-    case 'fade':
-    default:
-      entering = FadeIn.duration(240);
-      break;
-  }
+  const animatedStyle = useAnimatedStyle(() => {
+    if (!enabled) {
+      return { opacity: 1, transform: [{ scale: 1 }] };
+    }
+
+    if (animation === 'fade') {
+      return {
+        opacity: progress.value,
+      };
+    }
+
+    if (animation === 'slide-up') {
+      const translateY = interpolate(progress.value, [0, 1], [24, 0], Extrapolation.CLAMP);
+      return {
+        opacity: progress.value,
+        transform: [{ translateY }],
+      };
+    }
+
+    if (animation === 'slide-right') {
+      const translateX = interpolate(progress.value, [0, 1], [30, 0], Extrapolation.CLAMP);
+      return {
+        opacity: progress.value,
+        transform: [{ translateX }],
+      };
+    }
+
+    // Default 'zoom': Silky smooth soft scale from 0.95 to 1.0 + fade
+    const scale = interpolate(progress.value, [0, 1], [0.95, 1], Extrapolation.CLAMP);
+    return {
+      opacity: progress.value,
+      transform: [{ scale }],
+    };
+  });
 
   return (
-    <Animated.View
-      entering={entering}
-      exiting={FadeOut.duration(180)}
-      style={[styles.container, style]}
-    >
+    <Animated.View style={[styles.container, animatedStyle, style]}>
       {children}
     </Animated.View>
   );

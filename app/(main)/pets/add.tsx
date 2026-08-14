@@ -44,6 +44,7 @@ import { DropdownSelect } from '@components/ui/DropdownSelect';
 import { ChoiceChips } from '@components/ui/ChoiceChips';
 import { PetAvatarPickerModal } from '@components/ui/PetAvatarPickerModal';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
+import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { toast } from '@components/ui/Sonner';
 
@@ -832,73 +833,75 @@ export default function AddPetScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        {/* Top Header with Back Navigation & Step Capsule */}
-        <View style={styles.topBar}>
-          <View style={styles.topBarRow}>
-            <BackButton onPress={handlePrevious} />
-            <View style={styles.headerTitleWrap}>
-              <Text style={styles.topBarTitle}>New Pet Registration</Text>
-              <Text style={styles.topBarSubtitle}>City Veterinary Health Passport</Text>
+    <AnimatedScreen animation="zoom">
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          {/* Top Header with Back Navigation & Step Capsule */}
+          <View style={styles.topBar}>
+            <View style={styles.topBarRow}>
+              <BackButton onPress={handlePrevious} />
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.topBarTitle}>New Pet Registration</Text>
+                <Text style={styles.topBarSubtitle}>City Veterinary Health Passport</Text>
+              </View>
+              <View style={styles.stepCapsule}>
+                <Text style={styles.stepCapsuleText}>Step {subPart} of 4</Text>
+              </View>
             </View>
-            <View style={styles.stepCapsule}>
-              <Text style={styles.stepCapsuleText}>Step {subPart} of 4</Text>
+
+            {/* Multi-Segment Connected Progress Track */}
+            <View style={styles.progressTrackRow}>
+              {SUB_PARTS.map((step) => {
+                const isFilled = step <= subPart;
+                return (
+                  <Pressable
+                    key={step}
+                    onPress={() => handleStepPress(step)}
+                    style={styles.progressSegmentTouch}
+                    hitSlop={8}
+                  >
+                    <View
+                      style={[
+                        styles.progressSegment,
+                        isFilled ? styles.progressSegmentFilled : styles.progressSegmentUnfilled,
+                      ]}
+                    />
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
-          {/* Multi-Segment Connected Progress Track */}
-          <View style={styles.progressTrackRow}>
-            {SUB_PARTS.map((step) => {
-              const isFilled = step <= subPart;
-              return (
-                <Pressable
-                  key={step}
-                  onPress={() => handleStepPress(step)}
-                  style={styles.progressSegmentTouch}
-                  hitSlop={8}
-                >
-                  <View
-                    style={[
-                      styles.progressSegment,
-                      isFilled ? styles.progressSegmentFilled : styles.progressSegmentUnfilled,
-                    ]}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+          {/* Animated Horizontal FlatList Wizard */}
+          <AnimatedFlatList
+            ref={listRef}
+            data={SUB_PARTS}
+            keyExtractor={(item) => String(item)}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={scrollHandler}
+            onMomentumScrollEnd={onMomentumScrollEnd}
+            renderItem={renderItem}
+            style={styles.flatList}
+          />
+        </KeyboardAvoidingView>
 
-        {/* Animated Horizontal FlatList Wizard */}
-        <AnimatedFlatList
-          ref={listRef}
-          data={SUB_PARTS}
-          keyExtractor={(item) => String(item)}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onScroll={scrollHandler}
-          onMomentumScrollEnd={onMomentumScrollEnd}
-          renderItem={renderItem}
-          style={styles.flatList}
+        {/* Pet Avatar Picker Modal */}
+        <PetAvatarPickerModal
+          visible={avatarModalVisible}
+          onClose={() => setAvatarModalVisible(false)}
+          onSelectAvatar={handleSelectAvatar}
+          currentAvatarId={avatarId}
+          species={species}
+          petName={fields.name.value || 'Pet'}
         />
-      </KeyboardAvoidingView>
-
-      {/* Pet Avatar Picker Modal */}
-      <PetAvatarPickerModal
-        visible={avatarModalVisible}
-        onClose={() => setAvatarModalVisible(false)}
-        onSelectAvatar={handleSelectAvatar}
-        currentAvatarId={avatarId}
-        species={species}
-        petName={fields.name.value || 'Pet'}
-      />
-    </SafeAreaView>
+      </SafeAreaView>
+    </AnimatedScreen>
   );
 }
 

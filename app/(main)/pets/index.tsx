@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,17 +10,17 @@ import {
 import { useRouter } from 'expo-router';
 import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { ageFromBirthYear, formatAge } from '@lib/format';
 import { haptic } from '@lib/haptics';
-import { getPetAvatarSource } from '@lib/petAvatars';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
-import { LoadingState } from '@components/ui/LoadingState';
+import { PetsScreenSkeleton } from '@components/ui/Skeleton';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 
 interface DisplayPet {
@@ -47,10 +46,10 @@ export default function PetsScreen() {
   const ownerId = useAuthStore((state) => state.user?.id);
   const { loading, loaded } = useResidentData();
   const localPets = useDataStore((state) => state.pets);
-  const appointments = useDataStore((state) => state.appointments);
 
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   // Extract pets from Clerk metadata + local data store
   const allPets: DisplayPet[] = useMemo(() => {
@@ -118,85 +117,150 @@ export default function PetsScreen() {
 
   if (loading && !loaded && allPets.length === 0) {
     return (
-      <Screen>
-        <LoadingState label="Loading pet health passports…" />
-      </Screen>
+      <AnimatedScreen animation="zoom">
+        <PetsScreenSkeleton />
+      </AnimatedScreen>
     );
   }
 
   return (
-    <AnimatedScreen animation="fade">
+    <AnimatedScreen animation="zoom">
       <Screen scroll>
-        {/* Top Header */}
+        {/* 1. Senior Executive Municipal Header */}
         <View style={styles.topHeader}>
-          <View style={styles.titleWrap}>
-            <Text style={styles.screenTitle}>My Pets</Text>
-            <Text style={styles.screenSubtitle}>City Veterinary Health Passports</Text>
+          {/* Eyebrow badge */}
+          <View style={styles.eyebrowBadge}>
+            <Ionicons name="shield-checkmark" size={11} color={colors.primary} />
+            <Text style={styles.eyebrowText}>CITY VETERINARY OFFICE · CDO</Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Register a new pet"
-            onPress={() => {
-              haptic.light();
-              router.push('/pets/add' as never);
-            }}
-            hitSlop={8}
-            style={({ pressed }) => [styles.addPetBtn, pressed && styles.addPetBtnPressed]}
-          >
-            <Ionicons name="add" size={18} color={colors.white} />
-            <Text style={styles.addPetBtnText}>Register Pet</Text>
-          </Pressable>
+
+          {/* Title & Add Pet Button Row */}
+          <View style={styles.headerTitleRow}>
+            <View style={styles.titleCol}>
+              <Text style={styles.heroTitle}>Pet Registry</Text>
+              <Text style={styles.heroSubtitle}>
+                Official digital health passports & immunization records
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Register a new pet"
+              onPress={() => {
+                haptic.light();
+                router.push('/pets/add' as never);
+              }}
+              hitSlop={6}
+              style={({ pressed }) => [styles.addPetBtn, pressed && styles.addPetBtnPressed]}
+            >
+              <Ionicons name="add" size={18} color={colors.white} />
+              <Text style={styles.addPetBtnText}>Register Pet</Text>
+            </Pressable>
+          </View>
         </View>
 
-        {/* Quick Stats Summary Banner */}
+        {/* 2. Unified Health Registry Overview Dashboard */}
         {allPets.length > 0 ? (
-          <View style={[styles.statsBanner, shadows.sm]}>
-            <View style={styles.statSegment}>
-              <Text style={styles.statNumber}>{dogCount}</Text>
-              <Text style={styles.statLabel}>Dogs</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statSegment}>
-              <Text style={styles.statNumber}>{catCount}</Text>
-              <Text style={styles.statLabel}>Cats</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statSegment}>
-              <Text
+          <View style={[styles.dashboardCard, shadows.sm]}>
+            {/* Top compliance notice */}
+            <View style={styles.complianceRow}>
+              <View
                 style={[
-                  styles.statNumber,
-                  needsVaccineCount > 0 ? { color: colors.warning } : { color: colors.success },
+                  styles.complianceIconRing,
+                  needsVaccineCount === 0 ? styles.complianceRingGreen : styles.complianceRingAmber,
                 ]}
               >
-                {needsVaccineCount > 0 ? `${needsVaccineCount} Due` : '100%'}
-              </Text>
-              <Text style={styles.statLabel}>Anti-Rabies</Text>
+                <Ionicons
+                  name={needsVaccineCount === 0 ? 'shield-checkmark' : 'alert-circle'}
+                  size={18}
+                  color={needsVaccineCount === 0 ? colors.success : colors.warning}
+                />
+              </View>
+              <View style={styles.complianceTextCol}>
+                <Text style={styles.complianceTitle}>
+                  {needsVaccineCount === 0
+                    ? '100% Immunization Protected'
+                    : `${needsVaccineCount} ${needsVaccineCount === 1 ? 'Pet Needs' : 'Pets Need'} Anti-Rabies`}
+                </Text>
+                <Text style={styles.complianceSub}>
+                  {needsVaccineCount === 0
+                    ? 'All registered pets have up-to-date rabies protection.'
+                    : 'Free rabies vaccines available under City Ordinance.'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Micro-Stats Segmented Grid */}
+            <View style={styles.metricsRow}>
+              <View style={styles.metricSegment}>
+                <Text style={styles.metricNumber}>{allPets.length}</Text>
+                <Text style={styles.metricLabel}>Total</Text>
+              </View>
+              <View style={styles.metricDivider} />
+              <View style={styles.metricSegment}>
+                <Text style={styles.metricNumber}>{dogCount}</Text>
+                <Text style={styles.metricLabel}>Dogs</Text>
+              </View>
+              <View style={styles.metricDivider} />
+              <View style={styles.metricSegment}>
+                <Text style={styles.metricNumber}>{catCount}</Text>
+                <Text style={styles.metricLabel}>Cats</Text>
+              </View>
+              <View style={styles.metricDivider} />
+              <View style={styles.metricSegment}>
+                <Text
+                  style={[
+                    styles.metricNumber,
+                    needsVaccineCount > 0 ? { color: colors.warning } : { color: colors.success },
+                  ]}
+                >
+                  {needsVaccineCount > 0 ? needsVaccineCount : '0'}
+                </Text>
+                <Text style={styles.metricLabel}>Due</Text>
+              </View>
             </View>
           </View>
         ) : null}
 
-        {/* Search & Filter Bar */}
+        {/* 3. Search & Filter Controls */}
         {allPets.length > 0 ? (
           <View style={styles.filterSection}>
-            {/* Search Input */}
-            <View style={styles.searchBar}>
-              <Ionicons name="search-outline" size={18} color={colors.textMuted} />
+            {/* Search Input Bar */}
+            <View
+              style={[
+                styles.searchBar,
+                isSearchFocused && styles.searchBarFocused,
+              ]}
+            >
+              <Ionicons
+                name="search-outline"
+                size={18}
+                color={isSearchFocused ? colors.primary : colors.textMuted}
+              />
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search by name, breed, or species..."
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+                placeholder="Search by pet name, breed, or species..."
                 placeholderTextColor={colors.textMuted}
                 style={styles.searchInput}
                 clearButtonMode="while-editing"
               />
               {searchQuery ? (
-                <Pressable onPress={() => setSearchQuery('')} hitSlop={6}>
-                  <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                <Pressable
+                  onPress={() => {
+                    haptic.light();
+                    setSearchQuery('');
+                  }}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close-circle" size={17} color={colors.textMuted} />
                 </Pressable>
               ) : null}
             </View>
 
-            {/* Filter Chips */}
+            {/* Filter Pills Scroll */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -207,7 +271,10 @@ export default function PetsScreen() {
                   haptic.light();
                   setActiveFilter('all');
                 }}
-                style={[styles.filterChip, activeFilter === 'all' && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  activeFilter === 'all' && styles.filterChipActive,
+                ]}
               >
                 <Text
                   style={[
@@ -224,7 +291,10 @@ export default function PetsScreen() {
                   haptic.light();
                   setActiveFilter('dog');
                 }}
-                style={[styles.filterChip, activeFilter === 'dog' && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  activeFilter === 'dog' && styles.filterChipActive,
+                ]}
               >
                 <Text
                   style={[
@@ -241,7 +311,10 @@ export default function PetsScreen() {
                   haptic.light();
                   setActiveFilter('cat');
                 }}
-                style={[styles.filterChip, activeFilter === 'cat' && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  activeFilter === 'cat' && styles.filterChipActive,
+                ]}
               >
                 <Text
                   style={[
@@ -278,7 +351,7 @@ export default function PetsScreen() {
           </View>
         ) : null}
 
-        {/* Empty State */}
+        {/* 4. Empty States & Pet Passport Cards */}
         {allPets.length === 0 ? (
           <View style={[styles.emptyContainer, shadows.sm]}>
             <View style={styles.emptyIconCircle}>
@@ -286,7 +359,7 @@ export default function PetsScreen() {
             </View>
             <Text style={styles.emptyHeading}>No pets registered yet</Text>
             <Text style={styles.emptyDescription}>
-              Register your dog or cat with the City Veterinary Office to track vaccinations, generate official health passports, and book checkups.
+              Register your dog or cat with the City Veterinary Office to track vaccinations, generate official health passports, and schedule clinic checkups.
             </Text>
             <Pressable
               onPress={() => {
@@ -301,119 +374,142 @@ export default function PetsScreen() {
           </View>
         ) : filteredPets.length === 0 ? (
           <View style={styles.noResultsBox}>
-            <Ionicons name="search" size={28} color={colors.textMuted} />
-            <Text style={styles.noResultsTitle}>No matching pets</Text>
-            <Text style={styles.noResultsSubtitle}>Try searching with a different name or filter.</Text>
+            <View style={styles.noResultsIconWrap}>
+              <Ionicons name="search" size={24} color={colors.textMuted} />
+            </View>
+            <Text style={styles.noResultsTitle}>No matching pets found</Text>
+            <Text style={styles.noResultsSubtitle}>Try searching with a different name, breed, or filter.</Text>
           </View>
         ) : (
-          /* Pets Passport List */
+          /* Staggered Animated Pet Passport List */
           <View style={styles.petsList}>
-            {filteredPets.map((pet) => {
+            {filteredPets.map((pet, idx) => {
               const isDog = pet.species?.toLowerCase() === 'dog';
               const ageText = pet.birthYear
                 ? formatAge(ageFromBirthYear(pet.birthYear))
                 : undefined;
+              const genderLabel = pet.gender === 'male' ? 'Male ♂' : pet.gender === 'female' ? 'Female ♀' : undefined;
 
               return (
-                <Pressable
+                <Animated.View
                   key={pet.id}
-                  style={[styles.passportCard, shadows.sm]}
-                  onPress={() => {
-                    haptic.light();
-                    if (pet.id.startsWith('clerk-pet-')) {
-                      // Navigate to general pet records or book
-                      router.push('/appointments/new' as never);
-                    } else {
-                      router.push(`/pets/${pet.id}` as never);
-                    }
-                  }}
+                  entering={FadeInDown.delay(idx * 40).duration(200)}
                 >
-                  {/* Card Header Row */}
-                  <View style={styles.cardHeaderRow}>
-                    <PopoutPetAvatar
-                      avatarId={pet.avatarId}
-                      species={pet.species as any}
-                      photoUrl={pet.photoUrl}
-                      size={60}
-                    />
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.passportCard,
+                      shadows.sm,
+                      pressed && styles.passportCardPressed,
+                    ]}
+                    onPress={() => {
+                      haptic.light();
+                      router.push(`/pets/${pet.id}` as never);
+                    }}
+                  >
+                    {/* Header Row: 3D Avatar + Name + Tags + Chevron */}
+                    <View style={styles.cardHeaderRow}>
+                      <View style={styles.avatarHolder}>
+                        <PopoutPetAvatar
+                          avatarId={pet.avatarId}
+                          species={pet.species as any}
+                          photoUrl={pet.photoUrl}
+                          size={54}
+                          scale={1.25}
+                        />
+                      </View>
 
-                    <View style={styles.petIdentity}>
-                      <View style={styles.nameRow}>
-                        <Text style={styles.petName} numberOfLines={1}>
-                          {pet.name}
-                        </Text>
-                        <View style={styles.speciesPill}>
-                          <Text style={styles.speciesPillText}>
-                            {isDog ? 'Canine' : 'Feline'}
+                      <View style={styles.petIdentity}>
+                        <View style={styles.nameRow}>
+                          <Text style={styles.petName} numberOfLines={1}>
+                            {pet.name}
                           </Text>
+                          <View
+                            style={[
+                              styles.speciesBadge,
+                              isDog ? styles.speciesBadgeDog : styles.speciesBadgeCat,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.speciesBadgeText,
+                                isDog ? styles.speciesBadgeTextDog : styles.speciesBadgeTextCat,
+                              ]}
+                            >
+                              {isDog ? 'Canine' : 'Feline'}
+                            </Text>
+                          </View>
                         </View>
+
+                        <Text style={styles.petBreed} numberOfLines={1}>
+                          {pet.breed || (isDog ? 'Dog' : 'Cat')}
+                          {genderLabel ? ` · ${genderLabel}` : ''}
+                        </Text>
                       </View>
 
-                      <Text style={styles.petBreed} numberOfLines={1}>
-                        {pet.breed || (isDog ? 'Dog' : 'Cat')}
-                        {pet.gender
-                          ? ` · ${pet.gender === 'male' ? 'Male ♂' : 'Female ♀'}`
-                          : ''}
-                      </Text>
+                      <View style={styles.chevronButton}>
+                        <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                      </View>
                     </View>
 
-                    <View style={styles.arrowButton}>
-                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    {/* Immunization & Vital Status Row */}
+                    <View style={styles.statusChipsRow}>
+                      {/* Anti-Rabies Protection Status */}
+                      {pet.isVaccinated ? (
+                        <View style={styles.vaxBadgeGreen}>
+                          <Ionicons name="shield-checkmark" size={13} color={colors.success} />
+                          <Text style={styles.vaxBadgeTextGreen}>Anti-Rabies Protected</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.vaxBadgeAmber}>
+                          <Ionicons name="alert-circle" size={13} color={colors.warning} />
+                          <Text style={styles.vaxBadgeTextAmber}>Anti-Rabies Due · 0 Doses</Text>
+                        </View>
+                      )}
+
+                      {/* Age Chip */}
+                      {ageText ? (
+                        <View style={styles.vitalChip}>
+                          <Ionicons name="calendar-outline" size={11} color={colors.textSecondary} />
+                          <Text style={styles.vitalChipText}>{ageText}</Text>
+                        </View>
+                      ) : null}
+
+                      {/* Spayed/Neutered Chip */}
+                      {pet.isSpayedNeutered ? (
+                        <View style={styles.vitalChip}>
+                          <Ionicons name="checkmark-done" size={11} color={colors.primary} />
+                          <Text style={styles.vitalChipText}>Neutered</Text>
+                        </View>
+                      ) : null}
                     </View>
-                  </View>
 
-                  {/* Status Badges Row */}
-                  <View style={styles.badgesRow}>
-                    {/* Anti-Rabies Status */}
-                    {pet.isVaccinated ? (
-                      <View style={styles.vaccineBadgeGreen}>
-                        <Ionicons name="shield-checkmark" size={13} color={colors.success} />
-                        <Text style={styles.vaccineBadgeTextGreen}>Anti-Rabies (Protected · 1x)</Text>
+                    {/* Card Action Footer */}
+                    <View style={styles.cardFooter}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.bookShortcutBtn,
+                          pressed && styles.bookShortcutBtnPressed,
+                        ]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          haptic.light();
+                          router.push({
+                            pathname: '/appointments/new',
+                            params: { petId: pet.id, petName: pet.name },
+                          } as never);
+                        }}
+                      >
+                        <Ionicons name="calendar-outline" size={13} color={colors.primary} />
+                        <Text style={styles.bookShortcutText}>Book Visit</Text>
+                      </Pressable>
+
+                      <View style={styles.viewPassportLink}>
+                        <Text style={styles.passportLinkText}>View Passport</Text>
+                        <Ionicons name="arrow-forward" size={12} color={colors.primaryDark} />
                       </View>
-                    ) : (
-                      <View style={styles.vaccineBadgeAmber}>
-                        <Ionicons name="alert-circle" size={13} color={colors.warning} />
-                        <Text style={styles.vaccineBadgeTextAmber}>Needs Anti-Rabies Shot (0 Doses)</Text>
-                      </View>
-                    )}
-
-                    {/* Age Badge */}
-                    {ageText ? (
-                      <View style={styles.metaBadge}>
-                        <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} />
-                        <Text style={styles.metaBadgeText}>{ageText}</Text>
-                      </View>
-                    ) : null}
-
-                    {/* Weight / Status Badge */}
-                    {pet.isSpayedNeutered ? (
-                      <View style={styles.metaBadge}>
-                        <Ionicons name="cut-outline" size={12} color={colors.info} />
-                        <Text style={styles.metaBadgeText}>Spayed/Neutered</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {/* Card Quick Action Footer */}
-                  <View style={styles.cardFooter}>
-                    <Pressable
-                      style={styles.bookShortcutBtn}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        haptic.light();
-                        router.push({
-                          pathname: '/appointments/new',
-                          params: { petId: pet.id, petName: pet.name },
-                        } as never);
-                      }}
-                    >
-                      <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-                      <Text style={styles.bookShortcutText}>Book Clinic Visit</Text>
-                    </Pressable>
-
-                    <Text style={styles.passportLinkText}>View Passport →</Text>
-                  </View>
-                </Pressable>
+                    </View>
+                  </Pressable>
+                </Animated.View>
               );
             })}
           </View>
@@ -427,26 +523,48 @@ export default function PetsScreen() {
 
 const styles = StyleSheet.create({
   topHeader: {
+    marginBottom: spacing.md,
+    paddingTop: 4,
+    gap: 6,
+  },
+  eyebrowBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: radius.pill,
+  },
+  eyebrowText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 10,
+    letterSpacing: 0.6,
+  },
+  headerTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
-    paddingTop: 4,
+    gap: spacing.sm,
   },
-  titleWrap: {
+  titleCol: {
     flex: 1,
+    gap: 2,
   },
-  screenTitle: {
+  heroTitle: {
     ...typography.heading1,
     color: colors.textPrimary,
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  screenSubtitle: {
+  heroSubtitle: {
     ...typography.caption,
     color: colors.textSecondary,
     fontSize: 12.5,
-    marginTop: 2,
+    lineHeight: 16,
   },
   addPetBtn: {
     flexDirection: 'row',
@@ -454,47 +572,93 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: colors.primary,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 8.5,
     borderRadius: radius.pill,
+    ...shadows.sm,
   },
   addPetBtnPressed: {
     backgroundColor: colors.primaryDark,
+    transform: [{ scale: 0.98 }],
   },
   addPetBtnText: {
     ...typography.captionBold,
     color: colors.white,
     fontSize: 12.5,
   },
-  statsBanner: {
-    flexDirection: 'row',
+  dashboardCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    padding: spacing.md,
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    alignItems: 'center',
-    justifyContent: 'space-around',
+    gap: 12,
   },
-  statSegment: {
+  complianceRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 10,
   },
-  statNumber: {
-    ...typography.title,
+  complianceIconRing: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  complianceRingGreen: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+  },
+  complianceRingAmber: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+  },
+  complianceTextCol: {
+    flex: 1,
+    gap: 1,
+  },
+  complianceTitle: {
+    ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 17,
+    fontSize: 13,
     fontWeight: '700',
   },
-  statLabel: {
+  complianceSub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 11.5,
+    lineHeight: 15,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(7, 30, 38, 0.02)',
+    borderRadius: radius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.04)',
+  },
+  metricSegment: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 1,
+  },
+  metricNumber: {
+    ...typography.title,
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  metricLabel: {
     ...typography.caption,
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 10.5,
+    fontWeight: '600',
   },
-  statDivider: {
+  metricDivider: {
     width: 1,
-    height: 24,
+    height: 20,
     backgroundColor: 'rgba(7, 30, 38, 0.08)',
   },
   filterSection: {
@@ -508,9 +672,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingHorizontal: 12,
     height: 44,
-    borderWidth: 1,
-    borderColor: 'rgba(7, 30, 38, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(7, 30, 38, 0.07)',
     gap: 8,
+  },
+  searchBarFocused: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
   },
   searchInput: {
     flex: 1,
@@ -525,9 +693,12 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.surface,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 6.5,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.08)',
@@ -603,8 +774,17 @@ const styles = StyleSheet.create({
   },
   noResultsBox: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: 36,
     gap: 6,
+  },
+  noResultsIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(7, 30, 38, 0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
   },
   noResultsTitle: {
     ...typography.title,
@@ -623,124 +803,158 @@ const styles = StyleSheet.create({
   passportCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    padding: spacing.lg,
+    padding: spacing.md + 2,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 10,
+    gap: 11,
+  },
+  passportCardPressed: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    transform: [{ scale: 0.995 }],
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: 12,
+  },
+  avatarHolder: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   petIdentity: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
   },
   petName: {
     ...typography.title,
     color: colors.textPrimary,
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  speciesPill: {
-    backgroundColor: 'rgba(0, 168, 150, 0.08)',
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
+  speciesBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: radius.pill,
   },
-  speciesPillText: {
+  speciesBadgeDog: {
+    backgroundColor: 'rgba(0, 168, 150, 0.10)',
+  },
+  speciesBadgeCat: {
+    backgroundColor: 'rgba(219, 39, 119, 0.10)',
+  },
+  speciesBadgeText: {
     ...typography.captionBold,
+    fontSize: 10.5,
+  },
+  speciesBadgeTextDog: {
     color: colors.primary,
-    fontSize: 10,
+  },
+  speciesBadgeTextCat: {
+    color: '#DB2777',
   },
   petBreed: {
     ...typography.caption,
     color: colors.textSecondary,
     fontSize: 12.5,
+    fontWeight: '500',
   },
-  arrowButton: {
+  chevronButton: {
     width: 28,
     height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(7, 30, 38, 0.04)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgesRow: {
+  statusChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
   },
-  vaccineBadgeGreen: {
+  vaxBadgeGreen: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(16, 185, 129, 0.10)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: radius.pill,
   },
-  vaccineBadgeTextGreen: {
+  vaxBadgeTextGreen: {
     ...typography.captionBold,
     color: colors.success,
     fontSize: 10.5,
   },
-  vaccineBadgeAmber: {
+  vaxBadgeAmber: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: radius.pill,
   },
-  vaccineBadgeTextAmber: {
+  vaxBadgeTextAmber: {
     ...typography.captionBold,
     color: colors.warning,
     fontSize: 10.5,
   },
-  metaBadge: {
+  vitalChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(7, 30, 38, 0.04)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: radius.pill,
   },
-  metaBadgeText: {
+  vitalChipText: {
     ...typography.caption,
     color: colors.textSecondary,
     fontSize: 10.5,
+    fontWeight: '600',
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 9,
     borderTopWidth: 1,
     borderTopColor: 'rgba(7, 30, 38, 0.04)',
-    marginTop: 2,
   },
   bookShortcutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
+    gap: 5,
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: radius.pill,
+  },
+  bookShortcutBtnPressed: {
+    backgroundColor: 'rgba(0, 168, 150, 0.16)',
   },
   bookShortcutText: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 12,
+    fontSize: 11.5,
+  },
+  viewPassportLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   passportLinkText: {
     ...typography.captionBold,
     color: colors.primaryDark,
-    fontSize: 11.5,
+    fontSize: 12,
   },
   bottomSpacing: {
     height: spacing.xl,
