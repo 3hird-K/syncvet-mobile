@@ -295,12 +295,12 @@ export default function ProfileScreen() {
         description: 'You have been signed out of your account.',
       });
       setTimeout(() => {
-        router.replace('/welcome' as never);
+        router.replace({ pathname: '/onboarding', params: { slide: '3' } });
       }, 750);
     } catch (e) {
       console.log('Signout note:', e);
       signOut();
-      router.replace('/welcome' as never);
+      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     }
   };
 

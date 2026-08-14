@@ -468,6 +468,11 @@ export default function AuthScreen() {
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState<string | undefined>();
 
+  // Unified Google Auth: redirect to 4th onboarding slide
+  React.useEffect(() => {
+    router.replace({ pathname: '/onboarding', params: { slide: '3' } });
+  }, [router]);
+
   // Warm up browser for OAuth
   React.useEffect(() => {
     void WebBrowser.warmUpAsync();

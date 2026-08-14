@@ -28,7 +28,7 @@ export default function RegisterLayout() {
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.replace('/(auth)');
+      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
       return;
     }
     if (status === 'authenticated' && hasCompletedProfile && !onSuccess) {

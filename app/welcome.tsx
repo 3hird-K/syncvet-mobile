@@ -17,7 +17,7 @@ export default function WelcomeScreen() {
 
   const handleGetStarted = () => {
     haptic.light();
-    router.push('/(auth)');
+    router.replace({ pathname: '/onboarding', params: { slide: '3' } });
   };
 
   return (

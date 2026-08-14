@@ -76,23 +76,21 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError, restoreSession]);
 
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ClerkLoaded>
         <GestureHandlerRootView style={styles.root}>
           <SafeAreaProvider>
             <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                animation: 'fade',
-                contentStyle: { backgroundColor: colors.background },
-              }}
-            />
+            {fontsLoaded || fontError ? (
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  animation: 'fade',
+                  contentStyle: { backgroundColor: colors.background },
+                }}
+              />
+            ) : null}
             <Toaster />
           </SafeAreaProvider>
         </GestureHandlerRootView>

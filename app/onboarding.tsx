@@ -8,8 +8,12 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { useOAuth } from '@clerk/expo';
 import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
@@ -24,6 +28,9 @@ import { useOnboardingStore } from '@store/useOnboardingStore';
 import { ProgressIndicator } from '@components/ui/ProgressIndicator';
 import { OnboardingSlide } from '@components/ui/OnboardingSlide';
 import { Button } from '@components/ui/Button';
+import { PawLoadingOverlay } from '@components/ui/PawLoading';
+import { ColoredGoogleIcon } from '@components/ui/SocialAuthButton';
+import { toast } from '@components/ui/Sonner';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<OnboardingSlideData>);
 
@@ -36,19 +43,42 @@ type ScrollEvent = {
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { slide } = useLocalSearchParams<{ slide?: string }>();
   const { width } = useWindowDimensions();
   const listRef = useRef<FlatList>(null);
-  const [current, setCurrent] = useState(0);
+  const initialIndex = slide === '3' || slide === 'last' ? 3 : 0;
+  const [current, setCurrent] = useState(initialIndex);
   const setCompleted = useOnboardingStore((state) => state.setCompleted);
 
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+
   const status = useAuthStore((state) => state.status);
-  const user = useAuthStore((state) => state.user);
+
+  // Warm up browser for OAuth
+  useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
 
   useEffect(() => {
     if (status === 'authenticated') {
       router.replace('/(main)');
     }
   }, [status, router]);
+
+  // Jump to specific slide if requested (e.g. after logout)
+  useEffect(() => {
+    if (slide === '3' || slide === 'last') {
+      setCurrent(3);
+      const timer = setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: 3, animated: false });
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [slide]);
 
   const total = ONBOARDING_SLIDES.length;
   const isLast = current === total - 1;
@@ -63,17 +93,99 @@ export default function OnboardingScreen() {
     return null;
   }
 
-  const finish = useCallback(() => {
-    haptic.success();
-    setCompleted();
-    router.replace('/(auth)');
-  }, [router, setCompleted]);
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      haptic.medium();
+      setConnectingGoogle(true);
+
+      try {
+        await WebBrowser.dismissAuthSession();
+      } catch {}
+
+      const redirectUrl = Linking.createURL('/(auth)', { scheme: 'syncvet' });
+      const { createdSessionId, signIn: clerkSignInFlow, signUp: clerkSignUpFlow, setActive } =
+        await startOAuthFlow({ redirectUrl });
+
+      const sessionId = createdSessionId || clerkSignInFlow?.createdSessionId || clerkSignUpFlow?.createdSessionId;
+
+      if (sessionId && setActive) {
+        await setActive({ session: sessionId });
+        haptic.success();
+        setCompleted();
+
+        const clerkEmail =
+          clerkSignUpFlow?.emailAddress ??
+          clerkSignInFlow?.identifier ??
+          '';
+        const firstName = clerkSignUpFlow?.firstName || clerkSignInFlow?.userData?.firstName || '';
+        const lastName = clerkSignUpFlow?.lastName || clerkSignInFlow?.userData?.lastName || '';
+        const clerkName =
+          firstName && lastName
+            ? `${firstName} ${lastName}`
+            : firstName || (clerkEmail ? clerkEmail.split('@')[0] : 'Resident');
+
+        await useAuthStore.getState().googleSignIn({
+          email: clerkEmail || 'user@syncvet.app',
+          fullName: clerkName || 'SyncVet Resident',
+        });
+
+        const currentUser = useAuthStore.getState().user;
+        const metadata = (clerkSignUpFlow?.unsafeMetadata || (clerkSignInFlow?.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
+        const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+        const hasCompletedProfile = Boolean(
+          metadata?.profileCompleted &&
+          metadata?.mobileNumber &&
+          metadata?.address &&
+          clerkPets.length > 0
+        );
+
+        if (hasCompletedProfile) {
+          if (metadata?.mobileNumber || metadata?.address) {
+            await useAuthStore.getState().saveOwnerProfile(
+              (metadata?.mobileNumber as string) || currentUser?.mobileNumber || '',
+              (metadata?.address as string) || currentUser?.address || '',
+            );
+          }
+          await useAuthStore.getState().markRegistrationComplete();
+          router.replace('/(main)');
+        } else {
+          router.replace('/(register)/owner');
+        }
+      } else {
+        setConnectingGoogle(false);
+      }
+    } catch (err: any) {
+      console.log('Google OAuth error on onboarding:', err);
+      setConnectingGoogle(false);
+      const rawMsg =
+        err?.errors?.[0]?.longMessage ||
+        err?.message ||
+        'Could not sign in with Google. Please try again.';
+
+      // Suppress standard dismiss/cancel warnings
+      if (
+        !rawMsg.toLowerCase().includes('cancel') &&
+        !rawMsg.toLowerCase().includes('dismiss') &&
+        !rawMsg.toLowerCase().includes('closed')
+      ) {
+        toast.error('Google Sign-In', {
+          description: rawMsg,
+        });
+      }
+      haptic.error();
+    } finally {
+      setConnectingGoogle(false);
+      try {
+        await WebBrowser.dismissAuthSession();
+      } catch {}
+    }
+  }, [startOAuthFlow, setCompleted, router]);
 
   const skip = useCallback(() => {
     haptic.light();
-    setCompleted();
-    router.replace({ pathname: '/(auth)', params: { mode: 'signin' } });
-  }, [router, setCompleted]);
+    setCurrent(total - 1);
+    listRef.current?.scrollToIndex({ index: total - 1, animated: true });
+  }, [total]);
 
   const onMomentumScrollEnd = useCallback(
     (e: ScrollEvent) => {
@@ -87,10 +199,10 @@ export default function OnboardingScreen() {
     (e: ScrollEvent) => {
       const velocityX = e.nativeEvent.velocity?.x ?? 0;
       if (isLast && velocityX < -0.5) {
-        finish();
+        handleGoogleSignIn();
       }
     },
-    [isLast, finish],
+    [isLast, handleGoogleSignIn],
   );
 
   const renderItem = useCallback(
@@ -117,10 +229,16 @@ export default function OnboardingScreen() {
                 {isLastSlide ? (
                   <View style={styles.authButtonWrap}>
                     <Button
-                      title="Get Started"
+                      title="Continue with Google"
                       size="lg"
-                      onPress={finish}
+                      onPress={handleGoogleSignIn}
+                      loading={connectingGoogle}
                       variant="primary"
+                      leftIcon={
+                        <View style={styles.googleIconBadge}>
+                          <ColoredGoogleIcon size={18} />
+                        </View>
+                      }
                     />
                     <Text style={styles.footnote}>
                       By continuing, you agree to SyncVet’s{' '}
@@ -137,7 +255,7 @@ export default function OnboardingScreen() {
         </View>
       );
     },
-    [width, scrollX, total, finish],
+    [width, scrollX, total, connectingGoogle, handleGoogleSignIn],
   );
 
   const insets = useSafeAreaInsets();
@@ -246,6 +364,15 @@ const styles = StyleSheet.create({
   },
   link: {
     color: colors.primary,
+  },
+  googleIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
   },
 });
 

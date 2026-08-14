@@ -4,7 +4,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { colors, radius, spacing, typography } from '@theme';
 
-function ColoredGoogleIcon({ size = 20 }: { size?: number }) {
+export function ColoredGoogleIcon({ size = 20 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Path

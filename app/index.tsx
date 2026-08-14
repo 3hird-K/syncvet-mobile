@@ -146,7 +146,7 @@ export default function SplashScreen() {
         router.replace('/(register)/owner');
       }
     } else if (completed) {
-      router.replace('/(auth)');
+      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     } else {
       router.replace('/onboarding');
     }
