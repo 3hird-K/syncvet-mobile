@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 
+import { useUser } from '@clerk/expo';
 import { colors } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
 
@@ -12,7 +13,15 @@ export default function RegisterLayout() {
   const router = useRouter();
   const segments = useSegments();
   const status = useAuthStore((state) => state.status);
-  const profileCompleted = useAuthStore((state) => state.user?.profileCompleted);
+  const { user: clerkUser } = useUser();
+  const metadata = clerkUser?.unsafeMetadata;
+  const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+  const hasCompletedProfile = Boolean(
+    metadata?.profileCompleted &&
+    metadata?.mobileNumber &&
+    metadata?.address &&
+    clerkPets.length > 0
+  );
 
   const segmentPath = segments.join('/');
   const onSuccess = segmentPath.includes('success');
@@ -22,10 +31,10 @@ export default function RegisterLayout() {
       router.replace('/(auth)');
       return;
     }
-    if (status === 'authenticated' && profileCompleted && !onSuccess) {
+    if (status === 'authenticated' && hasCompletedProfile && !onSuccess) {
       router.replace('/(main)');
     }
-  }, [status, profileCompleted, router, onSuccess]);
+  }, [status, hasCompletedProfile, router, onSuccess]);
 
   return (
     <Stack

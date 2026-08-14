@@ -203,6 +203,10 @@ export default function AddPetScreen() {
     [width],
   );
 
+  const isPart1Valid = Boolean(fields.name.value && fields.name.value.trim().length > 0);
+  const isPart2Valid = Boolean(fields.breed.value && fields.breed.value.trim().length > 0);
+  const isCurrentPartValid = subPart === 1 ? isPart1Valid : subPart === 2 ? isPart2Valid : true;
+
   const lastToastTimeRef = useRef<number>(0);
 
   const canAdvanceFromStep = useCallback(
@@ -882,10 +886,16 @@ export default function AddPetScreen() {
             keyExtractor={(item) => String(item)}
             horizontal
             pagingEnabled
+            scrollEnabled={isCurrentPartValid}
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
             onScroll={scrollHandler}
             onMomentumScrollEnd={onMomentumScrollEnd}
+            onTouchStart={() => {
+              if (!isCurrentPartValid) {
+                canAdvanceFromStep(subPart);
+              }
+            }}
             renderItem={renderItem}
             style={styles.flatList}
           />

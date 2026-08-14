@@ -132,13 +132,15 @@ export default function SplashScreen() {
 
     if (isAuth) {
       const metadata = clerkUser?.unsafeMetadata;
-      const hasMetadata = Boolean(
-        currentUser?.profileCompleted ||
-        metadata?.profileCompleted ||
-        (metadata?.mobileNumber && metadata?.address)
+      const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+      const hasCompletedProfile = Boolean(
+        metadata?.profileCompleted &&
+        metadata?.mobileNumber &&
+        metadata?.address &&
+        clerkPets.length > 0
       );
 
-      if (hasMetadata) {
+      if (hasCompletedProfile) {
         router.replace('/(main)');
       } else {
         router.replace('/(register)/owner');

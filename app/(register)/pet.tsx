@@ -45,6 +45,7 @@ import { VisualChoiceCards } from '@components/ui/VisualChoiceCards';
 import { DropdownSelect } from '@components/ui/DropdownSelect';
 import { PetAvatarPickerModal } from '@components/ui/PetAvatarPickerModal';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
+import { toast } from '@components/ui/Sonner';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<SubPartIndex>);
 
@@ -177,6 +178,49 @@ export default function PetRegistrationScreen() {
     },
   );
 
+  const isPart1Valid = Boolean(fields.name.value && fields.name.value.trim().length > 0);
+  const isPart2Valid = Boolean(fields.breed.value && fields.breed.value.trim().length > 0);
+  const isCurrentPartValid = subPart === 1 ? isPart1Valid : subPart === 2 ? isPart2Valid : true;
+
+  const lastToastTimeRef = useRef<number>(0);
+
+  const canAdvanceFromStep = useCallback(
+    (step: number): boolean => {
+      if (step === 1) {
+        const valid = Boolean(fields.name.value && fields.name.value.trim().length > 0);
+        if (!valid) {
+          validateField('name');
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Pet Name Required', {
+              id: 'pet-name-required',
+              description: 'Please enter your pet’s name to continue.',
+            });
+          }
+        }
+        return valid;
+      }
+      if (step === 2) {
+        const valid = Boolean(fields.breed.value && fields.breed.value.trim().length > 0);
+        if (!valid) {
+          validateField('breed');
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Breed Required', {
+              id: 'pet-breed-required',
+              description: 'Please select or enter your pet’s breed to continue.',
+            });
+          }
+        }
+        return valid;
+      }
+      return true;
+    },
+    [fields.name.value, fields.breed.value, validateField],
+  );
+
   const breedPresets = useMemo(() => {
     return species === 'dog' ? DOG_BREEDS : CAT_BREEDS;
   }, [species]);
@@ -211,9 +255,10 @@ export default function PetRegistrationScreen() {
   }, [width]);
 
   const handleNextSubPart = useCallback((currentPart: number) => {
+    if (!canAdvanceFromStep(currentPart)) return;
     haptic.light();
     goToSlide(currentPart);
-  }, [goToSlide]);
+  }, [canAdvanceFromStep, goToSlide]);
 
   const handlePrevSubPart = useCallback((currentPart: number) => {
     haptic.light();
@@ -221,18 +266,10 @@ export default function PetRegistrationScreen() {
   }, [goToSlide]);
 
   const handlePart1Next = () => {
-    if (!validateField('name')) {
-      haptic.warning();
-      return;
-    }
     handleNextSubPart(1);
   };
 
   const handlePart2Next = () => {
-    if (!validateField('breed')) {
-      haptic.warning();
-      return;
-    }
     handleNextSubPart(2);
   };
 
@@ -411,15 +448,26 @@ export default function PetRegistrationScreen() {
               </View>
             </View>
 
-            <View style={styles.bottom}>
-              <Button
-                title="Continue to Breed & Age"
-                size="md"
-                onPress={handlePart1Next}
-                variant="primary"
-                showPaw
-              />
-            </View>
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={() => {
+                if (canAdvanceFromStep(1)) {
+                  handleNextSubPart(1);
+                }
+              }}
+              style={styles.swipePromptWrap}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Breed & Age"
+            >
+              <View style={[styles.swipePromptPill, Boolean(fields.name.value?.trim()) && styles.swipePromptPillReady]}>
+                <Text style={[styles.swipePromptText, Boolean(fields.name.value?.trim()) && styles.swipePromptTextReady]}>
+                  {fields.name.value?.trim() ? 'Swipe to continue to Breed & Age' : 'Enter name to swipe'}
+                </Text>
+                <View style={[styles.swipePromptIconWrap, Boolean(fields.name.value?.trim()) && styles.swipePromptIconWrapReady]}>
+                  <Ionicons name="arrow-forward" size={13} color={fields.name.value?.trim() ? colors.white : colors.textMuted} />
+                </View>
+              </View>
+            </Pressable>
           </SlideWrapper>
         );
       }
@@ -522,15 +570,26 @@ export default function PetRegistrationScreen() {
               </View>
             </View>
 
-            <View style={styles.bottom}>
-              <Button
-                title="Continue to Vaccines & Health"
-                size="lg"
-                onPress={handlePart2Next}
-                variant="primary"
-                showPaw
-              />
-            </View>
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={() => {
+                if (canAdvanceFromStep(2)) {
+                  handleNextSubPart(2);
+                }
+              }}
+              style={styles.swipePromptWrap}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Vaccines & Health"
+            >
+              <View style={[styles.swipePromptPill, Boolean(fields.breed.value?.trim()) && styles.swipePromptPillReady]}>
+                <Text style={[styles.swipePromptText, Boolean(fields.breed.value?.trim()) && styles.swipePromptTextReady]}>
+                  {fields.breed.value?.trim() ? 'Swipe to continue to Vaccines & Health' : 'Select breed to swipe'}
+                </Text>
+                <View style={[styles.swipePromptIconWrap, Boolean(fields.breed.value?.trim()) && styles.swipePromptIconWrapReady]}>
+                  <Ionicons name="arrow-forward" size={13} color={fields.breed.value?.trim() ? colors.white : colors.textMuted} />
+                </View>
+              </View>
+            </Pressable>
           </SlideWrapper>
         );
       }
@@ -616,15 +675,22 @@ export default function PetRegistrationScreen() {
               </View>
             </View>
 
-            <View style={styles.bottom}>
-              <Button
-                title="Continue to Weight & Notes"
-                size="lg"
-                onPress={handlePart3Next}
-                variant="primary"
-                showPaw
-              />
-            </View>
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={() => handleNextSubPart(3)}
+              style={styles.swipePromptWrap}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Weight & Notes"
+            >
+              <View style={[styles.swipePromptPill, styles.swipePromptPillReady]}>
+                <Text style={[styles.swipePromptText, styles.swipePromptTextReady]}>
+                  Swipe to continue to Weight & Notes
+                </Text>
+                <View style={[styles.swipePromptIconWrap, styles.swipePromptIconWrapReady]}>
+                  <Ionicons name="arrow-forward" size={13} color={colors.white} />
+                </View>
+              </View>
+            </Pressable>
           </SlideWrapper>
         );
       }
@@ -689,7 +755,7 @@ export default function PetRegistrationScreen() {
             {networkError ? <ErrorMessage message={networkError} /> : null}
             <Button
               title="Complete Registration"
-              size="lg"
+              size="md"
               onPress={handleSaveComplete}
               loading={submitting}
               variant="primary"
@@ -756,7 +822,7 @@ export default function PetRegistrationScreen() {
           </View>
         </View>
 
-        {/* Carousel of Sub-parts with Restricted Swipe (Only progresses via buttons upon validation) */}
+        {/* Carousel of Sub-parts with Validation-aware Swipe */}
         <AnimatedFlatList
           ref={listRef}
           data={SUB_PARTS}
@@ -764,10 +830,16 @@ export default function PetRegistrationScreen() {
           keyExtractor={(item) => String(item)}
           horizontal
           pagingEnabled
-          scrollEnabled={false}
+          scrollEnabled={isCurrentPartValid}
           showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
           onScroll={scrollHandler}
           onMomentumScrollEnd={onMomentumScrollEnd}
+          onTouchStart={() => {
+            if (!isCurrentPartValid) {
+              canAdvanceFromStep(subPart);
+            }
+          }}
           bounces={false}
           getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
           initialNumToRender={1}
@@ -931,5 +1003,46 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: 2,
     gap: spacing.md,
+  },
+  swipePromptWrap: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipePromptPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(7, 30, 38, 0.04)',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.08)',
+    width: '100%',
+  },
+  swipePromptPillReady: {
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    borderColor: 'rgba(0, 168, 150, 0.25)',
+  },
+  swipePromptText: {
+    ...typography.captionBold,
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  swipePromptTextReady: {
+    color: colors.primaryDark,
+  },
+  swipePromptIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(7, 30, 38, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipePromptIconWrapReady: {
+    backgroundColor: colors.primary,
   },
 });

@@ -482,7 +482,7 @@ export default function AuthScreen() {
       setConnectingGoogle(true);
       setNetworkError(undefined);
 
-      const redirectUrl = AuthSession.makeRedirectUri();
+      const redirectUrl = Linking.createURL('/(auth)', { scheme: 'syncvet' });
 
       const { createdSessionId, signIn: clerkSignInFlow, signUp: clerkSignUpFlow, setActive } =
         await startOAuthFlow({ redirectUrl });
@@ -511,13 +511,15 @@ export default function AuthScreen() {
 
         const currentUser = useAuthStore.getState().user;
         const metadata = (clerkSignUpFlow?.unsafeMetadata || (clerkSignInFlow?.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
-        const hasMetadata = Boolean(
-          metadata?.profileCompleted ||
-          (metadata?.mobileNumber && metadata?.address) ||
-          currentUser?.profileCompleted
+        const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+        const hasCompletedProfile = Boolean(
+          metadata?.profileCompleted &&
+          metadata?.mobileNumber &&
+          metadata?.address &&
+          clerkPets.length > 0
         );
 
-        if (hasMetadata) {
+        if (hasCompletedProfile) {
           if (metadata?.mobileNumber || metadata?.address) {
             await useAuthStore.getState().saveOwnerProfile(
               (metadata?.mobileNumber as string) || currentUser?.mobileNumber || '',
@@ -582,12 +584,15 @@ export default function AuthScreen() {
 
           haptic.success();
           const metadata = ((result.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
-          const hasMetadata = Boolean(
-            metadata?.profileCompleted ||
-            (metadata?.mobileNumber && metadata?.address)
+          const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+          const hasCompletedProfile = Boolean(
+            metadata?.profileCompleted &&
+            metadata?.mobileNumber &&
+            metadata?.address &&
+            clerkPets.length > 0
           );
 
-          if (hasMetadata) {
+          if (hasCompletedProfile) {
             if (metadata?.mobileNumber || metadata?.address) {
               await useAuthStore.getState().saveOwnerProfile(
                 (metadata?.mobileNumber as string) || '',
@@ -879,7 +884,8 @@ export default function AuthScreen() {
               <Text style={styles.modalTitle}>Check Your Email</Text>
               <Text style={styles.modalSubtitle}>
                 We sent a 6-digit verification code to{' '}
-                <Text style={styles.modalEmailBold}>{signUpForm.fields.email.value}</Text>
+                <Text style={styles.modalEmailBold}>{signUpForm.fields.email.value}</Text>.
+                Please enter the code directly in this app to verify.
               </Text>
             </View>
 

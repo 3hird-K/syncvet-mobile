@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
+import * as Linking from 'expo-linking';
 import { useOAuth } from '@clerk/expo';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -43,7 +43,7 @@ export default function GoogleAuthScreen() {
       setSubmitting(true);
       setError(undefined);
 
-      const redirectUrl = AuthSession.makeRedirectUri();
+      const redirectUrl = Linking.createURL('/(auth)', { scheme: 'syncvet' });
       const { createdSessionId, signIn: clerkSignInFlow, signUp: clerkSignUpFlow, setActive } =
         await startOAuthFlow({ redirectUrl });
 
@@ -71,13 +71,15 @@ export default function GoogleAuthScreen() {
 
         const currentUser = useAuthStore.getState().user;
         const metadata = (clerkSignUpFlow?.unsafeMetadata || (clerkSignInFlow?.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
-        const hasMetadata = Boolean(
-          metadata?.profileCompleted ||
-          (metadata?.mobileNumber && metadata?.address) ||
-          currentUser?.profileCompleted
+        const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+        const hasCompletedProfile = Boolean(
+          metadata?.profileCompleted &&
+          metadata?.mobileNumber &&
+          metadata?.address &&
+          clerkPets.length > 0
         );
 
-        if (hasMetadata) {
+        if (hasCompletedProfile) {
           if (metadata?.mobileNumber || metadata?.address) {
             await useAuthStore.getState().saveOwnerProfile(
               (metadata?.mobileNumber as string) || currentUser?.mobileNumber || '',
