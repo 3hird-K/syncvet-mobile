@@ -255,66 +255,125 @@ export default function HomeScreen() {
 
         {/* 2. Unified Pet Health Registry Overview Card */}
         <View style={[styles.overviewCard, shadows.sm]}>
+          {/* Header Row with Municipal Badge & Resident Pill */}
           <View style={styles.overviewTop}>
             <View style={styles.overviewBadge}>
-              <Ionicons name="shield-checkmark" size={15} color={colors.primary} />
-              <Text style={styles.overviewBadgeText}>Pet Health Registry</Text>
+              <View style={styles.overviewIconCircle}>
+                <Ionicons name="shield-checkmark" size={15} color={colors.primary} />
+              </View>
+              <View style={styles.overviewTitleWrap}>
+                <Text style={styles.overviewBadgeText}>Pet Health Registry</Text>
+                <Text style={styles.overviewBadgeSub}>City Veterinary Office · CDO</Text>
+              </View>
             </View>
 
             <View style={styles.verifiedPill}>
-              <View style={styles.verifiedDot} />
+              <Ionicons name="checkmark-circle" size={12} color={colors.primary} />
               <Text style={styles.verifiedText}>CDO Resident</Text>
             </View>
           </View>
 
+          {/* Elevated Micro-Stats Grid with Dedicated Icons */}
           <View style={styles.statsRow}>
+            {/* Stat 1: Registered Pets */}
             <Pressable
               onPress={() => {
                 haptic.light();
                 router.push('/pets' as never);
               }}
-              style={styles.statCol}
+              style={({ pressed }) => [styles.statBox, pressed && styles.statBoxPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="View registered pets"
             >
+              <View style={[styles.statIconBadge, { backgroundColor: 'rgba(0, 168, 150, 0.12)' }]}>
+                <Ionicons name="paw" size={13} color={colors.primary} />
+              </View>
               <Text style={styles.statNum}>{allPets.length}</Text>
               <Text style={styles.statLbl}>My Pets</Text>
             </Pressable>
 
-            <View style={styles.statDivider} />
-
-            <View style={styles.statCol}>
-              <Text style={[styles.statNum, { color: colors.success }]}>
+            {/* Stat 2: Vaccination Status */}
+            <Pressable
+              onPress={() => {
+                haptic.light();
+                router.push('/pets' as never);
+              }}
+              style={({ pressed }) => [styles.statBox, pressed && styles.statBoxPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="View vaccination records"
+            >
+              <View style={[styles.statIconBadge, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+                <Ionicons name="shield-checkmark" size={13} color={colors.success} />
+              </View>
+              <Text
+                style={[
+                  styles.statNum,
+                  {
+                    color:
+                      vaccinatedCount === allPets.length && allPets.length > 0
+                        ? colors.success
+                        : colors.textPrimary,
+                  },
+                ]}
+              >
                 {vaccinatedCount}/{allPets.length}
               </Text>
               <Text style={styles.statLbl}>Vaccinated</Text>
-            </View>
+            </Pressable>
 
-            <View style={styles.statDivider} />
-
+            {/* Stat 3: Upcoming Visits */}
             <Pressable
               onPress={() => {
                 haptic.light();
                 router.push('/appointments' as never);
               }}
-              style={styles.statCol}
+              style={({ pressed }) => [styles.statBox, pressed && styles.statBoxPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="View appointments"
             >
-              <Text style={[styles.statNum, { color: upcomingAppointments.length > 0 ? colors.primary : colors.textPrimary }]}>
+              <View style={[styles.statIconBadge, { backgroundColor: 'rgba(14, 116, 144, 0.12)' }]}>
+                <Ionicons name="calendar" size={13} color={colors.info} />
+              </View>
+              <Text
+                style={[
+                  styles.statNum,
+                  {
+                    color:
+                      upcomingAppointments.length > 0
+                        ? colors.primary
+                        : colors.textPrimary,
+                  },
+                ]}
+              >
                 {upcomingAppointments.length}
               </Text>
               <Text style={styles.statLbl}>Upcoming</Text>
             </Pressable>
           </View>
 
-          {/* Clinic Hours & Quick Direct Hotline */}
-          <Pressable
-            onPress={handleCallCVO}
-            style={styles.clinicHoursRow}
-          >
-            <View style={styles.clinicHoursLeft}>
-              <View style={styles.liveGreenDot} />
-              <Text style={styles.clinicHoursText}>CVO Main Clinic Open · 8:00 AM – 5:00 PM</Text>
+          {/* Clinic Hours & Quick Direct Hotline Strip */}
+          <View style={styles.clinicFooterStrip}>
+            <View style={styles.clinicScheduleWrap}>
+              <View style={styles.livePulseDot} />
+              <Ionicons name="business-outline" size={13} color={colors.textSecondary} />
+              <Text style={styles.clinicHoursText} numberOfLines={1}>
+                Main Clinic · 8:00 AM – 5:00 PM
+              </Text>
             </View>
-            <Ionicons name="call-outline" size={13} color={colors.primary} />
-          </Pressable>
+
+            <Pressable
+              onPress={handleCallCVO}
+              style={({ pressed }) => [
+                styles.cvoCallChip,
+                pressed && styles.cvoCallChipPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Call City Veterinary Office"
+            >
+              <Ionicons name="call" size={11} color={colors.primary} />
+              <Text style={styles.cvoCallChipText}>Call CVO</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* 4. Upcoming Visit / Preventive Care Banner */}
@@ -582,7 +641,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
     marginBottom: spacing.lg,
-    gap: 14,
+    gap: 12,
   },
   overviewTop: {
     flexDirection: 'row',
@@ -592,76 +651,103 @@ const styles = StyleSheet.create({
   overviewBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+  },
+  overviewIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 168, 150, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overviewTitleWrap: {
+    gap: 1,
   },
   overviewBadgeText: {
-    ...typography.captionBold,
+    ...typography.title,
     color: colors.textPrimary,
-    fontSize: 13.5,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  overviewBadgeSub: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 11,
   },
   verifiedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: 'rgba(0, 168, 150, 0.08)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: radius.pill,
-  },
-  verifiedDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.14)',
   },
   verifiedText: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 11,
+    fontSize: 10.5,
+    fontWeight: '700',
   },
   statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: 4,
+    gap: 8,
   },
-  statCol: {
+  statBox: {
     flex: 1,
     alignItems: 'center',
+    backgroundColor: '#F8FBFA',
+    paddingVertical: 9,
+    paddingHorizontal: 4,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.08)',
     gap: 2,
+  },
+  statBoxPressed: {
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+  },
+  statIconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
   },
   statNum: {
     ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 19,
-    fontWeight: '700',
+    fontSize: 16.5,
+    fontWeight: '800',
   },
   statLbl: {
-    ...typography.small,
+    ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 11,
+    fontWeight: '600',
   },
-  statDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: 'rgba(7, 30, 38, 0.08)',
-  },
-  clinicHoursRow: {
+  clinicFooterStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(0, 168, 150, 0.05)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.md,
+    backgroundColor: '#F0F9F7',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.12)',
   },
-  clinicHoursLeft: {
+  clinicScheduleWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
   },
-  liveGreenDot: {
+  livePulseDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
@@ -670,8 +756,28 @@ const styles = StyleSheet.create({
   clinicHoursText: {
     ...typography.small,
     color: colors.textPrimary,
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '600',
+  },
+  cvoCallChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.20)',
+  },
+  cvoCallChipPressed: {
+    backgroundColor: 'rgba(0, 168, 150, 0.12)',
+  },
+  cvoCallChipText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 10.5,
+    fontWeight: '700',
   },
   section: {
     marginBottom: spacing.lg,

@@ -25,6 +25,7 @@ export interface ToastAction {
 }
 
 export interface ToastOptions {
+  id?: string;
   description?: string;
   duration?: number;
   action?: ToastAction;
@@ -64,7 +65,23 @@ class ToastManager {
   }
 
   show(title: string, type: ToastType = 'default', options: ToastOptions = {}) {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const id = options.id || `toast-${title}-${options.description || ''}`;
+
+    // Deduplicate: If an identical toast is already active, remove the old one first
+    if (this.timerMap.has(id)) {
+      const existingTimer = this.timerMap.get(id);
+      if (existingTimer) clearTimeout(existingTimer);
+      this.timerMap.delete(id);
+      this.toasts = this.toasts.filter((t) => t.id !== id);
+    } else {
+      const existingSameToast = this.toasts.find(
+        (t) => t.title === title && t.description === options.description,
+      );
+      if (existingSameToast) {
+        this.dismiss(existingSameToast.id);
+      }
+    }
+
     const duration = options.duration ?? 3500;
 
     // Haptic feedback according to toast type
@@ -85,8 +102,8 @@ class ToastManager {
       createdAt: Date.now(),
     };
 
-    // Keep max 3 toasts active for clean stacking
-    this.toasts = [toastItem, ...this.toasts.slice(0, 2)];
+    // Keep max 2 toasts active for clean stacking
+    this.toasts = [toastItem, ...this.toasts.filter((t) => t.id !== id).slice(0, 1)];
     this.notify();
 
     if (duration > 0) {

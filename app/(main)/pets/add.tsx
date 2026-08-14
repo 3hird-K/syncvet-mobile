@@ -53,10 +53,10 @@ const SUB_PARTS = [1, 2, 3, 4] as const;
 type SubPartIndex = (typeof SUB_PARTS)[number];
 
 const PART_SUBTITLES: Record<SubPartIndex, string> = {
-  1: 'Part 1 of 4: Species & Name',
-  2: 'Part 2 of 4: Breed & Age',
-  3: 'Part 3 of 4: Health & Vaccines',
-  4: 'Part 4 of 4: Care Profile',
+  1: 'Species & Name',
+  2: 'Breed & Age',
+  3: 'Health & Vaccines',
+  4: 'Care & Review',
 };
 
 const DOG_BREEDS = [
@@ -202,12 +202,52 @@ export default function AddPetScreen() {
     [width],
   );
 
+  const lastToastTimeRef = useRef<number>(0);
+
+  const canAdvanceFromStep = useCallback(
+    (step: number): boolean => {
+      if (step === 1) {
+        const valid = Boolean(fields.name.value && fields.name.value.trim().length > 0);
+        if (!valid) {
+          validateField('name');
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Pet Name Required', {
+              id: 'pet-name-required',
+              description: 'Please enter your pet’s official name to continue.',
+            });
+          }
+        }
+        return valid;
+      }
+      if (step === 2) {
+        const valid = Boolean(fields.breed.value && fields.breed.value.trim().length > 0);
+        if (!valid) {
+          validateField('breed');
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Breed Required', {
+              id: 'pet-breed-required',
+              description: 'Please select or enter your pet’s breed to continue.',
+            });
+          }
+        }
+        return valid;
+      }
+      return true;
+    },
+    [fields.name.value, fields.breed.value, validateField],
+  );
+
   const handleNextSubPart = useCallback(
     (currentPart: number) => {
+      if (!canAdvanceFromStep(currentPart)) return;
       haptic.light();
       goToSlide(currentPart);
     },
-    [goToSlide],
+    [canAdvanceFromStep, goToSlide],
   );
 
   const handlePrevSubPart = useCallback(
@@ -219,23 +259,29 @@ export default function AddPetScreen() {
   );
 
   const handlePart1Next = () => {
-    if (!validateField('name')) {
-      haptic.warning();
-      return;
-    }
     handleNextSubPart(1);
   };
 
   const handlePart2Next = () => {
-    if (!validateField('breed')) {
-      haptic.warning();
-      return;
-    }
     handleNextSubPart(2);
   };
 
   const handlePart3Next = () => {
     handleNextSubPart(3);
+  };
+
+  const handleStepPress = (targetStep: SubPartIndex) => {
+    haptic.light();
+    if (targetStep < subPart) {
+      goToSlide(targetStep - 1);
+      return;
+    }
+    for (let s = subPart; s < targetStep; s++) {
+      if (!canAdvanceFromStep(s)) {
+        return;
+      }
+    }
+    goToSlide(targetStep - 1);
   };
 
   const handlePrevious = () => {
@@ -248,11 +294,26 @@ export default function AddPetScreen() {
 
   const onMomentumScrollEnd = useCallback(
     (e: { nativeEvent: { contentOffset: { x: number } } }) => {
-      const index = Math.round(e.nativeEvent.contentOffset.x / width);
-      const target = Math.max(1, Math.min(4, index + 1)) as SubPartIndex;
-      setSubPart(target);
+      const targetIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+      const targetStep = Math.max(1, Math.min(4, targetIndex + 1)) as SubPartIndex;
+
+      if (targetStep > subPart) {
+        for (let s = subPart; s < targetStep; s++) {
+          if (!canAdvanceFromStep(s)) {
+            // Validation failed! Snap back to the incomplete step
+            listRef.current?.scrollToOffset({
+              offset: (s - 1) * width,
+              animated: true,
+            });
+            setSubPart(s as SubPartIndex);
+            return;
+          }
+        }
+      }
+
+      setSubPart(targetStep);
     },
-    [width],
+    [width, subPart, canAdvanceFromStep],
   );
 
   const handleSelectAvatar = (id: string, customUri?: string) => {
@@ -306,9 +367,10 @@ export default function AddPetScreen() {
       }
 
       toast.success(`${petPayload.name} registered!`, {
+        id: 'pet-registered-success',
         description: 'City Veterinary health passport has been created.',
       });
-      router.back();
+      router.replace('/pets' as never);
     } catch {
       setNetworkError('We couldn’t register your pet. Please check your connection.');
       haptic.error();
@@ -343,9 +405,9 @@ export default function AddPetScreen() {
         return (
           <SlideWrapper index={index} scrollX={scrollX} width={width}>
             <View style={styles.sectionHeadingWrap}>
-              <Text style={styles.sectionTitle}>What kind of pet do you have?</Text>
+              <Text style={styles.sectionTitle}>Species & Name</Text>
               <Text style={styles.sectionDesc}>
-                Select species, profile avatar and official name.
+                Select species, avatar, and pet’s official name.
               </Text>
             </View>
 
@@ -419,16 +481,18 @@ export default function AddPetScreen() {
               />
             </View>
 
-            <View style={styles.actionRow}>
-              <Button
-                title="Continue: Breed & Age"
-                variant="primary"
-                onPress={handlePart1Next}
-                disabled={submitting}
-                fullWidth
-                showPaw
-              />
-            </View>
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={handlePart1Next}
+              style={styles.swipePromptPill}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Breed & Age"
+            >
+              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <View style={styles.swipePromptIconWrap}>
+                <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+              </View>
+            </Pressable>
           </SlideWrapper>
         );
       }
@@ -437,9 +501,9 @@ export default function AddPetScreen() {
         return (
           <SlideWrapper index={index} scrollX={scrollX} width={width}>
             <View style={styles.sectionHeadingWrap}>
-              <Text style={styles.sectionTitle}>Breed, Gender & Age</Text>
+              <Text style={styles.sectionTitle}>Breed & Age</Text>
               <Text style={styles.sectionDesc}>
-                Helps determine the right vaccinations and medical care.
+                Helps determine appropriate vaccination and care protocols.
               </Text>
             </View>
 
@@ -527,27 +591,18 @@ export default function AddPetScreen() {
               />
             </View>
 
-            <View style={styles.actionRowSplit}>
-              <View style={styles.actionCol}>
-                <Button
-                  title="Back"
-                  variant="outline"
-                  onPress={() => handlePrevSubPart(2)}
-                  disabled={submitting}
-                  fullWidth
-                />
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={handlePart2Next}
+              style={styles.swipePromptPill}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Health & Vaccines"
+            >
+              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <View style={styles.swipePromptIconWrap}>
+                <Ionicons name="arrow-forward" size={13} color={colors.primary} />
               </View>
-              <View style={styles.actionColFlex}>
-                <Button
-                  title="Continue: Health"
-                  variant="primary"
-                  onPress={handlePart2Next}
-                  disabled={submitting}
-                  fullWidth
-                  showPaw
-                />
-              </View>
-            </View>
+            </Pressable>
           </SlideWrapper>
         );
       }
@@ -556,9 +611,9 @@ export default function AddPetScreen() {
         return (
           <SlideWrapper index={index} scrollX={scrollX} width={width}>
             <View style={styles.sectionHeadingWrap}>
-              <Text style={styles.sectionTitle}>Vaccination & Health Status</Text>
+              <Text style={styles.sectionTitle}>Health & Vaccines</Text>
               <Text style={styles.sectionDesc}>
-                Track anti-rabies immunizations and spay/neuter status.
+                Track anti-rabies immunizations and surgical status.
               </Text>
             </View>
 
@@ -638,27 +693,18 @@ export default function AddPetScreen() {
               />
             </View>
 
-            <View style={styles.actionRowSplit}>
-              <View style={styles.actionCol}>
-                <Button
-                  title="Back"
-                  variant="outline"
-                  onPress={() => handlePrevSubPart(3)}
-                  disabled={submitting}
-                  fullWidth
-                />
+            {/* Swipe to continue prompt */}
+            <Pressable
+              onPress={handlePart3Next}
+              style={styles.swipePromptPill}
+              accessibilityRole="button"
+              accessibilityLabel="Swipe or tap to proceed to Care Profile"
+            >
+              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <View style={styles.swipePromptIconWrap}>
+                <Ionicons name="arrow-forward" size={13} color={colors.primary} />
               </View>
-              <View style={styles.actionColFlex}>
-                <Button
-                  title="Continue: Care Profile"
-                  variant="primary"
-                  onPress={handlePart3Next}
-                  disabled={submitting}
-                  fullWidth
-                  showPaw
-                />
-              </View>
-            </View>
+            </Pressable>
           </SlideWrapper>
         );
       }
@@ -667,9 +713,9 @@ export default function AddPetScreen() {
       return (
         <SlideWrapper index={index} scrollX={scrollX} width={width}>
           <View style={styles.sectionHeadingWrap}>
-            <Text style={styles.sectionTitle}>Physical Size & Care Notes</Text>
+            <Text style={styles.sectionTitle}>Care & Review</Text>
             <Text style={styles.sectionDesc}>
-              Final touches for your pet's City Veterinary Passport.
+              Review passport summary and complete registration.
             </Text>
           </View>
 
@@ -744,27 +790,16 @@ export default function AddPetScreen() {
             </View>
           </View>
 
-          <View style={styles.actionRowSplit}>
-            <View style={styles.actionCol}>
-              <Button
-                title="Back"
-                variant="outline"
-                onPress={() => handlePrevSubPart(4)}
-                disabled={submitting}
-                fullWidth
-              />
-            </View>
-            <View style={styles.actionColFlex}>
-              <Button
-                title="Register Pet"
-                variant="primary"
-                onPress={handleSaveComplete}
-                loading={submitting}
-                disabled={submitting}
-                fullWidth
-                showPaw
-              />
-            </View>
+          <View style={styles.finalSubmitRow}>
+            <Button
+              title="Generate Pet Passport"
+              variant="primary"
+              onPress={handleSaveComplete}
+              loading={submitting}
+              disabled={submitting}
+              fullWidth
+              showPaw
+            />
           </View>
         </SlideWrapper>
       );
@@ -790,7 +825,6 @@ export default function AddPetScreen() {
       handlePart1Next,
       handlePart2Next,
       handlePart3Next,
-      handlePrevSubPart,
       handleSaveComplete,
       validateField,
       setValue,
@@ -803,51 +837,36 @@ export default function AddPetScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Header with Back Navigation & Stepper */}
+        {/* Top Header with Back Navigation & Step Capsule */}
         <View style={styles.topBar}>
           <View style={styles.topBarRow}>
             <BackButton onPress={handlePrevious} />
             <View style={styles.headerTitleWrap}>
-              <Text style={styles.topBarTitle}>Add a Pet</Text>
-              <Text style={styles.topBarSubtitle}>{PART_SUBTITLES[subPart]}</Text>
+              <Text style={styles.topBarTitle}>New Pet Registration</Text>
+              <Text style={styles.topBarSubtitle}>City Veterinary Health Passport</Text>
+            </View>
+            <View style={styles.stepCapsule}>
+              <Text style={styles.stepCapsuleText}>Step {subPart} of 4</Text>
             </View>
           </View>
 
-          {/* Stepper Indicator */}
-          <View style={styles.stepperContainer}>
+          {/* Multi-Segment Connected Progress Track */}
+          <View style={styles.progressTrackRow}>
             {SUB_PARTS.map((step) => {
-              const isActive = step === subPart;
-              const isCompleted = step < subPart;
+              const isFilled = step <= subPart;
               return (
                 <Pressable
                   key={step}
-                  onPress={() => {
-                    haptic.light();
-                    goToSlide(step - 1);
-                  }}
-                  style={styles.stepTouch}
+                  onPress={() => handleStepPress(step)}
+                  style={styles.progressSegmentTouch}
                   hitSlop={8}
                 >
                   <View
                     style={[
-                      styles.stepDot,
-                      isActive && styles.stepDotActive,
-                      isCompleted && styles.stepDotCompleted,
+                      styles.progressSegment,
+                      isFilled ? styles.progressSegmentFilled : styles.progressSegmentUnfilled,
                     ]}
-                  >
-                    {isCompleted ? (
-                      <Ionicons name="checkmark" size={12} color={colors.white} />
-                    ) : (
-                      <Text
-                        style={[
-                          styles.stepDotNumber,
-                          isActive && styles.stepDotNumberActive,
-                        ]}
-                      >
-                        {step}
-                      </Text>
-                    )}
-                  </View>
+                  />
                 </Pressable>
               );
             })}
@@ -903,53 +922,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginBottom: spacing.xs,
   },
   headerTitleWrap: {
     flex: 1,
+    gap: 1,
   },
   topBarTitle: {
-    ...typography.heading2,
+    ...typography.title,
     color: colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
   },
   topBarSubtitle: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
-  stepperContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    marginTop: 4,
+  stepCapsule: {
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.16)',
   },
-  stepTouch: {
-    padding: 4,
-  },
-  stepDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(7, 30, 38, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepDotActive: {
-    backgroundColor: colors.primary,
-    transform: [{ scale: 1.1 }],
-  },
-  stepDotCompleted: {
-    backgroundColor: colors.success,
-  },
-  stepDotNumber: {
+  stepCapsuleText: {
     ...typography.captionBold,
-    color: colors.textSecondary,
+    color: colors.primary,
     fontSize: 11,
+    fontWeight: '700',
   },
-  stepDotNumberActive: {
-    color: colors.white,
+  progressTrackRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+  },
+  progressSegmentTouch: {
+    flex: 1,
+    paddingVertical: 4,
+  },
+  progressSegment: {
+    height: 4,
+    borderRadius: 2,
+  },
+  progressSegmentFilled: {
+    backgroundColor: colors.primary,
+  },
+  progressSegmentUnfilled: {
+    backgroundColor: 'rgba(7, 30, 38, 0.08)',
   },
   flatList: {
     flex: 1,
@@ -1080,18 +1100,36 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     fontSize: 10,
   },
-  actionRow: {
-    marginTop: spacing.md,
-  },
-  actionRowSplit: {
+  swipePromptPill: {
     flexDirection: 'row',
-    gap: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.18)',
     marginTop: spacing.md,
   },
-  actionCol: {
-    flex: 1,
+  swipePromptText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 12.5,
+    fontWeight: '700',
   },
-  actionColFlex: {
-    flex: 2,
+  swipePromptIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.15)',
+  },
+  finalSubmitRow: {
+    marginTop: spacing.md,
   },
 });
