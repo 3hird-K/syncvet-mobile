@@ -221,11 +221,19 @@ export default function PetProfileScreen() {
     });
   };
 
-  const handleBookVisit = () => {
+  const handleBookVaccination = () => {
     haptic.light();
     router.push({
       pathname: '/appointments/new',
-      params: { petId: pet.id, petName: pet.name },
+      params: { petId: pet.id, petName: pet.name, serviceId: 'vaccination' },
+    } as never);
+  };
+
+  const handleBookClinicVisit = () => {
+    haptic.light();
+    router.push({
+      pathname: '/appointments/new',
+      params: { petId: pet.id, petName: pet.name, serviceId: 'consultation' },
     } as never);
   };
 
@@ -270,13 +278,13 @@ export default function PetProfileScreen() {
 
         {/* Hero Passport Identity Card */}
         <View style={[styles.heroCard, shadows.sm]}>
-          <View style={styles.heroTopRow}>
-            {/* Pop-Out 3D Pet Avatar */}
+          {/* Centered Pop-Out 3D Pet Avatar */}
+          <View style={styles.avatarCenterWrap}>
             <PopoutPetAvatar
               avatarId={customAvatarId || pet.avatarId}
               species={pet.species}
               photoUrl={customPhotoUrl || pet.photoUrl}
-              size={132}
+              size={138}
               scale={1.65}
               showCameraBadge
               onPress={() => {
@@ -284,31 +292,41 @@ export default function PetProfileScreen() {
                 setAvatarModalVisible(true);
               }}
             />
+          </View>
 
-            {/* Pet Core Identity */}
-            <View style={styles.heroTextWrap}>
-              <View style={styles.nameRow}>
-                <Text style={styles.heroName} numberOfLines={1}>
-                  {pet.name}
+          {/* Centered Pet Core Identity */}
+          <View style={styles.heroCenterInfo}>
+            <View style={styles.nameCenterRow}>
+              <Text style={styles.heroName} numberOfLines={1}>
+                {pet.name}
+              </Text>
+              <View
+                style={[
+                  styles.speciesTag,
+                  isDog ? styles.speciesTagDog : styles.speciesTagCat,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.speciesTagText,
+                    isDog ? styles.speciesTagTextDog : styles.speciesTagTextCat,
+                  ]}
+                >
+                  {isDog ? '🐶 Canine' : '🐱 Feline'}
                 </Text>
-                <View style={styles.speciesTag}>
-                  <Text style={styles.speciesTagText}>
-                    {isDog ? 'Canine' : 'Feline'}
-                  </Text>
-                </View>
               </View>
-
-              <Text style={styles.heroBreed} numberOfLines={1}>
-                {pet.breed || (isDog ? 'Dog' : 'Cat')}
-                {pet.gender
-                  ? ` · ${pet.gender === 'male' ? 'Male ♂' : 'Female ♀'}`
-                  : ''}
-              </Text>
-
-              <Text style={styles.heroAge}>
-                {ageText} {pet.birthYear ? `(Born ${pet.birthYear})` : ''}
-              </Text>
             </View>
+
+            <Text style={styles.heroBreedText} numberOfLines={1}>
+              {pet.breed || (isDog ? 'Dog' : 'Cat')}
+              {pet.gender
+                ? ` · ${pet.gender === 'male' ? 'Male ♂' : 'Female ♀'}`
+                : ''}
+            </Text>
+
+            <Text style={styles.heroAgeText}>
+              {ageText} {pet.birthYear ? `(Born ${pet.birthYear})` : ''}
+            </Text>
           </View>
 
           {/* Anti-Rabies Vaccination Status Banner */}
@@ -411,7 +429,7 @@ export default function PetProfileScreen() {
               <Text style={styles.sectionTitle}>Anti-Rabies & Vaccines</Text>
             </View>
             <Pressable
-              onPress={handleBookVisit}
+              onPress={handleBookVaccination}
               style={styles.sectionActionBtn}
               hitSlop={8}
             >
@@ -429,7 +447,7 @@ export default function PetProfileScreen() {
                 <Text style={styles.emptyCardSubtitle}>
                   Keep your pet safe by booking an official anti-rabies vaccination at the City Vet Office.
                 </Text>
-                <Pressable onPress={handleBookVisit} style={styles.scheduleBtnInline}>
+                <Pressable onPress={handleBookVaccination} style={styles.scheduleBtnInline}>
                   <Ionicons name="add" size={14} color={colors.white} />
                   <Text style={styles.scheduleBtnInlineText}>Book Vaccination</Text>
                 </Pressable>
@@ -482,6 +500,10 @@ export default function PetProfileScreen() {
                 <Text style={styles.emptyCardSubtitle}>
                   Schedule checkups, anti-rabies vaccines, or consultations for {pet.name}.
                 </Text>
+                <Pressable onPress={handleBookClinicVisit} style={styles.scheduleBtnInline}>
+                  <Ionicons name="add" size={14} color={colors.white} />
+                  <Text style={styles.scheduleBtnInlineText}>Book Clinic Visit</Text>
+                </Pressable>
               </View>
             ) : (
               <View style={styles.historyList}>
@@ -508,18 +530,6 @@ export default function PetProfileScreen() {
               </View>
             )}
           </View>
-        </View>
-
-        {/* Book Service Action Button */}
-        <View style={styles.bottomCtaWrap}>
-          <Button
-            title={`Book Clinic Visit for ${pet.name}`}
-            size="lg"
-            variant="primary"
-            onPress={handleBookVisit}
-            showPaw
-            fullWidth
-          />
         </View>
 
         <View style={styles.bottomSpacing} />
@@ -563,26 +573,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
     paddingTop: 2,
+    gap: 8,
   },
   headerTitleWrap: {
     flex: 1,
-    marginLeft: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
   },
   headerTitle: {
     ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 18,
+    fontSize: 16.5,
     fontWeight: '700',
+    textAlign: 'center',
   },
   headerSubtitle: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 11,
+    textAlign: 'center',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   editHeaderBtn: {
     width: 32,
@@ -609,46 +624,65 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(7, 30, 38, 0.06)',
     gap: 12,
   },
-  heroTopRow: {
+  avatarCenterWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 4,
+    overflow: 'visible',
+  },
+  heroCenterInfo: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  nameCenterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-  },
-  heroTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
   },
   heroName: {
     ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 19,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   speciesTag: {
-    backgroundColor: 'rgba(0, 168, 150, 0.08)',
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: radius.pill,
+  },
+  speciesTagDog: {
+    backgroundColor: 'rgba(0, 168, 150, 0.10)',
+  },
+  speciesTagCat: {
+    backgroundColor: 'rgba(219, 39, 119, 0.10)',
   },
   speciesTagText: {
     ...typography.captionBold,
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  speciesTagTextDog: {
     color: colors.primary,
-    fontSize: 10,
   },
-  heroBreed: {
-    ...typography.caption,
+  speciesTagTextCat: {
+    color: '#DB2777',
+  },
+  heroBreedText: {
+    ...typography.body,
     color: colors.textSecondary,
-    fontSize: 12.5,
+    fontSize: 13,
+    textAlign: 'center',
   },
-  heroAge: {
-    ...typography.small,
+  heroAgeText: {
+    ...typography.caption,
     color: colors.textMuted,
-    fontSize: 11.5,
+    fontSize: 12,
+    textAlign: 'center',
   },
   vaxStatusBanner: {
     flexDirection: 'row',

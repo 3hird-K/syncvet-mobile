@@ -43,20 +43,25 @@ export function PopoutPetAvatar({
   const avatarSource = getPetAvatarSource(avatarId, species, photoUrl);
   const isCustomPhoto = Boolean(photoUrl);
 
-  // Proportions
+  // Exact 3D Popout Proportions
   const circleSize = size;
-  const imgSize = Math.round(size * scale); // 55% bigger for zoomed face & popout
-  const overflowTop = Math.round(size * 0.32); // Generous height for ears popping out
-  const wrapperHeight = circleSize + overflowTop;
-  const wrapperWidth = circleSize + 12;
+  const imgSize = Math.round(size * scale);
+  // Setting wrapperHeight equal to imgSize guarantees top: 0 has 0px offset so ears/head are NEVER clipped
+  const wrapperHeight = imgSize;
+  const wrapperWidth = Math.max(circleSize, imgSize);
 
-  // The vertical image offset so top and bottom image layers align with 100% precision
-  const imgTopOffset = wrapperHeight - imgSize;
+  // Height of the popping upper head container (from top of image down past the circle top ring)
+  const headContainerHeight = wrapperHeight - Math.round(circleSize * 0.48);
 
   const defaultBorderColor = borderColor || (isDog ? colors.primary : '#DB2777');
   const defaultBgColor =
     bgColor || (isDog ? 'rgba(0, 168, 150, 0.14)' : 'rgba(219, 39, 119, 0.14)');
   const ringWidth = Math.max(3, Math.round(size * 0.045));
+
+  // Precise attachment offset for the camera badge on the circular frame perimeter
+  const badgeSize = Math.max(26, Math.round(size * 0.28));
+  const badgeRightOffset = Math.round((wrapperWidth - circleSize) / 2) + Math.round(circleSize * 0.04);
+  const badgeBottomOffset = Math.round(circleSize * 0.02);
 
   const content = (
     <View
@@ -120,7 +125,7 @@ export function PopoutPetAvatar({
             />
           </View>
 
-          {/* LAYER 2: Porthole Frame Ring (Renders in front of body) */}
+          {/* LAYER 2: Porthole Frame Ring (Renders in front of lower body) */}
           <View
             style={[
               styles.portholeRing,
@@ -136,13 +141,13 @@ export function PopoutPetAvatar({
             pointerEvents="none"
           />
 
-          {/* LAYER 3: Popping Head & Ears (Upper Half overflows in front of top ring) */}
+          {/* LAYER 3: Popping Head & Ears (Upper Half overflows in front of top ring with ZERO top clipping) */}
           <View
             style={[
               styles.poppingHeadContainer,
               {
-                width: circleSize + 16,
-                height: Math.round(wrapperHeight * 0.56),
+                width: wrapperWidth + 24,
+                height: headContainerHeight,
               },
             ]}
             pointerEvents="none"
@@ -154,7 +159,7 @@ export function PopoutPetAvatar({
                 {
                   width: imgSize,
                   height: imgSize,
-                  top: imgTopOffset,
+                  top: 0,
                 },
               ]}
               resizeMode="contain"
@@ -163,23 +168,25 @@ export function PopoutPetAvatar({
         </>
       )}
 
-      {/* LAYER 4: Camera Customizer Badge */}
+      {/* LAYER 4: Camera Customizer Badge attached directly to the circular frame */}
       {showCameraBadge && (
         <View
           style={[
             styles.cameraBadge,
             {
-              width: Math.max(22, Math.round(size * 0.28)),
-              height: Math.max(22, Math.round(size * 0.28)),
-              borderRadius: Math.max(11, Math.round(size * 0.14)),
+              width: badgeSize,
+              height: badgeSize,
+              borderRadius: badgeSize / 2,
               backgroundColor: defaultBorderColor,
+              right: badgeRightOffset,
+              bottom: badgeBottomOffset,
             },
-            shadows.sm,
+            shadows.md,
           ]}
         >
           <Ionicons
             name="camera"
-            size={Math.max(11, Math.round(size * 0.14))}
+            size={Math.max(13, Math.round(badgeSize * 0.52))}
             color={colors.white}
           />
         </View>
@@ -208,6 +215,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     position: 'relative',
+    overflow: 'visible',
   },
   customPhotoCircle: {
     position: 'absolute',
@@ -241,12 +249,11 @@ const styles = StyleSheet.create({
   },
   cameraBadge: {
     position: 'absolute',
-    bottom: -1,
-    right: -1,
-    zIndex: 10,
+    zIndex: 20,
+    elevation: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: colors.surface,
   },
 });

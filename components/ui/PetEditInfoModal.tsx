@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,7 +17,6 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { currentYear, ageFromBirthYear } from '@lib/format';
 import type { Pet, PetGender, Species } from '@services/data';
-import { Button } from './Button';
 import { Input } from './Input';
 import { Stepper } from './Stepper';
 import { ChoiceChips } from './ChoiceChips';
@@ -160,20 +160,38 @@ export function PetEditInfoModal({
             {/* Modal Header */}
             <View style={styles.header}>
               <View style={styles.headerTitleWrap}>
-                <Text style={styles.title}>Edit Pet Info</Text>
+                <Text style={styles.title}>Edit Pet Profile</Text>
                 <Text style={styles.subtitle}>
-                  Update {pet.name}’s health passport details
+                  Update {pet.name}’s official health passport details
                 </Text>
               </View>
-              <Pressable
-                onPress={onClose}
-                style={styles.closeBtn}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <Ionicons name="close" size={20} color={colors.textSecondary} />
-              </Pressable>
+
+              <View style={styles.headerActions}>
+                <Pressable
+                  onPress={handleSave}
+                  disabled={saving}
+                  style={[styles.saveHeaderBtn, saving && { opacity: 0.6 }]}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save Changes"
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Ionicons name="save" size={18} color={colors.primary} />
+                  )}
+                </Pressable>
+
+                <Pressable
+                  onPress={onClose}
+                  style={styles.closeBtn}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                >
+                  <Ionicons name="close" size={18} color={colors.textSecondary} />
+                </Pressable>
+              </View>
             </View>
 
             {/* Form Scroll Area */}
@@ -190,63 +208,74 @@ export function PetEditInfoModal({
                 </View>
               ) : null}
 
-              {/* 1. Pet Name */}
-              <Input
-                label="Pet Name *"
-                value={name}
-                onChangeText={(val) => {
-                  setName(val);
-                  if (errorMessage) setErrorMessage(undefined);
-                }}
-                placeholder="e.g. Milo, Luna, Buddy"
-                autoCapitalize="words"
-                returnKeyType="next"
-              />
+              {/* CARD 1: Identity & Species */}
+              <View style={[styles.sectionCard, shadows.sm]}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="paw" size={16} color={colors.primary} />
+                  <Text style={styles.cardSectionTitle}>Basic Identity</Text>
+                </View>
 
-              {/* 2. Species Switcher */}
-              <View style={styles.fieldSection}>
-                <Text style={styles.fieldLabel}>Species *</Text>
-                <View style={styles.speciesToggleRow}>
-                  <Pressable
-                    onPress={() => handleSpeciesChange('dog')}
-                    style={[
-                      styles.speciesBtn,
-                      isDog && styles.speciesBtnActiveDog,
-                    ]}
-                  >
-                    <Text style={styles.speciesBtnEmoji}>🐶</Text>
-                    <Text
+                <Input
+                  label="Pet Name *"
+                  value={name}
+                  onChangeText={(val) => {
+                    setName(val);
+                    if (errorMessage) setErrorMessage(undefined);
+                  }}
+                  placeholder="e.g. Milo, Luna, Buddy"
+                  autoCapitalize="words"
+                  returnKeyType="next"
+                />
+
+                <View style={styles.fieldSection}>
+                  <Text style={styles.fieldLabel}>Species *</Text>
+                  <View style={styles.speciesToggleRow}>
+                    <Pressable
+                      onPress={() => handleSpeciesChange('dog')}
                       style={[
-                        styles.speciesBtnText,
-                        isDog && styles.speciesBtnTextActive,
+                        styles.speciesBtn,
+                        isDog && styles.speciesBtnActiveDog,
                       ]}
                     >
-                      Dog (Canine)
-                    </Text>
-                  </Pressable>
+                      <Text style={styles.speciesBtnEmoji}>🐶</Text>
+                      <Text
+                        style={[
+                          styles.speciesBtnText,
+                          isDog && styles.speciesBtnTextActiveDog,
+                        ]}
+                      >
+                        Canine (Dog)
+                      </Text>
+                    </Pressable>
 
-                  <Pressable
-                    onPress={() => handleSpeciesChange('cat')}
-                    style={[
-                      styles.speciesBtn,
-                      !isDog && styles.speciesBtnActiveCat,
-                    ]}
-                  >
-                    <Text style={styles.speciesBtnEmoji}>🐱</Text>
-                    <Text
+                    <Pressable
+                      onPress={() => handleSpeciesChange('cat')}
                       style={[
-                        styles.speciesBtnText,
-                        !isDog && styles.speciesBtnTextActive,
+                        styles.speciesBtn,
+                        !isDog && styles.speciesBtnActiveCat,
                       ]}
                     >
-                      Cat (Feline)
-                    </Text>
-                  </Pressable>
+                      <Text style={styles.speciesBtnEmoji}>🐱</Text>
+                      <Text
+                        style={[
+                          styles.speciesBtnText,
+                          !isDog && styles.speciesBtnTextActiveCat,
+                        ]}
+                      >
+                        Feline (Cat)
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
 
-              {/* 3. Breed & Common Presets */}
-              <View style={styles.fieldSection}>
+              {/* CARD 2: Breed & Presets */}
+              <View style={[styles.sectionCard, shadows.sm]}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="bookmark-outline" size={16} color={colors.primary} />
+                  <Text style={styles.cardSectionTitle}>Breed & Pedigree</Text>
+                </View>
+
                 <Input
                   label="Breed *"
                   value={breed}
@@ -293,228 +322,244 @@ export function PetEditInfoModal({
                 </ScrollView>
               </View>
 
-              {/* 4. Gender */}
-              <View style={styles.fieldSection}>
-                <Text style={styles.fieldLabel}>Gender *</Text>
-                <View style={styles.genderRow}>
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setGender('male');
-                    }}
-                    style={[
-                      styles.genderBtn,
-                      gender === 'male' && styles.genderBtnActiveMale,
-                    ]}
-                  >
-                    <Ionicons
-                      name="male"
-                      size={18}
-                      color={gender === 'male' ? colors.primary : colors.textMuted}
-                    />
-                    <Text
-                      style={[
-                        styles.genderBtnText,
-                        gender === 'male' && styles.genderBtnTextActive,
-                      ]}
-                    >
-                      Male (♂)
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setGender('female');
-                    }}
-                    style={[
-                      styles.genderBtn,
-                      gender === 'female' && styles.genderBtnActiveFemale,
-                    ]}
-                  >
-                    <Ionicons
-                      name="female"
-                      size={18}
-                      color={gender === 'female' ? '#DB2777' : colors.textMuted}
-                    />
-                    <Text
-                      style={[
-                        styles.genderBtnText,
-                        gender === 'female' && styles.genderBtnTextActivePink,
-                      ]}
-                    >
-                      Female (♀)
-                    </Text>
-                  </Pressable>
+              {/* CARD 3: Physical Profile */}
+              <View style={[styles.sectionCard, shadows.sm]}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="fitness-outline" size={16} color={colors.primary} />
+                  <Text style={styles.cardSectionTitle}>Physical Profile</Text>
                 </View>
-              </View>
 
-              {/* 5. Age */}
-              <View style={styles.fieldSection}>
-                <Text style={styles.fieldLabel}>Estimated Age</Text>
-                <View style={styles.stepperWrap}>
-                  <Stepper
-                    value={age}
-                    min={0}
-                    max={25}
-                    onChange={(newAge) => {
+                {/* Gender */}
+                <View style={styles.fieldSection}>
+                  <Text style={styles.fieldLabel}>Gender *</Text>
+                  <View style={styles.genderRow}>
+                    <Pressable
+                      onPress={() => {
+                        haptic.light();
+                        setGender('male');
+                      }}
+                      style={[
+                        styles.genderBtn,
+                        gender === 'male' && styles.genderBtnActiveMale,
+                      ]}
+                    >
+                      <Ionicons
+                        name="male"
+                        size={17}
+                        color={gender === 'male' ? '#2563EB' : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.genderBtnText,
+                          gender === 'male' && styles.genderBtnTextActiveMale,
+                        ]}
+                      >
+                        Male (♂)
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        haptic.light();
+                        setGender('female');
+                      }}
+                      style={[
+                        styles.genderBtn,
+                        gender === 'female' && styles.genderBtnActiveFemale,
+                      ]}
+                    >
+                      <Ionicons
+                        name="female"
+                        size={17}
+                        color={gender === 'female' ? '#DB2777' : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.genderBtnText,
+                          gender === 'female' && styles.genderBtnTextActiveFemale,
+                        ]}
+                      >
+                        Female (♀)
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {/* Age Stepper */}
+                <View style={styles.fieldSection}>
+                  <Text style={styles.fieldLabel}>Estimated Age</Text>
+                  <View style={styles.stepperWrap}>
+                    <Stepper
+                      value={age}
+                      min={0}
+                      max={25}
+                      onChange={(newAge) => {
+                        haptic.light();
+                        setAge(newAge);
+                      }}
+                      label={(val) => `${val} ${val === 1 ? 'year old' : 'years old'}`}
+                    />
+                    <Text style={styles.birthYearSub}>
+                      Estimated Birth Year: {currentYear() - age}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Weight Category */}
+                <View style={styles.fieldSection}>
+                  <Text style={styles.fieldLabel}>Weight Category</Text>
+                  <ChoiceChips
+                    options={WEIGHT_OPTIONS}
+                    value={weightCategory}
+                    onChange={(val) => {
                       haptic.light();
-                      setAge(newAge);
+                      setWeightCategory(val);
                     }}
-                    label={(val) => `${val} ${val === 1 ? 'year old' : 'years old'}`}
                   />
-                  <Text style={styles.birthYearSub}>
-                    Estimated Birth Year: {currentYear() - age}
-                  </Text>
                 </View>
               </View>
 
-              {/* 6. Anti-Rabies Vaccination Status */}
-              <View style={styles.fieldSection}>
-                <Text style={styles.fieldLabel}>Anti-Rabies Vaccination Status</Text>
-                <View style={styles.toggleRow}>
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setIsVaccinated(true);
-                    }}
-                    style={[
-                      styles.toggleBtn,
-                      isVaccinated && styles.toggleBtnActiveSuccess,
-                    ]}
-                  >
-                    <Ionicons
-                      name="shield-checkmark"
-                      size={17}
-                      color={isVaccinated ? colors.success : colors.textMuted}
-                    />
-                    <Text
-                      style={[
-                        styles.toggleBtnText,
-                        isVaccinated && styles.toggleBtnTextSuccess,
-                      ]}
-                    >
-                      Vaccinated
-                    </Text>
-                  </Pressable>
+              {/* CARD 4: Health & Protection */}
+              <View style={[styles.sectionCard, shadows.sm]}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="shield-checkmark-outline" size={16} color={colors.primary} />
+                  <Text style={styles.cardSectionTitle}>Health & Vaccination Status</Text>
+                </View>
 
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setIsVaccinated(false);
-                    }}
-                    style={[
-                      styles.toggleBtn,
-                      !isVaccinated && styles.toggleBtnActiveWarning,
-                    ]}
-                  >
-                    <Ionicons
-                      name="alert-circle"
-                      size={17}
-                      color={!isVaccinated ? colors.warning : colors.textMuted}
-                    />
-                    <Text
+                {/* Anti-Rabies Vaccination */}
+                <View style={styles.fieldSection}>
+                  <Text style={styles.fieldLabel}>Anti-Rabies Vaccination</Text>
+                  <View style={styles.toggleRow}>
+                    <Pressable
+                      onPress={() => {
+                        haptic.light();
+                        setIsVaccinated(true);
+                      }}
                       style={[
-                        styles.toggleBtnText,
-                        !isVaccinated && styles.toggleBtnTextWarning,
+                        styles.toggleBtn,
+                        isVaccinated && styles.toggleBtnActiveSuccess,
                       ]}
                     >
-                      Needs Vaccine
-                    </Text>
-                  </Pressable>
+                      <Ionicons
+                        name="shield-checkmark"
+                        size={16}
+                        color={isVaccinated ? colors.success : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.toggleBtnText,
+                          isVaccinated && styles.toggleBtnTextSuccess,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Protected
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        haptic.light();
+                        setIsVaccinated(false);
+                      }}
+                      style={[
+                        styles.toggleBtn,
+                        !isVaccinated && styles.toggleBtnActiveWarning,
+                      ]}
+                    >
+                      <Ionicons
+                        name="alert-circle"
+                        size={16}
+                        color={!isVaccinated ? colors.warning : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.toggleBtnText,
+                          !isVaccinated && styles.toggleBtnTextWarning,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Vaccine Due
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {/* Spayed / Neutered */}
+                <View style={styles.fieldSection}>
+                  <Text style={styles.fieldLabel}>Spayed / Neutered (Kapon)</Text>
+                  <View style={styles.toggleRow}>
+                    <Pressable
+                      onPress={() => {
+                        haptic.light();
+                        setIsSpayedNeutered(true);
+                      }}
+                      style={[
+                        styles.toggleBtn,
+                        isSpayedNeutered && styles.toggleBtnActivePrimary,
+                      ]}
+                    >
+                      <Ionicons
+                        name="cut"
+                        size={16}
+                        color={isSpayedNeutered ? colors.primary : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.toggleBtnText,
+                          isSpayedNeutered && styles.toggleBtnTextPrimary,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Fixed (Kapon)
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        haptic.light();
+                        setIsSpayedNeutered(false);
+                      }}
+                      style={[
+                        styles.toggleBtn,
+                        !isSpayedNeutered && styles.toggleBtnActiveNeutral,
+                      ]}
+                    >
+                      <Ionicons
+                        name="ellipse-outline"
+                        size={16}
+                        color={!isSpayedNeutered ? colors.textPrimary : colors.textMuted}
+                      />
+                      <Text
+                        style={[
+                          styles.toggleBtnText,
+                          !isSpayedNeutered && styles.toggleBtnText,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Intact
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
 
-              {/* 7. Spayed / Neutered */}
-              <View style={styles.fieldSection}>
-                <Text style={styles.fieldLabel}>Spayed / Neutered</Text>
-                <View style={styles.toggleRow}>
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setIsSpayedNeutered(true);
-                    }}
-                    style={[
-                      styles.toggleBtn,
-                      isSpayedNeutered && styles.toggleBtnActivePrimary,
-                    ]}
-                  >
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={17}
-                      color={isSpayedNeutered ? colors.primary : colors.textMuted}
-                    />
-                    <Text
-                      style={[
-                        styles.toggleBtnText,
-                        isSpayedNeutered && styles.toggleBtnTextPrimary,
-                      ]}
-                    >
-                      Yes, Fixed
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setIsSpayedNeutered(false);
-                    }}
-                    style={[
-                      styles.toggleBtn,
-                      !isSpayedNeutered && styles.toggleBtnActiveNeutral,
-                    ]}
-                  >
-                    <Ionicons
-                      name="ellipse-outline"
-                      size={17}
-                      color={!isSpayedNeutered ? colors.textPrimary : colors.textMuted}
-                    />
-                    <Text
-                      style={[
-                        styles.toggleBtnText,
-                        !isSpayedNeutered && styles.toggleBtnText,
-                      ]}
-                    >
-                      Intact / No
-                    </Text>
-                  </Pressable>
+              {/* CARD 5: Special Care Notes */}
+              <View style={[styles.sectionCard, shadows.sm]}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+                  <Text style={styles.cardSectionTitle}>Special Medical Notes</Text>
                 </View>
-              </View>
 
-              {/* 8. Weight Category */}
-              <View style={styles.fieldSection}>
-                <Text style={styles.fieldLabel}>Weight Category</Text>
-                <ChoiceChips
-                  options={WEIGHT_OPTIONS}
-                  value={weightCategory}
-                  onChange={(val) => {
-                    haptic.light();
-                    setWeightCategory(val);
-                  }}
+                <Input
+                  label="Allergies / Special Instructions"
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="e.g. Allergic to chicken, microchip ID #12345, friendly with children"
+                  multiline
+                  numberOfLines={3}
                 />
               </View>
-
-              {/* 9. Special Notes */}
-              <Input
-                label="Medical Notes / Allergies (Optional)"
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="e.g. Allergic to chicken, microchip ID #12345, friendly with strangers"
-                multiline
-                numberOfLines={3}
-              />
             </ScrollView>
-
-            {/* Bottom Actions Bar */}
-            <View style={styles.footer}>
-              <Button
-                title="Save Changes"
-                variant="primary"
-                onPress={handleSave}
-                loading={saving}
-                fullWidth
-              />
-            </View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -525,7 +570,7 @@ export function PetEditInfoModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(7, 30, 38, 0.60)',
+    backgroundColor: 'rgba(7, 30, 38, 0.65)',
     justifyContent: 'flex-end',
   },
   keyboardView: {
@@ -533,21 +578,23 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#F7FBF9',
     borderTopLeftRadius: radius.xxl,
     borderTopRightRadius: radius.xxl,
-    maxHeight: '90%',
-    paddingBottom: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    maxHeight: '92%',
+    overflow: 'hidden',
+    paddingBottom: Platform.OS === 'ios' ? spacing.lg : spacing.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(7, 30, 38, 0.06)',
+    backgroundColor: colors.surface,
   },
   headerTitleWrap: {
     flex: 1,
@@ -556,28 +603,62 @@ const styles = StyleSheet.create({
   title: {
     ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 19,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
   },
   subtitle: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  saveHeaderBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 168, 150, 0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(7, 30, 38, 0.05)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   formScroll: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   formContent: {
     paddingVertical: spacing.md,
-    gap: 16,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.06)',
+    gap: 12,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: 2,
+  },
+  cardSectionTitle: {
+    ...typography.captionBold,
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
   },
   errorBanner: {
     flexDirection: 'row',
@@ -593,7 +674,7 @@ const styles = StyleSheet.create({
   errorText: {
     ...typography.captionBold,
     color: colors.error,
-    fontSize: 12.5,
+    fontSize: 12,
     flex: 1,
   },
   fieldSection: {
@@ -602,7 +683,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 12.5,
   },
   speciesToggleRow: {
     flexDirection: 'row',
@@ -616,9 +697,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 11,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(7, 30, 38, 0.04)',
+    backgroundColor: 'rgba(7, 30, 38, 0.03)',
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: 'rgba(7, 30, 38, 0.06)',
   },
   speciesBtnActiveDog: {
     backgroundColor: 'rgba(0, 168, 150, 0.10)',
@@ -634,21 +715,25 @@ const styles = StyleSheet.create({
   speciesBtnText: {
     ...typography.captionBold,
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12.5,
   },
-  speciesBtnTextActive: {
-    color: colors.textPrimary,
+  speciesBtnTextActiveDog: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  speciesBtnTextActiveCat: {
+    color: '#DB2777',
     fontWeight: '700',
   },
   presetsHeader: {
     ...typography.small,
     color: colors.textMuted,
-    fontSize: 11.5,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: -4,
   },
   presetsScroll: {
     gap: 6,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   presetChip: {
     backgroundColor: 'rgba(7, 30, 38, 0.04)',
@@ -665,7 +750,7 @@ const styles = StyleSheet.create({
   presetChipText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   presetChipTextSelected: {
     color: colors.primary,
@@ -683,13 +768,13 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(7, 30, 38, 0.04)',
+    backgroundColor: 'rgba(7, 30, 38, 0.03)',
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: 'rgba(7, 30, 38, 0.06)',
   },
   genderBtnActiveMale: {
-    backgroundColor: 'rgba(0, 168, 150, 0.10)',
-    borderColor: colors.primary,
+    backgroundColor: 'rgba(37, 99, 235, 0.10)',
+    borderColor: '#2563EB',
   },
   genderBtnActiveFemale: {
     backgroundColor: 'rgba(219, 39, 119, 0.10)',
@@ -698,13 +783,15 @@ const styles = StyleSheet.create({
   genderBtnText: {
     ...typography.captionBold,
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12.5,
   },
-  genderBtnTextActive: {
-    color: colors.primary,
+  genderBtnTextActiveMale: {
+    color: '#2563EB',
+    fontWeight: '700',
   },
-  genderBtnTextActivePink: {
+  genderBtnTextActiveFemale: {
     color: '#DB2777',
+    fontWeight: '700',
   },
   stepperWrap: {
     gap: 4,
@@ -712,7 +799,8 @@ const styles = StyleSheet.create({
   birthYearSub: {
     ...typography.small,
     color: colors.textMuted,
-    fontSize: 11.5,
+    fontSize: 11,
+    textAlign: 'center',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -725,10 +813,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
+    paddingHorizontal: 8,
     borderRadius: radius.lg,
-    backgroundColor: 'rgba(7, 30, 38, 0.04)',
+    backgroundColor: 'rgba(7, 30, 38, 0.03)',
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: 'rgba(7, 30, 38, 0.06)',
   },
   toggleBtnActiveSuccess: {
     backgroundColor: 'rgba(16, 185, 129, 0.10)',
@@ -743,13 +832,13 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   toggleBtnActiveNeutral: {
-    backgroundColor: 'rgba(7, 30, 38, 0.08)',
-    borderColor: 'rgba(7, 30, 38, 0.18)',
+    backgroundColor: 'rgba(7, 30, 38, 0.06)',
+    borderColor: 'rgba(7, 30, 38, 0.12)',
   },
   toggleBtnText: {
     ...typography.captionBold,
     color: colors.textSecondary,
-    fontSize: 12.5,
+    fontSize: 11.5,
   },
   toggleBtnTextSuccess: {
     color: colors.success,
@@ -762,11 +851,5 @@ const styles = StyleSheet.create({
   toggleBtnTextPrimary: {
     color: colors.primary,
     fontWeight: '700',
-  },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(7, 30, 38, 0.06)',
   },
 });
