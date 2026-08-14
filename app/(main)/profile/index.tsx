@@ -36,6 +36,7 @@ import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { toast } from '@components/ui/Sonner';
 import { ProfileScreenSkeleton } from '@components/ui/Skeleton';
+import { PawLoadingOverlay } from '@components/ui/PawLoading';
 
 interface MetadataPet {
   id?: string;
@@ -98,6 +99,7 @@ export default function ProfileScreen() {
   const [editPhone, setEditPhone] = useState(mobileNumber);
   const [editAddress, setEditAddress] = useState(address);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [nameError, setNameError] = useState<string | undefined>();
   const [phoneError, setPhoneError] = useState<string | undefined>();
   const [editError, setEditError] = useState<string | undefined>();
@@ -285,13 +287,16 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     try {
       haptic.medium();
+      setLoggingOut(true);
       await clerkSignOut();
       signOut();
       toast.success('Logged out', {
         id: 'logout-success',
         description: 'You have been signed out of your account.',
       });
-      router.replace('/welcome' as never);
+      setTimeout(() => {
+        router.replace('/welcome' as never);
+      }, 750);
     } catch (e) {
       console.log('Signout note:', e);
       signOut();
@@ -672,6 +677,9 @@ export default function ProfileScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+
+      {/* Standard Paw Loading Overlay on Logout */}
+      <PawLoadingOverlay visible={loggingOut} />
     </AnimatedScreen>
   );
 }

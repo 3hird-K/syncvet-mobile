@@ -237,10 +237,9 @@ export default function AppointmentsScreen() {
         {/* 1. Senior Executive Municipal Header */}
         <View style={styles.topHeader}>
           {/* Eyebrow badge */}
-          <View style={styles.eyebrowBadge}>
-            <Ionicons name="shield-checkmark" size={11} color={colors.primary} />
+          {/* <View style={styles.eyebrowBadge}>
             <Text style={styles.eyebrowText}>CITY VETERINARY OFFICE · CDO</Text>
-          </View>
+          </View> */}
 
           {/* Title & Book Visit Button Row */}
           <View style={styles.headerTitleRow}>

@@ -130,10 +130,10 @@ export default function HomeScreen() {
         {/* 1. Senior Executive Municipal Top Header */}
         <Animated.View entering={FadeInDown.duration(240)} style={styles.topHeader}>
           <View style={styles.headerLeft}>
-            <View style={styles.eyebrowBadge}>
+            {/* <View style={styles.eyebrowBadge}>
               <Ionicons name="shield-checkmark" size={11} color={colors.primary} />
               <Text style={styles.eyebrowText}>CITY VETERINARY OFFICE · CDO</Text>
-            </View>
+            </View> */}
             <Text style={styles.greetingHeading} numberOfLines={1}>
               Hello, {getFirstName(displayName)} 👋
             </Text>
@@ -388,9 +388,6 @@ export default function HomeScreen() {
             {/* Header Row with Municipal Badge & Resident Pill */}
             <View style={styles.overviewTop}>
               <View style={styles.overviewBadge}>
-                <View style={styles.overviewIconCircle}>
-                  <Ionicons name="shield-checkmark" size={15} color={colors.primary} />
-                </View>
                 <View style={styles.overviewTitleWrap}>
                   <Text style={styles.overviewBadgeText}>Pet Health Registry</Text>
                   <Text style={styles.overviewBadgeSub}>City Veterinary Office · CDO</Text>

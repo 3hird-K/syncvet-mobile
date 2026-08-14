@@ -89,17 +89,17 @@ export default function ServicesScreen() {
         {/* 1. Senior Executive Municipal Header */}
         <View style={styles.topHeader}>
           {/* Eyebrow badge */}
-          <View style={styles.eyebrowBadge}>
+          {/* <View style={styles.eyebrowBadge}>
             <Ionicons name="shield-checkmark" size={11} color={colors.primary} />
             <Text style={styles.eyebrowText}>CITY VETERINARY OFFICE · CDO</Text>
-          </View>
+          </View> */}
 
           {/* Title & Book Visit Action Row */}
           <View style={styles.headerTitleRow}>
             <View style={styles.titleCol}>
               <Text style={styles.heroTitle}>Services</Text>
               <Text style={styles.heroSubtitle}>
-                Official municipal pet health, immunization, and clinical programs
+                Municipal Pet Health & Immunization Programs
               </Text>
             </View>
 
