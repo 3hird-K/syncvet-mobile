@@ -20,6 +20,7 @@ import type { Pet, PetGender, Species } from '@services/data';
 import { Input } from './Input';
 import { Stepper } from './Stepper';
 import { ChoiceChips } from './ChoiceChips';
+import { toast } from './Sonner';
 
 interface PetEditInfoModalProps {
   visible: boolean;
@@ -134,11 +135,17 @@ export function PetEditInfoModal({
 
       await onSave(updatedPet);
       haptic.success();
+      toast.success('Pet Profile Updated', {
+        description: `${name.trim()}’s passport details have been saved.`,
+      });
       onClose();
     } catch (err: any) {
       console.log('Error saving pet:', err);
       setErrorMessage(err?.message || 'Could not update pet info. Please try again.');
       haptic.error();
+      toast.error('Update Failed', {
+        description: err?.message || 'Could not update pet info. Please try again.',
+      });
     } finally {
       setSaving(false);
     }

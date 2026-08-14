@@ -89,14 +89,51 @@ export function getService(serviceId: string): ServiceDef | undefined {
   return SERVICES.find((s) => s.id === serviceId);
 }
 
-/** Time slots offered at the City Veterinary Office. */
-export const TIME_SLOTS = [
-  '8:00 AM',
+export const MORNING_SLOTS = [
+  '8:30 AM',
   '9:30 AM',
-  '11:00 AM',
-  '1:30 PM',
-  '3:00 PM',
-  '4:30 PM',
+  '10:30 AM',
 ] as const;
+
+export const AFTERNOON_SLOTS = [
+  '1:30 PM',
+  '2:30 PM',
+  '3:30 PM',
+] as const;
+
+/** Time slots offered at the City Veterinary Office (Monday - Friday). */
+export const TIME_SLOTS = [
+  ...MORNING_SLOTS,
+  ...AFTERNOON_SLOTS,
+] as const;
+
+export type TimeSlot = (typeof TIME_SLOTS)[number];
+
+/** Converts a slot string like "8:30 AM" or "1:30 PM" to decimal hours (e.g. 8.5 or 13.5). */
+export function slotToHour(slot: string): number {
+  const match = slot.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+  if (!match) return 8;
+  let hour = parseInt(match[1], 10);
+  const min = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hour < 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return hour + min / 60;
+}
+
+/** Check if a time slot is still open for a given date (requires at least 30 min advance). */
+export function isSlotAvailable(dateISO: string, slot: string): boolean {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+
+  if (dateISO < today) return false;
+  if (dateISO > today) return true;
+
+  const currentHour = now.getHours() + now.getMinutes() / 60;
+  const slotHour = slotToHour(slot);
+  return slotHour > currentHour + 0.5;
+}
 
 export const SERVICE_LOCATION = 'City Veterinary Office';

@@ -153,12 +153,12 @@ export default function PetsScreen() {
           <View style={[styles.statsBanner, shadows.sm]}>
             <View style={styles.statSegment}>
               <Text style={styles.statNumber}>{dogCount}</Text>
-              <Text style={styles.statLabel}>🐶 Dogs</Text>
+              <Text style={styles.statLabel}>Dogs</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statSegment}>
               <Text style={styles.statNumber}>{catCount}</Text>
-              <Text style={styles.statLabel}>🐱 Cats</Text>
+              <Text style={styles.statLabel}>Cats</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statSegment}>
@@ -232,7 +232,7 @@ export default function PetsScreen() {
                     activeFilter === 'dog' && styles.filterChipTextActive,
                   ]}
                 >
-                  🐶 Dogs ({dogCount})
+                  Dogs ({dogCount})
                 </Text>
               </Pressable>
 
@@ -249,7 +249,7 @@ export default function PetsScreen() {
                     activeFilter === 'cat' && styles.filterChipTextActive,
                   ]}
                 >
-                  🐱 Cats ({catCount})
+                  Cats ({catCount})
                 </Text>
               </Pressable>
 
@@ -270,7 +270,7 @@ export default function PetsScreen() {
                       activeFilter === 'needs_vaccine' && styles.filterChipTextActiveAmber,
                     ]}
                   >
-                    💉 Needs Shot ({needsVaccineCount})
+                    Needs Shot ({needsVaccineCount})
                   </Text>
                 </Pressable>
               ) : null}

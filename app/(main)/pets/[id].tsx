@@ -344,7 +344,7 @@ export default function PetProfileScreen() {
                     isDog ? styles.speciesTagTextDog : styles.speciesTagTextCat,
                   ]}
                 >
-                  {isDog ? '🐶 Canine' : '🐱 Feline'}
+                  {isDog ? 'Canine' : 'Feline'}
                 </Text>
               </View>
             </View>

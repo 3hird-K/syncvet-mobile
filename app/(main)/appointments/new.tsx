@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +19,10 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import {
   SERVICES,
   SERVICE_LOCATION,
+  MORNING_SLOTS,
+  AFTERNOON_SLOTS,
   TIME_SLOTS,
+  isSlotAvailable,
   getService,
 } from '@lib/services';
 import {
@@ -209,25 +212,38 @@ export default function NewAppointmentScreen() {
     [selectedServiceId],
   );
 
-  // Available dates (Next 10 business days, skipping Sundays)
+  // Available dates (Next 10 official municipal business days: Monday to Friday)
   const dateOptions = useMemo(() => {
     const today = todayISO();
     const tomorrow = toISODate(addDays(1));
-    const options: { iso: string; label: string; weekday: string; isSunday: boolean }[] = [];
+    const options: {
+      iso: string;
+      label: string;
+      weekday: string;
+      isToday: boolean;
+      hasAvailableSlots: boolean;
+    }[] = [];
 
     let daysAdded = 0;
     let offset = 0;
     while (daysAdded < 10) {
       const dateObj = addDays(offset);
-      const isSunday = dateObj.getDay() === 0;
+      const dayOfWeek = dateObj.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday = 0, Saturday = 6
       const iso = toISODate(dateObj);
 
-      if (!isSunday) {
+      if (!isWeekend) {
+        const isToday = iso === today;
+        const hasAvailableSlots = isToday
+          ? TIME_SLOTS.some((s) => isSlotAvailable(iso, s))
+          : true;
+
         options.push({
           iso,
-          label: iso === today ? 'Today' : iso === tomorrow ? 'Tomorrow' : formatShortDate(iso),
+          label: isToday ? 'Today' : iso === tomorrow ? 'Tomorrow' : formatShortDate(iso),
           weekday: formatWeekdayDate(iso).split(',')[0],
-          isSunday: false,
+          isToday,
+          hasAvailableSlots,
         });
         daysAdded++;
       }
@@ -235,6 +251,23 @@ export default function NewAppointmentScreen() {
     }
     return options;
   }, []);
+
+  // Auto-select first available date with open slots
+  useEffect(() => {
+    if (!dateISO && dateOptions.length > 0) {
+      const firstOpen = dateOptions.find((d) => d.hasAvailableSlots) || dateOptions[0];
+      setDateISO(firstOpen.iso);
+    }
+  }, [dateOptions, dateISO]);
+
+  // If selected time slot is unavailable on the chosen date, reset it
+  useEffect(() => {
+    if (dateISO && timeSlot) {
+      if (!isSlotAvailable(dateISO, timeSlot)) {
+        setTimeSlot(undefined);
+      }
+    }
+  }, [dateISO, timeSlot]);
 
   const canContinue = useMemo(() => {
     if (step === 1) return Boolean(selectedPetId);
@@ -335,6 +368,9 @@ export default function NewAppointmentScreen() {
       console.log('Booking error:', err);
       setError('Could not confirm booking. Please try again.');
       haptic.error();
+      toast.error('Booking Failed', {
+        description: 'Unable to schedule this visit. Please check your connection and try again.',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -552,14 +588,14 @@ export default function NewAppointmentScreen() {
                                     isDog ? styles.speciesChipTextDog : styles.speciesChipTextCat,
                                   ]}
                                 >
-                                  {isDog ? '🐶 Canine' : '🐱 Feline'}
+                                  {isDog ? 'Canine' : 'Feline'}
                                 </Text>
                               </View>
                             </View>
 
                             {/* Subtitle: Breed and Age */}
                             <Text style={styles.petCardBreed} numberOfLines={1}>
-                              {p.breed || (isDog ? 'Dog' : 'Cat')}
+                              {p.breed || (isDog ? 'Canine' : 'Feline')}
                               {ageDisplay ? ` · ${ageDisplay}` : ''}
                             </Text>
 
@@ -574,11 +610,6 @@ export default function NewAppointmentScreen() {
                                       : styles.vaxDoseBadgeAmber,
                                   ]}
                                 >
-                                  <Ionicons
-                                    name={vax.isVaccinated ? 'shield-checkmark' : 'alert-circle'}
-                                    size={12}
-                                    color={vax.isVaccinated ? colors.success : colors.warning}
-                                  />
                                   <Text
                                     style={[
                                       styles.vaxDoseBadgeText,
@@ -588,31 +619,22 @@ export default function NewAppointmentScreen() {
                                     ]}
                                   >
                                     {vax.isVaccinated
-                                      ? `${vax.totalDoses}x Vaccinated`
-                                      : '0 Doses (Due)'}
+                                      ? `${vax.totalDoses} ${vax.totalDoses === 1 ? 'Dose' : 'Doses'} Recorded`
+                                      : '0 Doses (Vaccine Due)'}
                                   </Text>
                                 </View>
                               </View>
 
-                              {/* Vaccination Timing: Last Shot & Next Due Date */}
-                              {vax.isVaccinated ? (
-                                <View style={styles.vaxTimingRow}>
-                                  {vax.lastVaccineDate ? (
-                                    <Text style={styles.vaxTimingSub}>
-                                      Last: {formatDateWithYear(vax.lastVaccineDate)}
-                                    </Text>
-                                  ) : null}
-                                  {vax.nextBoosterDate ? (
-                                    <Text style={styles.vaxTimingNext}>
-                                      Next Due: {formatDateWithYear(vax.nextBoosterDate)}
-                                    </Text>
-                                  ) : null}
-                                </View>
-                              ) : (
-                                <Text style={styles.vaxTimingDue}>
-                                  ⚠️ Anti-Rabies vaccine due · Schedule now
+                              {/* Vaccination Timing: Next Due Date or Alert */}
+                              {vax.isVaccinated && vax.nextBoosterDate ? (
+                                <Text style={styles.vaxTimingNext} numberOfLines={1}>
+                                  Next Booster: {formatDateWithYear(vax.nextBoosterDate)}
                                 </Text>
-                              )}
+                              ) : !vax.isVaccinated ? (
+                                <Text style={styles.vaxTimingDue} numberOfLines={1}>
+                                  Anti-Rabies due · Schedule now
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
 
@@ -758,11 +780,11 @@ export default function NewAppointmentScreen() {
                 <View style={styles.stepBlock}>
                   <Text style={styles.sectionHeading}>Pick Appointment Date & Time</Text>
                   <Text style={styles.sectionSub}>
-                    Official clinic hours are Monday to Friday, 8:00 AM – 5:00 PM.
+                    Official veterinary clinic hours are Monday to Friday, 8:00 AM – 5:00 PM.
                   </Text>
 
                   {/* Date Selector */}
-                  <Text style={styles.scheduleGroupLabel}>Select Date</Text>
+                  <Text style={styles.scheduleGroupLabel}>Select Date (Monday – Friday)</Text>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -770,10 +792,16 @@ export default function NewAppointmentScreen() {
                   >
                     {dateOptions.map((opt) => {
                       const isSelected = opt.iso === dateISO;
+                      const isClosed = !opt.hasAvailableSlots;
+
                       return (
                         <Pressable
                           key={opt.iso}
                           onPress={() => {
+                            if (isClosed) {
+                              haptic.warning();
+                              return;
+                            }
                             haptic.light();
                             setDateISO(opt.iso);
                             setError(undefined);
@@ -781,6 +809,7 @@ export default function NewAppointmentScreen() {
                           style={[
                             styles.datePill,
                             isSelected && styles.datePillActive,
+                            isClosed && styles.datePillDisabled,
                             shadows.sm,
                           ]}
                         >
@@ -788,6 +817,7 @@ export default function NewAppointmentScreen() {
                             style={[
                               styles.dateWeekday,
                               isSelected && styles.dateWeekdayActive,
+                              isClosed && styles.dateWeekdayDisabled,
                             ]}
                           >
                             {opt.weekday}
@@ -796,24 +826,34 @@ export default function NewAppointmentScreen() {
                             style={[
                               styles.dateLabel,
                               isSelected && styles.dateLabelActive,
+                              isClosed && styles.dateLabelDisabled,
                             ]}
                           >
-                            {opt.label}
+                            {isClosed && opt.isToday ? 'Closed Today' : opt.label}
                           </Text>
                         </Pressable>
                       );
                     })}
                   </ScrollView>
 
-                  {/* Time Slots */}
-                  <Text style={styles.scheduleGroupLabel}>Select Time Slot</Text>
+                  {/* Morning Session Time Slots */}
+                  <View style={styles.sessionHeaderRow}>
+                    <Ionicons name="sunny-outline" size={16} color={colors.warning} />
+                    <Text style={styles.sessionHeaderTitle}>Morning Session (8:30 AM – 11:30 AM)</Text>
+                  </View>
                   <View style={styles.timeSlotsGrid}>
-                    {TIME_SLOTS.map((slot) => {
+                    {MORNING_SLOTS.map((slot) => {
                       const isSelected = slot === timeSlot;
+                      const available = isSlotAvailable(dateISO || '', slot);
+
                       return (
                         <Pressable
                           key={slot}
                           onPress={() => {
+                            if (!available) {
+                              haptic.warning();
+                              return;
+                            }
                             haptic.light();
                             setTimeSlot(slot);
                             setError(undefined);
@@ -821,22 +861,94 @@ export default function NewAppointmentScreen() {
                           style={[
                             styles.timeSlotCard,
                             isSelected && styles.timeSlotCardActive,
+                            !available && styles.timeSlotCardDisabled,
                             shadows.sm,
                           ]}
                         >
                           <Ionicons
-                            name="time-outline"
+                            name={available ? 'time-outline' : 'close-circle-outline'}
                             size={16}
-                            color={isSelected ? colors.primary : colors.textSecondary}
+                            color={
+                              !available
+                                ? colors.textDisabled
+                                : isSelected
+                                ? colors.primary
+                                : colors.textSecondary
+                            }
                           />
-                          <Text
-                            style={[
-                              styles.timeSlotText,
-                              isSelected && styles.timeSlotTextActive,
-                            ]}
-                          >
-                            {slot}
-                          </Text>
+                          <View style={styles.slotTextWrap}>
+                            <Text
+                              style={[
+                                styles.timeSlotText,
+                                isSelected && styles.timeSlotTextActive,
+                                !available && styles.timeSlotTextDisabled,
+                              ]}
+                            >
+                              {slot}
+                            </Text>
+                            {!available && (
+                              <Text style={styles.slotUnavailableTag}>Passed</Text>
+                            )}
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {/* Afternoon Session Time Slots */}
+                  <View style={[styles.sessionHeaderRow, { marginTop: spacing.sm }]}>
+                    <Ionicons name="partly-sunny-outline" size={16} color={colors.primary} />
+                    <Text style={styles.sessionHeaderTitle}>Afternoon Session (1:30 PM – 4:30 PM)</Text>
+                  </View>
+                  <View style={styles.timeSlotsGrid}>
+                    {AFTERNOON_SLOTS.map((slot) => {
+                      const isSelected = slot === timeSlot;
+                      const available = isSlotAvailable(dateISO || '', slot);
+
+                      return (
+                        <Pressable
+                          key={slot}
+                          onPress={() => {
+                            if (!available) {
+                              haptic.warning();
+                              return;
+                            }
+                            haptic.light();
+                            setTimeSlot(slot);
+                            setError(undefined);
+                          }}
+                          style={[
+                            styles.timeSlotCard,
+                            isSelected && styles.timeSlotCardActive,
+                            !available && styles.timeSlotCardDisabled,
+                            shadows.sm,
+                          ]}
+                        >
+                          <Ionicons
+                            name={available ? 'time-outline' : 'close-circle-outline'}
+                            size={16}
+                            color={
+                              !available
+                                ? colors.textDisabled
+                                : isSelected
+                                ? colors.primary
+                                : colors.textSecondary
+                            }
+                          />
+                          <View style={styles.slotTextWrap}>
+                            <Text
+                              style={[
+                                styles.timeSlotText,
+                                isSelected && styles.timeSlotTextActive,
+                                !available && styles.timeSlotTextDisabled,
+                              ]}
+                            >
+                              {slot}
+                            </Text>
+                            {!available && (
+                              <Text style={styles.slotUnavailableTag}>Passed</Text>
+                            )}
+                          </View>
                         </Pressable>
                       );
                     })}
@@ -1332,6 +1444,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
+  datePillDisabled: {
+    backgroundColor: 'rgba(7, 30, 38, 0.03)',
+    borderColor: 'rgba(7, 30, 38, 0.05)',
+    opacity: 0.55,
+  },
   dateWeekday: {
     ...typography.caption,
     color: colors.textSecondary,
@@ -1339,6 +1456,9 @@ const styles = StyleSheet.create({
   },
   dateWeekdayActive: {
     color: 'rgba(255, 255, 255, 0.85)',
+  },
+  dateWeekdayDisabled: {
+    color: colors.textMuted,
   },
   dateLabel: {
     ...typography.captionBold,
@@ -1348,6 +1468,23 @@ const styles = StyleSheet.create({
   },
   dateLabelActive: {
     color: colors.white,
+  },
+  dateLabelDisabled: {
+    color: colors.textMuted,
+    fontSize: 11.5,
+  },
+  sessionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+    marginBottom: 2,
+  },
+  sessionHeaderTitle: {
+    ...typography.captionBold,
+    color: colors.textPrimary,
+    fontSize: 12.5,
+    fontWeight: '700',
   },
   timeSlotsGrid: {
     flexDirection: 'row',
@@ -1360,7 +1497,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 12,
+    paddingVertical: 11,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1.5,
@@ -1370,6 +1507,14 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: '#F0FAF8',
   },
+  timeSlotCardDisabled: {
+    backgroundColor: 'rgba(7, 30, 38, 0.03)',
+    borderColor: 'rgba(7, 30, 38, 0.05)',
+    opacity: 0.5,
+  },
+  slotTextWrap: {
+    alignItems: 'center',
+  },
   timeSlotText: {
     ...typography.captionBold,
     color: colors.textPrimary,
@@ -1378,6 +1523,16 @@ const styles = StyleSheet.create({
   timeSlotTextActive: {
     color: colors.primary,
     fontWeight: '700',
+  },
+  timeSlotTextDisabled: {
+    color: colors.textDisabled,
+  },
+  slotUnavailableTag: {
+    ...typography.small,
+    fontSize: 9,
+    color: colors.textMuted,
+    fontWeight: '600',
+    marginTop: -2,
   },
   summaryCard: {
     backgroundColor: colors.surface,

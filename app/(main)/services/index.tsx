@@ -214,16 +214,13 @@ export default function ServicesScreen() {
                 ]}
               >
                 {/* Card Top Row */}
-                <View style={styles.cardTopRow}>
+                <View style={styles.cardHeaderRow}>
                   <View style={[styles.serviceIconWrap, { backgroundColor: service.bg }]}>
-                    <Ionicons name={service.icon} size={24} color={service.color} />
+                    <Ionicons name={service.icon} size={22} color={service.color} />
                   </View>
 
-                  <View style={styles.cardHeaderInfo}>
-                    <View style={styles.cardTitleRow}>
-                      <Text style={styles.serviceName}>{service.name}</Text>
-                    </View>
-                    <Text style={styles.serviceTagline}>{service.tagline}</Text>
+                  <View style={styles.cardTitleWrap}>
+                    <Text style={styles.serviceName}>{service.name}</Text>
                   </View>
 
                   <View style={[styles.badgePill, { backgroundColor: tag.bg }]}>
@@ -232,6 +229,9 @@ export default function ServicesScreen() {
                     </Text>
                   </View>
                 </View>
+
+                {/* Subtitle Tagline */}
+                <Text style={styles.serviceTagline}>{service.tagline}</Text>
 
                 {/* Service Description */}
                 <Text style={styles.serviceDescription}>
@@ -455,26 +455,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FCFB',
     transform: [{ scale: 0.99 }],
   },
-  cardTopRow: {
+  cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    gap: 10,
   },
   serviceIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardHeaderInfo: {
+  cardTitleWrap: {
     flex: 1,
-    gap: 2,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
   serviceName: {
     ...typography.heading2,
@@ -483,9 +478,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   serviceTagline: {
-    ...typography.small,
-    color: colors.textSecondary,
-    fontSize: 11.5,
+    ...typography.captionBold,
+    color: colors.primaryDark,
+    fontSize: 13,
+    marginTop: -2,
   },
   badgePill: {
     paddingHorizontal: 8,
@@ -502,6 +498,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 12.5,
     lineHeight: 18,
+    marginTop: -4,
   },
   cardFooter: {
     flexDirection: 'row',

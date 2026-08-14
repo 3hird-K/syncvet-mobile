@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 import { colors, spacing, typography } from '@theme';
 import { todayISO } from '@lib/format';
@@ -10,18 +12,19 @@ import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
-import { SegmentedControl } from '@components/ui/SegmentedControl';
+import { AppointmentSwitch, AppointmentTab } from '@components/ui/AppointmentSwitch';
 import { AppointmentCard } from '@components/ui/AppointmentCard';
+import { AppointmentDetailModal } from '@components/ui/AppointmentDetailModal';
 import { EmptyState } from '@components/ui/EmptyState';
 import { LoadingState } from '@components/ui/LoadingState';
-
-type Segment = 'upcoming' | 'past';
+import type { Appointment } from '@services/data';
 
 export default function AppointmentsScreen() {
   const router = useRouter();
   const { loading, loaded } = useResidentData();
   const appointments = useDataStore((state) => state.appointments);
-  const [segment, setSegment] = useState<Segment>('upcoming');
+  const [segment, setSegment] = useState<AppointmentTab>('upcoming');
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
   const { upcoming, past } = useMemo(() => {
     const today = todayISO();
@@ -51,30 +54,59 @@ export default function AppointmentsScreen() {
   return (
     <AnimatedScreen animation="fade">
       <Screen scroll>
-        <View style={styles.header}>
-          <Text style={styles.title}>Appointments</Text>
-          <Text style={styles.subtitle}>
-            Upcoming visits and your pet care history.
+        <View style={styles.headerRow}>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.title}>Appointments</Text>
+            <Text style={styles.subtitle}>
+              Upcoming visits and your pet care history.
+            </Text>
+          </View>
+
+          <Pressable
+            onPress={() => {
+              haptic.light();
+              router.push('/appointments/new' as never);
+            }}
+            style={styles.bookHeaderBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Book new visit"
+          >
+            <Ionicons name="add" size={18} color={colors.white} />
+            <Text style={styles.bookHeaderBtnText}>Book Visit</Text>
+          </Pressable>
+        </View>
+
+        {/* Dual-Pill Capsule Switch with Spring Physics & Icons */}
+        <AppointmentSwitch
+          activeTab={segment}
+          onChange={setSegment}
+          upcomingCount={upcoming.length}
+          pastCount={past.length}
+        />
+
+        {/* Context subtitle bar */}
+        <View style={styles.tabContextRow}>
+          <Ionicons
+            name={segment === 'upcoming' ? 'shield-checkmark-outline' : 'archive-outline'}
+            size={13}
+            color={segment === 'upcoming' ? colors.primary : colors.textSecondary}
+          />
+          <Text style={styles.tabContextText}>
+            {segment === 'upcoming'
+              ? `${upcoming.length} active ${upcoming.length === 1 ? 'booking' : 'bookings'} scheduled at City Vet`
+              : `${past.length} completed or archived ${past.length === 1 ? 'visit' : 'visits'}`}
           </Text>
         </View>
 
-        <SegmentedControl<Segment>
-          options={[
-            { value: 'upcoming', label: 'Upcoming' },
-            { value: 'past', label: 'Past' },
-          ]}
-          value={segment}
-          onChange={setSegment}
-        />
-
-        <View style={styles.list}>
+        {/* Animated Card List */}
+        <Animated.View key={segment} entering={FadeIn.duration(200)} style={styles.list}>
           {list.length === 0 ? (
             <EmptyState
               icon={segment === 'upcoming' ? 'calendar-outline' : 'time-outline'}
               title={segment === 'upcoming' ? 'No upcoming appointments' : 'No past appointments'}
               message={
                 segment === 'upcoming'
-                  ? 'Book a veterinary service and it will show up here.'
+                  ? 'Schedule a veterinary checkup or vaccine visit for your pet.'
                   : 'Completed or cancelled visits will appear here.'
               }
               actionLabel={segment === 'upcoming' ? 'Book a Service' : undefined}
@@ -84,38 +116,88 @@ export default function AppointmentsScreen() {
               }}
             />
           ) : (
-            list.map((appointment) => (
-              <AppointmentCard
+            list.map((appointment, idx) => (
+              <Animated.View
                 key={appointment.id}
-                appointment={appointment}
-                onPress={() => {
-                  haptic.light();
-                  router.push(`/pets/${appointment.petId}` as never);
-                }}
-              />
+                entering={FadeInDown.delay(idx * 50).duration(200)}
+              >
+                <AppointmentCard
+                  appointment={appointment}
+                  onPress={() => {
+                    haptic.light();
+                    setSelectedAppointment(appointment);
+                  }}
+                />
+              </Animated.View>
             ))
           )}
-        </View>
+        </Animated.View>
+
+        {/* Appointment Details & Cancellation Modal */}
+        <AppointmentDetailModal
+          visible={Boolean(selectedAppointment)}
+          appointment={selectedAppointment}
+          onClose={() => setSelectedAppointment(null)}
+          onCancelled={() => setSelectedAppointment(null)}
+        />
       </Screen>
     </AnimatedScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    marginBottom: spacing.xl,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  headerTitleWrap: {
+    flex: 1,
   },
   title: {
     ...typography.heading1,
     color: colors.textPrimary,
+    fontSize: 26,
+    fontWeight: '800',
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: 3,
+    fontSize: 13,
+  },
+  bookHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 2,
+  },
+  bookHeaderBtnText: {
+    ...typography.captionBold,
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tabContextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingHorizontal: 4,
+  },
+  tabContextText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12,
   },
   list: {
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
     gap: spacing.md,
   },
 });
