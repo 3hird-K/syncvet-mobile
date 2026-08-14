@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -20,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
+import { getPetAvatarSource } from '@lib/petAvatars';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
@@ -29,6 +31,9 @@ import { Avatar } from '@components/ui/Avatar';
 import { Input } from '@components/ui/Input';
 import { Button } from '@components/ui/Button';
 import { AddressPicker } from '@components/ui/AddressPicker';
+import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
+import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
+import { toast } from '@components/ui/Sonner';
 
 interface MetadataPet {
   id?: string;
@@ -41,6 +46,8 @@ interface MetadataPet {
   isSpayedNeutered?: boolean;
   weightCategory?: string;
   notes?: string;
+  avatarId?: string;
+  photoUrl?: string;
 }
 
 export default function ProfileScreen() {
@@ -91,22 +98,6 @@ export default function ProfileScreen() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [editError, setEditError] = useState<string | undefined>();
 
-  // State for In-App Notification Toast
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (toastMessage) {
-      const timer = setTimeout(() => {
-        setToastMessage(null);
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toastMessage]);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-  };
-
   // Read pets from Clerk metadata
   const metadataPets: MetadataPet[] = useMemo(() => {
     if (Array.isArray(metadata.pets) && metadata.pets.length > 0) {
@@ -151,7 +142,6 @@ export default function ProfileScreen() {
         const uri = result.assets[0].uri;
         const base64 = result.assets[0].base64;
         setCustomPhoto(uri);
-        haptic.medium();
 
         if (clerkUser) {
           try {
@@ -162,19 +152,17 @@ export default function ProfileScreen() {
             }
           } catch (e) {
             console.log('Clerk setProfileImage note:', e);
-            await clerkUser.update({
-              unsafeMetadata: {
-                ...clerkUser.unsafeMetadata,
-                photoUrl: uri,
-              },
+            await updateClerkUnsafeMetadata(clerkUser, {
+              photoUrl: uri,
             });
           }
         }
         useAuthStore.setState((s) => ({
           user: s.user ? { ...s.user, photoUrl: uri } : null,
         }));
-        haptic.success();
-        showToast('Profile photo updated successfully!');
+        toast.success('Profile photo updated!', {
+          description: 'Your new avatar is live across SyncVet.',
+        });
       }
     } catch (err) {
       console.log('Image picker error:', err);
@@ -216,21 +204,26 @@ export default function ProfileScreen() {
       const lastName = nameParts.slice(1).join(' ') || '';
 
       if (clerkUser) {
-        await clerkUser.update({
-          firstName,
-          lastName,
-          unsafeMetadata: {
-            ...clerkUser.unsafeMetadata,
-            mobileNumber: editPhone.trim(),
-            address: editAddress.trim(),
-          },
+        try {
+          await clerkUser.update({
+            firstName,
+            lastName,
+          });
+        } catch (e) {
+          console.log('Clerk name update note:', e);
+        }
+
+        await updateClerkUnsafeMetadata(clerkUser, {
+          mobileNumber: editPhone.trim(),
+          address: editAddress.trim(),
         });
       }
 
       await useAuthStore.getState().saveOwnerProfile(editPhone.trim(), editAddress.trim());
-      haptic.success();
       setEditModalVisible(false);
-      showToast('Profile details updated successfully!');
+      toast.success('Profile updated successfully!', {
+        description: 'Name, phone and address have been saved.',
+      });
     } catch (err: any) {
       console.log('Update profile error:', err);
       setEditError(err?.message || 'Could not update profile. Please try again.');
@@ -248,23 +241,6 @@ export default function ProfileScreen() {
   return (
     <AnimatedScreen animation="fade">
       <Screen scroll>
-        {/* Floating Notification Toast */}
-        {toastMessage ? (
-          <Pressable
-            onPress={() => {
-              haptic.light();
-              setToastMessage(null);
-            }}
-            style={[styles.toastBanner, shadows.md]}
-          >
-            <View style={styles.toastIconWrap}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.white} />
-            </View>
-            <Text style={styles.toastText}>{toastMessage}</Text>
-            <Ionicons name="close" size={14} color="rgba(255,255,255,0.8)" />
-          </Pressable>
-        ) : null}
-
         {/* Compact Screen Header */}
         <View style={styles.topHeader}>
           <Text style={styles.screenHeading}>Profile</Text>
@@ -419,19 +395,13 @@ export default function ProfileScreen() {
                       }
                     }}
                   >
-                    {/* Image / Species Badge on the Left */}
-                    <View
-                      style={[
-                        styles.petLeftAvatarCircle,
-                        {
-                          backgroundColor: isDog
-                            ? 'rgba(0, 168, 150, 0.10)'
-                            : 'rgba(219, 39, 119, 0.10)',
-                        },
-                      ]}
-                    >
-                      <Text style={styles.petLeftAvatarEmoji}>{isDog ? '🐶' : '🐱'}</Text>
-                    </View>
+                    {/* Pop-Out Avatar on the Left */}
+                    <PopoutPetAvatar
+                      avatarId={pet.avatarId}
+                      species={pet.species as any}
+                      photoUrl={pet.photoUrl}
+                      size={46}
+                    />
 
                     {/* Texts and Status on the Right */}
                     <View style={styles.petRightInfo}>
@@ -600,26 +570,6 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  toastBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
-    gap: 8,
-  },
-  toastIconWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toastText: {
-    ...typography.captionBold,
-    color: colors.white,
-    fontSize: 12.5,
-    flex: 1,
-  },
   topHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -825,16 +775,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
     gap: spacing.md,
-  },
-  petLeftAvatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  petLeftAvatarEmoji: {
-    fontSize: 22,
   },
   petRightInfo: {
     flex: 1,

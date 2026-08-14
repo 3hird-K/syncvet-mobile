@@ -18,6 +18,7 @@ import { StepHeader } from '@components/ui/StepHeader';
 import { BackButton } from '@components/ui/BackButton';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
+import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 
 const CLINIC_OPTIONS = [
   { label: 'Main City Vet Clinic', value: 'main' },
@@ -77,17 +78,10 @@ export default function OwnerRegistrationScreen() {
       await saveOwnerProfile(mobile, addr);
 
       if (clerkUser) {
-        try {
-          await clerkUser.update({
-            unsafeMetadata: {
-              ...clerkUser.unsafeMetadata,
-              mobileNumber: mobile,
-              address: addr,
-            },
-          });
-        } catch (e) {
-          console.log('Clerk metadata update note:', e);
-        }
+        await updateClerkUnsafeMetadata(clerkUser, {
+          mobileNumber: mobile,
+          address: addr,
+        });
       }
 
       haptic.success();

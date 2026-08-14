@@ -15,6 +15,8 @@ export interface Pet {
   isSpayedNeutered?: boolean;
   weightCategory?: string;
   notes?: string;
+  avatarId?: string;
+  photoUrl?: string;
   createdAt: string;
 }
 

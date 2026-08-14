@@ -18,6 +18,7 @@ interface DataState {
   error?: string;
   loadAll: (ownerId: string) => Promise<void>;
   addPet: (ownerId: string, input: PetInput) => Promise<Pet>;
+  updatePet: (pet: Pet) => Promise<void>;
   deletePet: (ownerId: string, petId: string) => Promise<void>;
   bookAppointment: (ownerId: string, input: BookingInput) => Promise<Appointment>;
   cancelAppointment: (ownerId: string, appointmentId: string) => Promise<void>;
@@ -50,6 +51,13 @@ export const useDataStore = create<DataState>((set, get) => ({
     const pet = await getDataService().addPet(ownerId, input);
     set((state) => ({ pets: [...state.pets, pet] }));
     return pet;
+  },
+
+  updatePet: async (pet) => {
+    await getDataService().updatePet(pet);
+    set((state) => ({
+      pets: state.pets.map((p) => (p.id === pet.id ? pet : p)),
+    }));
   },
 
   deletePet: async (ownerId, petId) => {

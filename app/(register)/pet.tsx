@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -28,6 +29,8 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { required } from '@lib/validation';
 import { haptic } from '@lib/haptics';
 import { currentYear } from '@lib/format';
+import { getPetAvatarSource } from '@lib/petAvatars';
+import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { useForm } from '@hooks/useForm';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
@@ -40,6 +43,8 @@ import { Stepper } from '@components/ui/Stepper';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { VisualChoiceCards } from '@components/ui/VisualChoiceCards';
 import { DropdownSelect } from '@components/ui/DropdownSelect';
+import { PetAvatarPickerModal } from '@components/ui/PetAvatarPickerModal';
+import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<SubPartIndex>);
 
@@ -103,13 +108,10 @@ function SlideWrapper({ index, scrollX, width, children }: SlideWrapperProps) {
   const animatedStyle = useAnimatedStyle(() => {
     if (reducedMotion) return {};
     return {
-      opacity: interpolate(scrollX.value, inputRange, [0.35, 1, 0.35], Extrapolation.CLAMP),
+      opacity: interpolate(scrollX.value, inputRange, [0.4, 1, 0.4], Extrapolation.CLAMP),
       transform: [
         {
-          scale: interpolate(scrollX.value, inputRange, [0.82, 1, 0.82], Extrapolation.CLAMP),
-        },
-        {
-          translateY: interpolate(scrollX.value, inputRange, [26, 0, 26], Extrapolation.CLAMP),
+          scale: interpolate(scrollX.value, inputRange, [0.92, 1, 0.92], Extrapolation.CLAMP),
         },
       ],
     };
@@ -154,6 +156,9 @@ export default function PetRegistrationScreen() {
   const [species, setSpecies] = useState<Species>('dog');
   const [gender, setGender] = useState<PetGender>('male');
   const [age, setAge] = useState(1);
+  const [avatarId, setAvatarId] = useState<string | undefined>();
+  const [customPhotoUri, setCustomPhotoUri] = useState<string | undefined>();
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
 
   // Part 3 & 4 state
   const [isVaccinated, setIsVaccinated] = useState<'yes' | 'no' | 'unknown'>('yes');
@@ -179,7 +184,19 @@ export default function PetRegistrationScreen() {
   const handleSpeciesChange = (newSpecies: Species) => {
     haptic.light();
     setSpecies(newSpecies);
+    setAvatarId(undefined);
+    setCustomPhotoUri(undefined);
     setValue('breed', '');
+  };
+
+  const handleSelectAvatar = (id: string, customUri?: string) => {
+    if (id === 'custom' && customUri) {
+      setCustomPhotoUri(customUri);
+      setAvatarId(undefined);
+    } else {
+      setAvatarId(id);
+      setCustomPhotoUri(undefined);
+    }
   };
 
   const handleBreedPreset = (breedName: string) => {
@@ -254,6 +271,7 @@ export default function PetRegistrationScreen() {
     setNetworkError(undefined);
     try {
       const petPayload = {
+        id: `pet-${Date.now()}`,
         name: fields.name.value.trim(),
         species,
         breed: fields.breed.value.trim(),
@@ -263,23 +281,18 @@ export default function PetRegistrationScreen() {
         isSpayedNeutered: isSpayedNeutered === 'yes',
         weightCategory,
         notes: notes.trim(),
+        avatarId,
+        photoUrl: customPhotoUri,
       };
 
       await addPet(ownerId, petPayload);
 
       if (clerkUser) {
-        try {
-          const existingPets = ((clerkUser.unsafeMetadata?.pets as any[]) || []);
-          await clerkUser.update({
-            unsafeMetadata: {
-              ...clerkUser.unsafeMetadata,
-              profileCompleted: true,
-              pets: [...existingPets, petPayload],
-            },
-          });
-        } catch (e) {
-          console.log('Clerk pet metadata update note:', e);
-        }
+        const existingPets = ((clerkUser.unsafeMetadata?.pets as any[]) || []);
+        await updateClerkUnsafeMetadata(clerkUser, {
+          profileCompleted: true,
+          pets: [...existingPets, petPayload],
+        });
       }
 
       haptic.success();
@@ -290,7 +303,7 @@ export default function PetRegistrationScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [user?.id, validateAll, fields.name.value, fields.breed.value, species, gender, age, isVaccinated, isSpayedNeutered, weightCategory, notes, addPet, clerkUser, router, goToSlide]);
+  }, [user?.id, validateAll, fields.name.value, fields.breed.value, species, gender, age, isVaccinated, isSpayedNeutered, weightCategory, notes, avatarId, customPhotoUri, addPet, clerkUser, router, goToSlide]);
 
   const renderItem = useCallback(
     ({ item }: { item: SubPartIndex }) => {
@@ -336,6 +349,35 @@ export default function PetRegistrationScreen() {
                   value={species}
                   onChange={handleSpeciesChange}
                 />
+              </View>
+
+              {/* Avatar Selector Tile */}
+              <View style={styles.fieldBlock}>
+                <Text style={styles.sectionLabel}>Profile Avatar</Text>
+                <Pressable
+                  onPress={() => {
+                    haptic.light();
+                    setAvatarModalVisible(true);
+                  }}
+                  style={[styles.avatarPickerCard, shadows.sm]}
+                >
+                  <PopoutPetAvatar
+                    avatarId={avatarId}
+                    species={species}
+                    photoUrl={customPhotoUri}
+                    size={52}
+                    showCameraBadge
+                  />
+
+                  <View style={styles.avatarPickerTextWrap}>
+                    <Text style={styles.avatarPickerTitle}>Choose Pet Avatar</Text>
+                    <Text style={styles.avatarPickerSub}>
+                      Illustrated {species} profile or custom photo
+                    </Text>
+                  </View>
+
+                  <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+                </Pressable>
               </View>
 
               <View style={styles.fieldBlock}>
@@ -440,7 +482,7 @@ export default function PetRegistrationScreen() {
               </View>
 
               <View style={styles.fieldBlock}>
-                <View style={styles.labelWithBadgeRow}>
+                <View style={styles.ageHeaderRow}>
                   <Text style={styles.sectionLabel}>Pet Age</Text>
                   <View style={styles.ageBadge}>
                     <Ionicons
@@ -734,6 +776,16 @@ export default function PetRegistrationScreen() {
           style={styles.flex}
         />
       </KeyboardAvoidingView>
+
+      {/* Pet Avatar Customizer Modal */}
+      <PetAvatarPickerModal
+        visible={avatarModalVisible}
+        onClose={() => setAvatarModalVisible(false)}
+        onSelectAvatar={handleSelectAvatar}
+        currentAvatarId={avatarId}
+        species={species}
+        petName={fields.name.value || 'Pet'}
+      />
     </SafeAreaView>
   );
 }
@@ -780,21 +832,44 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   form: {
-    marginTop: spacing.md,
     gap: spacing.lg,
   },
   fieldBlock: {
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  avatarPickerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.08)',
+    gap: 12,
+  },
+  avatarPickerTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  avatarPickerTitle: {
+    ...typography.captionBold,
+    color: colors.textPrimary,
+    fontSize: 13,
+  },
+  avatarPickerSub: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontSize: 11,
   },
   sectionLabel: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 14,
+    marginBottom: 4,
   },
-  labelWithBadgeRow: {
+  ageHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   ageBadge: {
     flexDirection: 'row',

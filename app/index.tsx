@@ -18,6 +18,7 @@ import { useDataStore } from '@store/useDataStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { PhotoIllustration } from '@components/ui/PhotoIllustration';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
+import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 
 const SPLASH_DURATION = 1800;
 
@@ -63,9 +64,24 @@ export default function SplashScreen() {
           const clerkPets = (metadata.pets as any[]) || [];
           const ownerId = useAuthStore.getState().user?.id;
           if (ownerId && clerkPets.length > 0) {
+            let hasMissingId = false;
+            const updatedClerkPets = clerkPets.map((pet, idx) => {
+              if (!pet.id) {
+                hasMissingId = true;
+                return { ...pet, id: `pet-${Date.now()}-${idx}` };
+              }
+              return pet;
+            });
+
+            if (hasMissingId && clerkUser) {
+              await updateClerkUnsafeMetadata(clerkUser, {
+                pets: updatedClerkPets,
+              });
+            }
+
             const currentPets = useDataStore.getState().pets;
             if (currentPets.length === 0) {
-              for (const pet of clerkPets) {
+              for (const pet of updatedClerkPets) {
                 await useDataStore.getState().addPet(ownerId, pet);
               }
             }

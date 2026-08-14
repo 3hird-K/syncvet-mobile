@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,12 +15,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { ageFromBirthYear, formatAge } from '@lib/format';
 import { haptic } from '@lib/haptics';
+import { getPetAvatarSource } from '@lib/petAvatars';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { LoadingState } from '@components/ui/LoadingState';
+import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 
 interface DisplayPet {
   id: string;
@@ -32,6 +35,8 @@ interface DisplayPet {
   isSpayedNeutered?: boolean;
   weightCategory?: string;
   notes?: string;
+  avatarId?: string;
+  photoUrl?: string;
 }
 
 type FilterCategory = 'all' | 'dog' | 'cat' | 'needs_vaccine';
@@ -63,6 +68,8 @@ export default function PetsScreen() {
         isSpayedNeutered: Boolean(p.isSpayedNeutered),
         weightCategory: p.weightCategory,
         notes: p.notes,
+        avatarId: p.avatarId,
+        photoUrl: p.photoUrl,
       }));
     }
 
@@ -322,20 +329,12 @@ export default function PetsScreen() {
                 >
                   {/* Card Header Row */}
                   <View style={styles.cardHeaderRow}>
-                    <View style={styles.petAvatarWrapper}>
-                      <View
-                        style={[
-                          styles.speciesIconCircle,
-                          {
-                            backgroundColor: isDog
-                              ? 'rgba(0, 168, 150, 0.10)'
-                              : 'rgba(219, 39, 119, 0.10)',
-                          },
-                        ]}
-                      >
-                        <Text style={styles.speciesEmoji}>{isDog ? '🐶' : '🐱'}</Text>
-                      </View>
-                    </View>
+                    <PopoutPetAvatar
+                      avatarId={pet.avatarId}
+                      species={pet.species as any}
+                      photoUrl={pet.photoUrl}
+                      size={60}
+                    />
 
                     <View style={styles.petIdentity}>
                       <View style={styles.nameRow}>
@@ -632,19 +631,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-  },
-  petAvatarWrapper: {
-    position: 'relative',
-  },
-  speciesIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  speciesEmoji: {
-    fontSize: 24,
   },
   petIdentity: {
     flex: 1,

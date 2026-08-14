@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Platform, StatusBar as RNStatusBar, StyleSheet } from 'react-native';
+import { LogBox, Platform, StatusBar as RNStatusBar, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -19,6 +19,26 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
 import { tokenCache } from '@lib/tokenCache';
+import { Toaster } from '@components/ui/Sonner';
+
+// Silence Clerk development keys notice in development
+LogBox.ignoreLogs([
+  'Clerk: Clerk has been loaded with development keys',
+  'Clerk has been loaded with development keys',
+]);
+
+if (__DEV__) {
+  const origWarn = console.warn;
+  console.warn = (...args: any[]) => {
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('Clerk has been loaded with development keys')
+    ) {
+      return;
+    }
+    origWarn(...args);
+  };
+}
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -73,6 +93,7 @@ export default function RootLayout() {
                 contentStyle: { backgroundColor: colors.background },
               }}
             />
+            <Toaster />
           </SafeAreaProvider>
         </GestureHandlerRootView>
       </ClerkLoaded>

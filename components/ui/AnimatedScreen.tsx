@@ -6,12 +6,13 @@ import Animated, {
   FadeOut,
   SlideInDown,
   SlideInRight,
+  ZoomIn,
   useReducedMotion,
 } from 'react-native-reanimated';
 
 import { colors } from '@theme';
 
-export type ScreenAnimation = 'fade' | 'slide-up' | 'slide-right';
+export type ScreenAnimation = 'fade' | 'zoom' | 'slide-up' | 'slide-right';
 
 interface AnimatedScreenProps extends PropsWithChildren {
   animation?: ScreenAnimation;
@@ -20,22 +21,13 @@ interface AnimatedScreenProps extends PropsWithChildren {
   style?: object;
 }
 
-const ENTRANCE_MAP = {
-  fade: FadeIn,
-  'slide-up': SlideInDown,
-  'slide-right': SlideInRight,
-} as const;
-
-type EntranceKey = keyof typeof ENTRANCE_MAP;
-type EntranceBuilder = (typeof ENTRANCE_MAP)[EntranceKey];
-
 /**
  * Standard full-screen entrance animation used across every SyncVet screen
- * so transitions feel consistent. Respects reduced-motion preferences.
+ * so transitions feel smooth and consistent without unnatural bouncing.
  */
 export function AnimatedScreen({
   children,
-  animation = 'fade',
+  animation = 'zoom',
   animated = true,
   style,
 }: AnimatedScreenProps) {
@@ -46,15 +38,27 @@ export function AnimatedScreen({
     return <View style={[styles.container, style]}>{children}</View>;
   }
 
-  const builder = ENTRANCE_MAP[animation] as EntranceBuilder;
-  const entering = animation === 'slide-up'
-    ? SlideInDown.duration(320).springify().damping(18)
-    : builder.duration(280);
+  let entering;
+  switch (animation) {
+    case 'zoom':
+      entering = ZoomIn.duration(260);
+      break;
+    case 'slide-up':
+      entering = SlideInDown.duration(260);
+      break;
+    case 'slide-right':
+      entering = SlideInRight.duration(260);
+      break;
+    case 'fade':
+    default:
+      entering = FadeIn.duration(240);
+      break;
+  }
 
   return (
     <Animated.View
       entering={entering}
-      exiting={FadeOut.duration(200)}
+      exiting={FadeOut.duration(180)}
       style={[styles.container, style]}
     >
       {children}
