@@ -15,9 +15,7 @@
       "package": "com.syncvet.app",
       "adaptiveIcon": {
         "backgroundColor": "#0A6E64",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -41,6 +39,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6e4a17fe-9cdf-41e2-bb55-049b4789c107"
+      }
+    },
+    "owner": "3hirdk"
   }
 }
