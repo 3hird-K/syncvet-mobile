@@ -109,6 +109,13 @@ export default function ProfileScreen() {
     return [];
   }, [metadata.pets, localPets]);
 
+  const [petsExpanded, setPetsExpanded] = useState(false);
+  const DEFAULT_VISIBLE_PETS = 2;
+  const visiblePets = petsExpanded
+    ? metadataPets
+    : metadataPets.slice(0, DEFAULT_VISIBLE_PETS);
+  const hasMorePets = metadataPets.length > DEFAULT_VISIBLE_PETS;
+
   const stats = useMemo(() => {
     const today = todayISO();
     const upcoming = appointments.filter(
@@ -380,7 +387,7 @@ export default function ProfileScreen() {
             </Pressable>
           ) : (
             <View style={styles.petsVerticalList}>
-              {metadataPets.map((pet, idx) => {
+              {visiblePets.map((pet, idx) => {
                 const isDog = pet.species?.toLowerCase() === 'dog';
                 return (
                   <Pressable
@@ -434,6 +441,34 @@ export default function ProfileScreen() {
                   </Pressable>
                 );
               })}
+
+              {/* Expand / Reduce Pets Button */}
+              {hasMorePets && (
+                <Pressable
+                  onPress={() => {
+                    haptic.light();
+                    setPetsExpanded((prev) => !prev);
+                  }}
+                  style={styles.expandPetsBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    petsExpanded
+                      ? 'Show fewer pets'
+                      : `Show all ${metadataPets.length} pets`
+                  }
+                >
+                  <Text style={styles.expandPetsBtnText}>
+                    {petsExpanded
+                      ? 'Show Fewer Pets'
+                      : `Show All (${metadataPets.length}) Pets`}
+                  </Text>
+                  <Ionicons
+                    name={petsExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    color={colors.primary}
+                  />
+                </Pressable>
+              )}
             </View>
           )}
         </View>
@@ -823,6 +858,24 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.textSecondary,
     fontSize: 11.5,
+  },
+  expandPetsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    backgroundColor: 'rgba(0, 168, 150, 0.06)',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.14)',
+    marginTop: 2,
+  },
+  expandPetsBtnText: {
+    ...typography.captionBold,
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '700',
   },
   cvoCleanCard: {
     flexDirection: 'row',

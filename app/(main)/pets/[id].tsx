@@ -274,7 +274,7 @@ export default function PetProfileScreen() {
       <Screen scroll>
         {/* Top Navigation Bar with Edit & Delete Actions */}
         <View style={styles.headerRow}>
-          <BackButton />
+          <BackButton to="/pets" />
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerTitle}>Pet Health Passport</Text>
             <Text style={styles.headerSubtitle}>City Veterinary Office · CDO</Text>

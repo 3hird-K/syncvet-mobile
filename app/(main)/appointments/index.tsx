@@ -54,26 +54,27 @@ export default function AppointmentsScreen() {
   return (
     <AnimatedScreen animation="fade">
       <Screen scroll>
-        <View style={styles.headerRow}>
-          <View style={styles.headerTitleWrap}>
+        <View style={styles.header}>
+          <View style={styles.titleRow}>
             <Text style={styles.title}>Appointments</Text>
-            <Text style={styles.subtitle}>
-              Upcoming visits and your pet care history.
-            </Text>
+
+            <Pressable
+              onPress={() => {
+                haptic.light();
+                router.push('/appointments/new' as never);
+              }}
+              style={styles.bookHeaderBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Book new visit"
+            >
+              <Ionicons name="add" size={16} color={colors.white} />
+              <Text style={styles.bookHeaderBtnText}>Book Visit</Text>
+            </Pressable>
           </View>
 
-          <Pressable
-            onPress={() => {
-              haptic.light();
-              router.push('/appointments/new' as never);
-            }}
-            style={styles.bookHeaderBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Book new visit"
-          >
-            <Ionicons name="add" size={18} color={colors.white} />
-            <Text style={styles.bookHeaderBtnText}>Book Visit</Text>
-          </Pressable>
+          <Text style={styles.subtitle}>
+            Upcoming visits and your pet care history.
+          </Text>
         </View>
 
         {/* Dual-Pill Capsule Switch with Spring Physics & Icons */}
@@ -146,27 +147,27 @@ export default function AppointmentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
+  header: {
+    marginBottom: spacing.md,
   },
-  headerTitleWrap: {
-    flex: 1,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   title: {
     ...typography.heading1,
     color: colors.textPrimary,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
-    marginTop: 3,
-    fontSize: 13,
+    marginTop: 4,
+    fontSize: 13.5,
+    lineHeight: 18,
   },
   bookHeaderBtn: {
     flexDirection: 'row',
@@ -174,9 +175,8 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: colors.primary,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 20,
-    marginTop: 2,
   },
   bookHeaderBtnText: {
     ...typography.captionBold,
