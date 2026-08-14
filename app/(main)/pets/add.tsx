@@ -287,7 +287,7 @@ export default function AddPetScreen() {
 
   const handlePrevious = () => {
     if (subPart === 1) {
-      router.back();
+      router.replace('/pets' as never);
     } else {
       handlePrevSubPart(subPart);
     }

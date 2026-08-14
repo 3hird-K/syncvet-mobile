@@ -313,11 +313,16 @@ export default function HomeScreen() {
         {/* 3. Fast Quick Actions Hub (4 High-Utility Operations) */}
         <Animated.View entering={FadeInDown.delay(100).duration(240)} style={styles.quickActionsSection}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Book an appointment"
             onPress={() => {
               haptic.light();
               router.push('/appointments/new' as never);
             }}
-            style={({ pressed }) => [styles.quickActionTile, pressed && styles.quickActionTilePressed]}
+            style={({ pressed }) => [
+              styles.quickActionTile,
+              pressed && styles.quickActionTilePressed,
+            ]}
           >
             <View style={[styles.quickActionIconWrap, { backgroundColor: 'rgba(0, 168, 150, 0.12)' }]}>
               <Ionicons name="calendar" size={17} color={colors.primary} />
@@ -326,11 +331,16 @@ export default function HomeScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add a new pet"
             onPress={() => {
               haptic.light();
               router.push('/pets/add' as never);
             }}
-            style={({ pressed }) => [styles.quickActionTile, pressed && styles.quickActionTilePressed]}
+            style={({ pressed }) => [
+              styles.quickActionTile,
+              pressed && styles.quickActionTilePressed,
+            ]}
           >
             <View style={[styles.quickActionIconWrap, { backgroundColor: 'rgba(139, 92, 246, 0.12)' }]}>
               <Ionicons name="paw" size={17} color="#8B5CF6" />
@@ -339,8 +349,19 @@ export default function HomeScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => goService('vaccination')}
-            style={({ pressed }) => [styles.quickActionTile, pressed && styles.quickActionTilePressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Book anti-rabies vaccination"
+            onPress={() => {
+              haptic.light();
+              router.push({
+                pathname: '/appointments/new',
+                params: { serviceId: 'vaccination' },
+              } as never);
+            }}
+            style={({ pressed }) => [
+              styles.quickActionTile,
+              pressed && styles.quickActionTilePressed,
+            ]}
           >
             <View style={[styles.quickActionIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
               <Ionicons name="shield-checkmark" size={17} color={colors.success} />
@@ -349,8 +370,19 @@ export default function HomeScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => goService('spay-neuter')}
-            style={({ pressed }) => [styles.quickActionTile, pressed && styles.quickActionTilePressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Book spay or neuter kapon service"
+            onPress={() => {
+              haptic.light();
+              router.push({
+                pathname: '/appointments/new',
+                params: { serviceId: 'spay-neuter' },
+              } as never);
+            }}
+            style={({ pressed }) => [
+              styles.quickActionTile,
+              pressed && styles.quickActionTilePressed,
+            ]}
           >
             <View style={[styles.quickActionIconWrap, { backgroundColor: 'rgba(37, 99, 235, 0.12)' }]}>
               <Ionicons name="medical" size={17} color="#2563EB" />
@@ -807,8 +839,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
@@ -817,8 +849,10 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   quickActionTilePressed: {
-    backgroundColor: 'rgba(7, 30, 38, 0.03)',
-    transform: [{ scale: 0.98 }],
+    backgroundColor: '#F0F9F7',
+    borderColor: 'rgba(0, 168, 150, 0.35)',
+    transform: [{ scale: 0.94 }],
+    opacity: 0.92,
   },
   quickActionIconWrap: {
     width: 34,

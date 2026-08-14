@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
+import { phoneRule } from '@lib/validation';
 import { getPetAvatarSource } from '@lib/petAvatars';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
@@ -97,6 +98,8 @@ export default function ProfileScreen() {
   const [editPhone, setEditPhone] = useState(mobileNumber);
   const [editAddress, setEditAddress] = useState(address);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [nameError, setNameError] = useState<string | undefined>();
+  const [phoneError, setPhoneError] = useState<string | undefined>();
   const [editError, setEditError] = useState<string | undefined>();
 
   // Read pets from Clerk metadata
@@ -177,28 +180,63 @@ export default function ProfileScreen() {
     }
   };
 
+  const validatePhone = (val: string): boolean => {
+    const trimmed = val.trim();
+    if (!trimmed) {
+      setPhoneError('Enter your mobile number.');
+      return false;
+    }
+    if (!phoneRule.validate(trimmed)) {
+      setPhoneError(phoneRule.message);
+      return false;
+    }
+    setPhoneError(undefined);
+    return true;
+  };
+
+  const handlePhoneChange = (text: string) => {
+    setEditPhone(text);
+    if (phoneError) setPhoneError(undefined);
+    if (editError) setEditError(undefined);
+  };
+
+  const handleNameChange = (text: string) => {
+    setEditName(text);
+    if (nameError) setNameError(undefined);
+    if (editError) setEditError(undefined);
+  };
+
   const openEditModal = () => {
     haptic.light();
     setEditName(fullName);
     setEditPhone(mobileNumber);
     setEditAddress(address);
+    setNameError(undefined);
+    setPhoneError(undefined);
     setEditError(undefined);
     setEditModalVisible(true);
   };
 
   const handleSaveProfile = async () => {
+    let isValid = true;
+
     if (!editName.trim()) {
-      setEditError('Please enter your full name.');
-      haptic.warning();
-      return;
+      setNameError('Enter your full name.');
+      isValid = false;
+    } else {
+      setNameError(undefined);
     }
-    if (!editPhone.trim()) {
-      setEditError('Please enter your mobile phone number.');
-      haptic.warning();
-      return;
+
+    if (!validatePhone(editPhone)) {
+      isValid = false;
     }
+
     if (!editAddress.trim()) {
       setEditError('Please enter your residence address.');
+      isValid = false;
+    }
+
+    if (!isValid) {
       haptic.warning();
       return;
     }
@@ -246,6 +284,36 @@ export default function ProfileScreen() {
     void Linking.openURL('tel:0888572260').catch(() => {});
   };
 
+  const handleLogout = () => {
+    haptic.medium();
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out of your SyncVet account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              haptic.light();
+              await clerkSignOut();
+              signOut();
+              toast.success('Logged out', {
+                description: 'You have been signed out of your account.',
+              });
+              router.replace('/welcome' as never);
+            } catch (e) {
+              console.log('Signout note:', e);
+              signOut();
+              router.replace('/welcome' as never);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (loading && !loaded && !user && !clerkUser) {
     return (
       <AnimatedScreen animation="zoom">
@@ -257,19 +325,32 @@ export default function ProfileScreen() {
   return (
     <AnimatedScreen animation="zoom">
       <Screen scroll>
-        {/* Compact Screen Header */}
+        {/* Compact Screen Header with Edit and Logout */}
         <View style={styles.topHeader}>
           <Text style={styles.screenHeading}>Profile</Text>
-          <Pressable
-            onPress={openEditModal}
-            style={styles.headerEditBtn}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Edit Profile"
-          >
-            <Ionicons name="pencil" size={13} color={colors.primary} />
-            <Text style={styles.headerEditText}>Edit</Text>
-          </Pressable>
+          <View style={styles.headerButtonsRow}>
+            <Pressable
+              onPress={openEditModal}
+              style={styles.headerEditBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Edit Profile"
+            >
+              <Ionicons name="pencil" size={13} color={colors.primary} />
+              <Text style={styles.headerEditText}>Edit</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleLogout}
+              style={styles.headerLogoutBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Log Out"
+            >
+              <Ionicons name="log-out-outline" size={13} color={colors.error} />
+              <Text style={styles.headerLogoutText}>Log Out</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Clean Hero Identity Card */}
@@ -545,7 +626,12 @@ export default function ProfileScreen() {
                   <Text style={styles.modalFieldLabel}>Full Name</Text>
                   <Input
                     value={editName}
-                    onChangeText={setEditName}
+                    onChangeText={handleNameChange}
+                    onBlur={() => {
+                      if (!editName.trim()) setNameError('Enter your full name.');
+                      else setNameError(undefined);
+                    }}
+                    error={nameError}
                     placeholder="Enter full name"
                     leftIcon={<Ionicons name="person-outline" size={18} color={colors.primary} />}
                     editable={!savingProfile}
@@ -557,8 +643,11 @@ export default function ProfileScreen() {
                   <Text style={styles.modalFieldLabel}>Mobile Number</Text>
                   <Input
                     value={editPhone}
-                    onChangeText={setEditPhone}
+                    onChangeText={handlePhoneChange}
+                    onBlur={() => validatePhone(editPhone)}
+                    error={phoneError}
                     keyboardType="phone-pad"
+                    maxLength={13}
                     placeholder="09XXXXXXXXX"
                     leftIcon={<Ionicons name="call-outline" size={18} color={colors.primary} />}
                     editable={!savingProfile}
@@ -585,25 +674,14 @@ export default function ProfileScreen() {
 
               {/* Action Buttons */}
               <View style={styles.modalActionsRow}>
-                <View style={styles.modalCancelWrap}>
-                  <Button
-                    title="Cancel"
-                    variant="outline"
-                    onPress={() => setEditModalVisible(false)}
-                    disabled={savingProfile}
-                    fullWidth
-                  />
-                </View>
-                <View style={styles.modalSaveWrap}>
-                  <Button
-                    title="Save Changes"
-                    variant="primary"
-                    onPress={handleSaveProfile}
-                    loading={savingProfile}
-                    showPaw
-                    fullWidth
-                  />
-                </View>
+                <Button
+                  title="Save Changes"
+                  variant="primary"
+                  onPress={handleSaveProfile}
+                  loading={savingProfile}
+                  showPaw
+                  fullWidth
+                />
               </View>
             </View>
           </KeyboardAvoidingView>
@@ -627,6 +705,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
   },
+  headerButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -635,10 +718,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.16)',
   },
   headerEditText: {
     ...typography.captionBold,
     color: colors.primary,
+    fontSize: 12,
+  },
+  headerLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.18)',
+  },
+  headerLogoutText: {
+    ...typography.captionBold,
+    color: colors.error,
     fontSize: 12,
   },
   heroCard: {
@@ -1019,14 +1120,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalActionsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
+    width: '100%',
     marginTop: spacing.md,
-  },
-  modalCancelWrap: {
-    flex: 1,
-  },
-  modalSaveWrap: {
-    flex: 1.4,
   },
 });

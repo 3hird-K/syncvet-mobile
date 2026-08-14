@@ -130,7 +130,7 @@ export default function PetProfileScreen() {
     return (
       <Screen scroll>
         <View style={styles.headerRow}>
-          <BackButton />
+          <BackButton to="/pets" />
         </View>
         <EmptyState
           icon="paw-outline"

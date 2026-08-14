@@ -428,14 +428,10 @@ export default function NewAppointmentScreen() {
   };
 
   const handleBack = () => {
-    if (confirmedTicket) {
+    if (confirmedTicket || step === 1) {
       router.replace('/appointments' as never);
-    } else if (step > 1) {
-      handlePrevStep(step);
-    } else if (router.canGoBack()) {
-      router.back();
     } else {
-      router.replace('/appointments' as never);
+      handlePrevStep(step);
     }
   };
 
