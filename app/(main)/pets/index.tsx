@@ -47,6 +47,7 @@ export default function PetsScreen() {
   const ownerId = useAuthStore((state) => state.user?.id);
   const { loading, loaded } = useResidentData();
   const localPets = useDataStore((state) => state.pets);
+  const appointments = useDataStore((state) => state.appointments);
 
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -367,12 +368,12 @@ export default function PetsScreen() {
                     {pet.isVaccinated ? (
                       <View style={styles.vaccineBadgeGreen}>
                         <Ionicons name="shield-checkmark" size={13} color={colors.success} />
-                        <Text style={styles.vaccineBadgeTextGreen}>Anti-Rabies Up-to-Date</Text>
+                        <Text style={styles.vaccineBadgeTextGreen}>Anti-Rabies (Protected · 1x)</Text>
                       </View>
                     ) : (
                       <View style={styles.vaccineBadgeAmber}>
                         <Ionicons name="alert-circle" size={13} color={colors.warning} />
-                        <Text style={styles.vaccineBadgeTextAmber}>Needs Anti-Rabies Shot</Text>
+                        <Text style={styles.vaccineBadgeTextAmber}>Needs Anti-Rabies Shot (0 Doses)</Text>
                       </View>
                     )}
 

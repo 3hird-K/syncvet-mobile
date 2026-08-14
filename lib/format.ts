@@ -32,6 +32,14 @@ export function formatShortDate(iso: string): string {
   return `${names[month - 1]} ${day}`;
 }
 
+/** "Aug 20, 2026" from YYYY-MM-DD. */
+export function formatDateWithYear(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  if (!month || !day || !year) return iso;
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${names[month - 1]} ${day}, ${year}`;
+}
+
 /** "Monday, Aug 20" from YYYY-MM-DD. */
 export function formatWeekdayDate(iso: string): string {
   const date = new Date(`${iso}T12:00:00`);

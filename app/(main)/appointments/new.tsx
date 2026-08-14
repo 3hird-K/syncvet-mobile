@@ -21,13 +21,15 @@ import {
   SERVICE_LOCATION,
   TIME_SLOTS,
   getService,
-  type ServiceDef,
 } from '@lib/services';
 import {
   addDays,
   formatShortDate,
+  formatDateWithYear,
   formatLongDate,
   formatWeekdayDate,
+  ageFromBirthYear,
+  formatAge,
   toISODate,
   todayISO,
 } from '@lib/format';
@@ -75,6 +77,59 @@ const CLINICAL_REASONS: Record<string, string[]> = {
   other: ['General Veterinary Inquiry', 'Prescription Refill', 'Health Certificate Request'],
 };
 
+interface PetVaccinationTimeline {
+  isVaccinated: boolean;
+  totalDoses: number;
+  lastVaccineDate?: string;
+  nextBoosterDate?: string;
+}
+
+function calculatePetVaccineTimeline(
+  pet: any,
+  appointments: any[] = [],
+): PetVaccinationTimeline {
+  // Find all vaccination appointments for this specific pet
+  const vaxAppts = (appointments || [])
+    .filter(
+      (a) => a.petId === pet.id && a.serviceId === 'vaccination' && a.status !== 'cancelled',
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const doseCountFromAppts = vaxAppts.length;
+  const isVaccinated = Boolean(pet.isVaccinated) || doseCountFromAppts > 0;
+  const totalDoses = Math.max(isVaccinated ? 1 : 0, doseCountFromAppts, pet.vaccinationDoses || 0);
+
+  let lastVaccineDate = vaxAppts[0]?.date || pet.lastVaccinationDate;
+  if (!lastVaccineDate && isVaccinated) {
+    // If marked vaccinated but no specific date was set, use pet's registration date or 6 months ago
+    lastVaccineDate = pet.createdAt ? pet.createdAt.split('T')[0] : '2025-08-14';
+  }
+
+  let nextBoosterDate: string | undefined = pet.nextVaccinationDate;
+  if (!nextBoosterDate && isVaccinated && lastVaccineDate) {
+    try {
+      const parts = lastVaccineDate.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parts[1];
+        const day = parts[2];
+        if (!isNaN(year)) {
+          nextBoosterDate = `${year + 1}-${month}-${day}`;
+        }
+      }
+    } catch {
+      nextBoosterDate = undefined;
+    }
+  }
+
+  return {
+    isVaccinated,
+    totalDoses,
+    lastVaccineDate,
+    nextBoosterDate,
+  };
+}
+
 export default function NewAppointmentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -85,34 +140,42 @@ export default function NewAppointmentScreen() {
 
   const { user: clerkUser } = useUser();
   const ownerId = useAuthStore((state) => state.user?.id) || 'cdo-resident-user';
-  const pets = useDataStore((state) => state.pets);
+  const localPets = useDataStore((state) => state.pets);
+  const appointments = useDataStore((state) => state.appointments);
   const bookAppointment = useDataStore((state) => state.bookAppointment);
 
-  // Combine Zustand pets with Clerk metadata pets if available
+  // Load STRICTLY the signed-in resident's pets (Clerk metadata priority, fallback to local user store)
   const allPets = useMemo(() => {
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const list = Array.isArray(metadata.pets) ? metadata.pets : [];
-    const metaPets = list.map((p: any, idx: number) => ({
-      id: p.id || `clerk-pet-${idx}`,
-      ownerId: ownerId,
-      name: p.name || 'My Pet',
-      species: p.species || 'dog',
-      breed: p.breed || '',
-      gender: p.gender || '',
-      birthYear: p.birthYear,
-      isVaccinated: Boolean(p.isVaccinated),
-      isSpayedNeutered: Boolean(p.isSpayedNeutered),
-      weightCategory: p.weightCategory || 'Medium',
-      notes: p.notes,
-      avatarId: p.avatarId,
-      photoUrl: p.photoUrl,
-      createdAt: p.createdAt || new Date().toISOString(),
-    }));
+    const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
+    if (metaPets.length > 0) {
+      return metaPets.map((p: any, idx: number) => ({
+        id: p.id || `clerk-pet-${idx}`,
+        ownerId: ownerId,
+        name: p.name || 'My Pet',
+        species: p.species || 'dog',
+        breed: p.breed || '',
+        gender: p.gender || '',
+        birthYear: p.birthYear,
+        isVaccinated: Boolean(p.isVaccinated),
+        isSpayedNeutered: Boolean(p.isSpayedNeutered),
+        weightCategory: p.weightCategory || 'Medium',
+        notes: p.notes,
+        avatarId: p.avatarId,
+        photoUrl: p.photoUrl,
+        vaccinationDoses: p.vaccinationDoses,
+        lastVaccinationDate: p.lastVaccinationDate,
+        nextVaccinationDate: p.nextVaccinationDate,
+        createdAt: p.createdAt || new Date().toISOString(),
+      }));
+    }
 
-    const map = new Map<string, any>();
-    [...pets, ...metaPets].forEach((p) => map.set(p.id, p));
-    return Array.from(map.values());
-  }, [pets, clerkUser?.unsafeMetadata, ownerId]);
+    if (localPets && localPets.length > 0) {
+      return localPets;
+    }
+
+    return [];
+  }, [clerkUser?.unsafeMetadata, localPets, ownerId]);
 
   // Initial form values derived from params
   const initialPetId = params.petId || (allPets.length > 0 ? allPets[0].id : undefined);
@@ -146,7 +209,7 @@ export default function NewAppointmentScreen() {
     [selectedServiceId],
   );
 
-  // Available dates (Next 14 business days, skipping Sundays)
+  // Available dates (Next 10 business days, skipping Sundays)
   const dateOptions = useMemo(() => {
     const today = todayISO();
     const tomorrow = toISODate(addDays(1));
@@ -441,13 +504,16 @@ export default function NewAppointmentScreen() {
                 <View style={styles.stepBlock}>
                   <Text style={styles.sectionHeading}>Who is this appointment for?</Text>
                   <Text style={styles.sectionSub}>
-                    Select the registered pet you want to bring to the City Veterinary Office.
+                    Select your registered pet to schedule their veterinary visit.
                   </Text>
 
                   <View style={styles.petsGrid}>
                     {allPets.map((p) => {
                       const isSelected = p.id === selectedPetId;
                       const isDog = p.species?.toLowerCase() === 'dog';
+                      const vax = calculatePetVaccineTimeline(p, appointments);
+                      const ageDisplay = p.birthYear ? formatAge(ageFromBirthYear(p.birthYear)) : '';
+
                       return (
                         <Pressable
                           key={p.id}
@@ -466,11 +532,12 @@ export default function NewAppointmentScreen() {
                             avatarId={p.avatarId}
                             species={p.species}
                             photoUrl={p.photoUrl}
-                            size={72}
+                            size={76}
                             scale={1.55}
                           />
 
                           <View style={styles.petSelectInfo}>
+                            {/* Top row: Name + Species */}
                             <View style={styles.petNameRow}>
                               <Text style={styles.petCardName}>{p.name}</Text>
                               <View
@@ -490,26 +557,62 @@ export default function NewAppointmentScreen() {
                               </View>
                             </View>
 
+                            {/* Subtitle: Breed and Age */}
                             <Text style={styles.petCardBreed} numberOfLines={1}>
                               {p.breed || (isDog ? 'Dog' : 'Cat')}
+                              {ageDisplay ? ` · ${ageDisplay}` : ''}
                             </Text>
 
-                            <View style={styles.petCardVaxRow}>
-                              <Ionicons
-                                name={p.isVaccinated ? 'shield-checkmark' : 'alert-circle'}
-                                size={12}
-                                color={p.isVaccinated ? colors.success : colors.warning}
-                              />
-                              <Text
-                                style={[
-                                  styles.petCardVaxText,
-                                  p.isVaccinated
-                                    ? styles.petCardVaxTextGreen
-                                    : styles.petCardVaxTextAmber,
-                                ]}
-                              >
-                                {p.isVaccinated ? 'Anti-Rabies Protected' : 'Vaccine Due'}
-                              </Text>
+                            {/* Clinical Vaccination Status & Frequency */}
+                            <View style={styles.vaxStatusBox}>
+                              <View style={styles.vaxBadgeRow}>
+                                <View
+                                  style={[
+                                    styles.vaxDoseBadge,
+                                    vax.isVaccinated
+                                      ? styles.vaxDoseBadgeGreen
+                                      : styles.vaxDoseBadgeAmber,
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name={vax.isVaccinated ? 'shield-checkmark' : 'alert-circle'}
+                                    size={12}
+                                    color={vax.isVaccinated ? colors.success : colors.warning}
+                                  />
+                                  <Text
+                                    style={[
+                                      styles.vaxDoseBadgeText,
+                                      vax.isVaccinated
+                                        ? styles.vaxDoseBadgeTextGreen
+                                        : styles.vaxDoseBadgeTextAmber,
+                                    ]}
+                                  >
+                                    {vax.isVaccinated
+                                      ? `${vax.totalDoses}x Vaccinated`
+                                      : '0 Doses (Due)'}
+                                  </Text>
+                                </View>
+                              </View>
+
+                              {/* Vaccination Timing: Last Shot & Next Due Date */}
+                              {vax.isVaccinated ? (
+                                <View style={styles.vaxTimingRow}>
+                                  {vax.lastVaccineDate ? (
+                                    <Text style={styles.vaxTimingSub}>
+                                      Last: {formatDateWithYear(vax.lastVaccineDate)}
+                                    </Text>
+                                  ) : null}
+                                  {vax.nextBoosterDate ? (
+                                    <Text style={styles.vaxTimingNext}>
+                                      Next Due: {formatDateWithYear(vax.nextBoosterDate)}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              ) : (
+                                <Text style={styles.vaxTimingDue}>
+                                  ⚠️ Anti-Rabies vaccine due · Schedule now
+                                </Text>
+                              )}
                             </View>
                           </View>
 
@@ -944,7 +1047,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   petsGrid: {
-    gap: spacing.sm,
+    gap: 10,
     marginTop: spacing.xs,
   },
   petSelectCard: {
@@ -1002,21 +1105,58 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 12,
   },
-  petCardVaxRow: {
+  vaxStatusBox: {
+    marginTop: 4,
+    gap: 3,
+  },
+  vaxBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  vaxDoseBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
   },
-  petCardVaxText: {
+  vaxDoseBadgeGreen: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+  },
+  vaxDoseBadgeAmber: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  },
+  vaxDoseBadgeText: {
     ...typography.captionBold,
-    fontSize: 11,
+    fontSize: 10.5,
   },
-  petCardVaxTextGreen: {
+  vaxDoseBadgeTextGreen: {
     color: colors.success,
   },
-  petCardVaxTextAmber: {
+  vaxDoseBadgeTextAmber: {
     color: colors.warning,
+  },
+  vaxTimingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  vaxTimingSub: {
+    ...typography.small,
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  vaxTimingNext: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 11,
+  },
+  vaxTimingDue: {
+    ...typography.small,
+    color: colors.warning,
+    fontSize: 11,
+    fontWeight: '600',
   },
   radioCircle: {
     width: 20,

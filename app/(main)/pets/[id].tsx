@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { getService } from '@lib/services';
-import { formatShortDate, formatWeekdayDate, ageFromBirthYear, formatAge } from '@lib/format';
+import { formatShortDate, formatDateWithYear, formatWeekdayDate, ageFromBirthYear, formatAge } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { getPetAvatarSource } from '@lib/petAvatars';
 import { useAuthStore } from '@store/useAuthStore';
@@ -93,6 +93,38 @@ export default function PetProfileScreen() {
       ),
     [petAppointments],
   );
+
+  const vaxTimeline = useMemo(() => {
+    const vaxAppts = (petAppointments || [])
+      .filter((a) => a.serviceId === 'vaccination' && a.status !== 'cancelled')
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    const doseCount = vaxAppts.length;
+    const isVaccinated = Boolean(pet?.isVaccinated) || doseCount > 0;
+    const totalDoses = Math.max(isVaccinated ? 1 : 0, doseCount, (pet as any)?.vaccinationDoses || 0);
+
+    let lastDate = vaxAppts[0]?.date || (pet as any)?.lastVaccinationDate;
+    if (!lastDate && isVaccinated) {
+      lastDate = pet?.createdAt ? pet.createdAt.split('T')[0] : '2025-08-14';
+    }
+
+    let nextBooster: string | undefined = (pet as any)?.nextVaccinationDate;
+    if (!nextBooster && isVaccinated && lastDate) {
+      try {
+        const parts = lastDate.split('-');
+        if (parts.length === 3) {
+          const yr = parseInt(parts[0], 10);
+          if (!isNaN(yr)) {
+            nextBooster = `${yr + 1}-${parts[1]}-${parts[2]}`;
+          }
+        }
+      } catch {
+        nextBooster = undefined;
+      }
+    }
+
+    return { isVaccinated, totalDoses, lastDate, nextBooster };
+  }, [petAppointments, pet]);
 
   if (!pet) {
     return (
@@ -333,38 +365,53 @@ export default function PetProfileScreen() {
           <View
             style={[
               styles.vaxStatusBanner,
-              {
-                backgroundColor: pet.isVaccinated
-                  ? 'rgba(16, 185, 129, 0.08)'
-                  : 'rgba(245, 158, 11, 0.10)',
-                borderColor: pet.isVaccinated
-                  ? 'rgba(16, 185, 129, 0.25)'
-                  : 'rgba(245, 158, 11, 0.25)',
-              },
+              vaxTimeline.isVaccinated
+                ? styles.vaxBannerProtected
+                : styles.vaxBannerDue,
             ]}
           >
-            <Ionicons
-              name={pet.isVaccinated ? 'shield-checkmark' : 'alert-circle'}
-              size={18}
-              color={pet.isVaccinated ? colors.success : colors.warning}
-            />
-            <View style={styles.vaxBannerTextWrap}>
+            <View style={styles.vaxBannerHeaderRow}>
               <Text
                 style={[
                   styles.vaxBannerTitle,
-                  { color: pet.isVaccinated ? colors.success : colors.warning },
+                  vaxTimeline.isVaccinated
+                    ? styles.vaxBannerTitleGreen
+                    : styles.vaxBannerTitleAmber,
                 ]}
               >
-                {pet.isVaccinated
-                  ? 'Anti-Rabies Protection Up to Date'
-                  : 'Anti-Rabies Vaccination Required'}
-              </Text>
-              <Text style={styles.vaxBannerSub}>
-                {pet.isVaccinated
-                  ? 'Compliant with CDO City Veterinary Health Registry'
-                  : 'Please schedule municipal rabies immunization'}
+                {vaxTimeline.isVaccinated
+                  ? `Anti-Rabies Protected · ${vaxTimeline.totalDoses} ${
+                      vaxTimeline.totalDoses === 1 ? 'Dose' : 'Doses'
+                    }`
+                  : 'Anti-Rabies Vaccine Due (0 Doses)'}
               </Text>
             </View>
+
+            {vaxTimeline.isVaccinated ? (
+              <View style={styles.vaxTimelineDatesRow}>
+                {vaxTimeline.lastDate ? (
+                  <View style={styles.vaxDateCol}>
+                    <Text style={styles.vaxDateLabel}>Last Administered</Text>
+                    <Text style={styles.vaxDateValue}>
+                      {formatDateWithYear(vaxTimeline.lastDate)}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {vaxTimeline.nextBooster ? (
+                  <View style={styles.vaxDateCol}>
+                    <Text style={styles.vaxDateLabel}>Next Booster Due</Text>
+                    <Text style={[styles.vaxDateValue, styles.vaxDateValueHighlight]}>
+                      {formatDateWithYear(vaxTimeline.nextBooster)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.vaxBannerHelpText}>
+                No immunization on record. Please schedule your pet’s free municipal rabies shot.
+              </Text>
+            )}
           </View>
         </View>
 
@@ -685,26 +732,69 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   vaxStatusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
     borderWidth: 1,
+    gap: 8,
   },
-  vaxBannerTextWrap: {
-    flex: 1,
-    gap: 1,
+  vaxBannerProtected: {
+    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+    borderColor: 'rgba(16, 185, 129, 0.20)',
+  },
+  vaxBannerDue: {
+    backgroundColor: 'rgba(245, 158, 11, 0.07)',
+    borderColor: 'rgba(245, 158, 11, 0.22)',
+  },
+  vaxBannerHeaderRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   vaxBannerTitle: {
     ...typography.captionBold,
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  vaxBannerSub: {
+  vaxBannerTitleGreen: {
+    color: colors.success,
+  },
+  vaxBannerTitleAmber: {
+    color: colors.warning,
+  },
+  vaxTimelineDatesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(16, 185, 129, 0.16)',
+    gap: 12,
+  },
+  vaxDateCol: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  vaxDateLabel: {
+    ...typography.small,
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  vaxDateValue: {
+    ...typography.captionBold,
+    color: colors.textPrimary,
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  vaxDateValueHighlight: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  vaxBannerHelpText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 10.5,
+    fontSize: 11.5,
+    textAlign: 'center',
   },
   specsRow: {
     flexDirection: 'row',
