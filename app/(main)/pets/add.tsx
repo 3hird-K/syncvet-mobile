@@ -452,7 +452,7 @@ export default function AddPetScreen() {
                   avatarId={avatarId}
                   species={species}
                   photoUrl={customPhotoUri}
-                  size={52}
+                  size={44}
                   showCameraBadge
                 />
 
@@ -983,7 +983,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
   slideInner: {
-    gap: spacing.md,
+    gap: 12,
   },
   sectionHeadingWrap: {
     marginBottom: 4,
@@ -991,47 +991,49 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '700',
   },
   sectionDesc: {
     ...typography.body,
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12.5,
     marginTop: 2,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   fieldBlock: {
-    gap: 6,
+    gap: 3,
   },
   fieldLabel: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 12.5,
+    marginBottom: 2,
   },
   avatarPickerCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: 10,
+    borderRadius: radius.lg,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.08)',
-    gap: 12,
+    gap: 10,
   },
   avatarPickerTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   avatarPickerTitle: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 12.5,
   },
   avatarPickerSub: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 10.5,
   },
   popularBreedChips: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,78 +11,96 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import { useOAuth } from '@clerk/expo';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
-import { emailRule, required } from '@lib/validation';
 import { haptic } from '@lib/haptics';
-import { useForm } from '@hooks/useForm';
 import { useAuthStore } from '@store/useAuthStore';
-import { Avatar } from '@components/ui/Avatar';
-import { Input } from '@components/ui/Input';
 import { Button } from '@components/ui/Button';
 import { BackButton } from '@components/ui/BackButton';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { BackgroundDecoration } from '@components/ui/BackgroundDecoration';
 
-const DEMO_ACCOUNTS = [
-  { name: 'Neil Reyes', email: 'neil.reyes@gmail.com' },
-  { name: 'Maria Santos', email: 'maria.santos@gmail.com' },
-  { name: 'Jose Ramirez', email: 'jose.ramirez@gmail.com' },
-] as const;
-
 export default function GoogleAuthScreen() {
   const router = useRouter();
-  const googleSignIn = useAuthStore((state) => state.googleSignIn);
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
   const [submitting, setSubmitting] = useState(false);
-  const [useAnother, setUseAnother] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
-  const accountForm = useForm(
-    { fullName: '', email: '' },
-    {
-      fullName: [required('Enter your name.')],
-      email: [required('Enter your email address.'), emailRule],
-    },
-  );
+  // Warm up browser
+  React.useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
 
-  const finish = useCallback(() => {
-    const currentUser = useAuthStore.getState().user;
-    if (currentUser?.profileCompleted) {
-      router.replace('/(main)');
-    } else {
-      router.replace('/(register)/owner');
-    }
-  }, [router]);
-
-  const handleSelect = useCallback(
-    async (name: string, email: string) => {
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      haptic.medium();
       setSubmitting(true);
       setError(undefined);
-      haptic.medium();
-      try {
-        const state = useAuthStore.getState();
-        await state.googleSignIn({ email, fullName: name });
+
+      const redirectUrl = AuthSession.makeRedirectUri();
+      const { createdSessionId, signIn: clerkSignInFlow, signUp: clerkSignUpFlow, setActive } =
+        await startOAuthFlow({ redirectUrl });
+
+      const sessionId = createdSessionId || clerkSignInFlow?.createdSessionId || clerkSignUpFlow?.createdSessionId;
+
+      if (sessionId && setActive) {
+        await setActive({ session: sessionId });
         haptic.success();
-        finish();
-      } catch {
-        setError('We couldn’t sign you in with Google. Please try again.');
-        haptic.error();
+
+        const clerkEmail =
+          clerkSignUpFlow?.emailAddress ??
+          clerkSignInFlow?.identifier ??
+          '';
+        const firstName = clerkSignUpFlow?.firstName || clerkSignInFlow?.userData?.firstName || '';
+        const lastName = clerkSignUpFlow?.lastName || clerkSignInFlow?.userData?.lastName || '';
+        const clerkName =
+          firstName && lastName
+            ? `${firstName} ${lastName}`
+            : firstName || (clerkEmail ? clerkEmail.split('@')[0] : 'Resident');
+
+        await useAuthStore.getState().googleSignIn({
+          email: clerkEmail || 'user@syncvet.app',
+          fullName: clerkName || 'SyncVet Resident',
+        });
+
+        const currentUser = useAuthStore.getState().user;
+        const metadata = (clerkSignUpFlow?.unsafeMetadata || (clerkSignInFlow?.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
+        const hasMetadata = Boolean(
+          metadata?.profileCompleted ||
+          (metadata?.mobileNumber && metadata?.address) ||
+          currentUser?.profileCompleted
+        );
+
+        if (hasMetadata) {
+          if (metadata?.mobileNumber || metadata?.address) {
+            await useAuthStore.getState().saveOwnerProfile(
+              (metadata?.mobileNumber as string) || currentUser?.mobileNumber || '',
+              (metadata?.address as string) || currentUser?.address || '',
+            );
+          }
+          await useAuthStore.getState().markRegistrationComplete();
+          router.replace('/(main)');
+        } else {
+          router.replace('/(register)/owner');
+        }
+      } else {
         setSubmitting(false);
       }
-    },
-    [finish],
-  );
-
-  const handleAnother = useCallback(async () => {
-    if (!accountForm.validateAll()) {
-      haptic.warning();
-      return;
+    } catch (err: any) {
+      console.log('Clerk Google OAuth error:', err);
+      setError(err?.errors?.[0]?.longMessage || err?.message || 'We couldn’t sign you in with Google. Please try again.');
+      haptic.error();
+      setSubmitting(false);
+    } finally {
+      setSubmitting(false);
     }
-    await handleSelect(
-      accountForm.fields.fullName.value,
-      accountForm.fields.email.value,
-    );
-  }, [accountForm, handleSelect]);
+  }, [startOAuthFlow, router]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -97,75 +116,37 @@ export default function GoogleAuthScreen() {
 
         <View style={styles.content}>
           <View style={styles.googleBadge}>
-            <Ionicons name="logo-google" size={30} color="#4285F4" />
+            <Ionicons name="logo-google" size={32} color="#4285F4" />
           </View>
 
-          <Text style={styles.title}>Choose an account</Text>
-          <Text style={styles.subtitle}>to continue to SyncVet</Text>
+          <Text style={styles.title}>Google Sign-In</Text>
+          <Text style={styles.subtitle}>
+            Sign in with your verified Google Account to access the City Veterinary portal.
+          </Text>
 
-          <View style={styles.accountList}>
-            {DEMO_ACCOUNTS.map((account) => (
-              <AccountRow
-                key={account.email}
-                name={account.name}
-                email={account.email}
-                onPress={() => handleSelect(account.name, account.email)}
-                disabled={submitting}
-              />
-            ))}
-
+          <View style={styles.actionCard}>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Sign in with Google"
               disabled={submitting}
-              onPress={() => {
-                haptic.light();
-                setUseAnother((v) => !v);
-              }}
-              style={({ pressed }) => [styles.anotherRow, pressed && styles.pressed]}
+              onPress={handleGoogleSignIn}
+              style={({ pressed }) => [
+                styles.googleBtn,
+                shadows.sm,
+                pressed && styles.googleBtnPressed,
+                submitting && styles.googleBtnDisabled,
+              ]}
             >
-              <View style={styles.anotherIcon}>
-                <Ionicons name="person-add-outline" size={20} color={colors.primaryDark} />
-              </View>
-              <Text style={styles.anotherLabel}>Use another account</Text>
-              <Ionicons
-                name={useAnother ? 'chevron-up' : 'chevron-down'}
-                size={18}
-                color={colors.textMuted}
-              />
+              {submitting ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={20} color="#4285F4" />
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
+                </>
+              )}
             </Pressable>
           </View>
-
-          {useAnother ? (
-            <View style={styles.form}>
-              <Input
-                label="Full name"
-                value={accountForm.fields.fullName.value}
-                onChangeText={(v) => accountForm.setValue('fullName', v)}
-                onBlur={() => accountForm.validateField('fullName')}
-                error={accountForm.fields.fullName.error}
-                placeholder="Your name"
-                editable={!submitting}
-              />
-              <Input
-                label="Google email"
-                value={accountForm.fields.email.value}
-                onChangeText={(v) => accountForm.setValue('email', v)}
-                onBlur={() => accountForm.validateField('email')}
-                error={accountForm.fields.email.error}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="you@gmail.com"
-                editable={!submitting}
-              />
-              <Button
-                title="Continue"
-                size="md"
-                onPress={handleAnother}
-                loading={submitting}
-              />
-            </View>
-          ) : null}
 
           {error ? (
             <View style={styles.errorWrap}>
@@ -181,39 +162,6 @@ export default function GoogleAuthScreen() {
         </Text>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
-}
-
-function AccountRow({
-  name,
-  email,
-  onPress,
-  disabled,
-}: {
-  name: string;
-  email: string;
-  onPress: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Sign in as ${name}, ${email}`}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.accountRow, pressed && styles.accountRowPressed]}
-    >
-      <Avatar name={name} size={40} />
-      <View style={styles.accountText}>
-        <Text style={styles.accountName} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={styles.accountEmail} numberOfLines={1}>
-          {email}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-    </Pressable>
   );
 }
 
@@ -233,11 +181,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.xxl,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   googleBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
@@ -249,73 +198,48 @@ const styles = StyleSheet.create({
   title: {
     ...typography.heading2,
     color: colors.textPrimary,
+    textAlign: 'center',
   },
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
     marginTop: spacing.xs,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: spacing.md,
   },
-  accountList: {
+  actionCard: {
     marginTop: spacing.xxl,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
+    width: '100%',
   },
-  accountRow: {
+  googleBtn: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  accountRowPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  accountText: {
-    flex: 1,
-  },
-  accountName: {
-    ...typography.captionMedium,
-    color: colors.textPrimary,
-  },
-  accountEmail: {
-    ...typography.small,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  anotherRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  anotherIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.12)',
   },
-  anotherLabel: {
-    ...typography.captionMedium,
-    color: colors.primaryDark,
-    flex: 1,
-  },
-  pressed: {
+  googleBtnPressed: {
     backgroundColor: colors.surfaceMuted,
+    transform: [{ scale: 0.985 }],
   },
-  form: {
-    marginTop: spacing.lg,
-    gap: spacing.lg,
+  googleBtnDisabled: {
+    opacity: 0.7,
+  },
+  googleBtnText: {
+    ...typography.button,
+    color: colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '700',
   },
   errorWrap: {
     marginTop: spacing.lg,
+    width: '100%',
   },
   terms: {
     ...typography.small,

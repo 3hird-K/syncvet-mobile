@@ -102,16 +102,13 @@ export default function ProfileScreen() {
   const [phoneError, setPhoneError] = useState<string | undefined>();
   const [editError, setEditError] = useState<string | undefined>();
 
-  // Read pets from Clerk metadata
+  // Read pets exclusively from Clerk metadata
   const metadataPets: MetadataPet[] = useMemo(() => {
     if (Array.isArray(metadata.pets) && metadata.pets.length > 0) {
       return metadata.pets;
     }
-    if (localPets && localPets.length > 0) {
-      return localPets;
-    }
     return [];
-  }, [metadata.pets, localPets]);
+  }, [metadata.pets]);
 
   const [petsExpanded, setPetsExpanded] = useState(false);
   const DEFAULT_VISIBLE_PETS = 2;
@@ -122,12 +119,13 @@ export default function ProfileScreen() {
 
   const stats = useMemo(() => {
     const today = todayISO();
-    const upcoming = appointments.filter(
-      (a) => a.status !== 'cancelled' && a.status !== 'completed' && a.date >= today,
+    const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
+    const upcoming = metaAppts.filter(
+      (a: any) => a.status !== 'cancelled' && a.status !== 'completed' && a.date >= today,
     ).length;
-    const completed = appointments.filter((a) => a.status === 'completed').length;
+    const completed = metaAppts.filter((a: any) => a.status === 'completed').length;
     return { pets: metadataPets.length, upcoming, completed };
-  }, [metadataPets, appointments]);
+  }, [metadataPets, metadata.appointments]);
 
   const handleChangeProfilePhoto = async () => {
     try {
@@ -284,34 +282,21 @@ export default function ProfileScreen() {
     void Linking.openURL('tel:0888572260').catch(() => {});
   };
 
-  const handleLogout = () => {
-    haptic.medium();
-    Alert.alert(
-      'Log Out',
-      'Are you sure you want to log out of your SyncVet account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              haptic.light();
-              await clerkSignOut();
-              signOut();
-              toast.success('Logged out', {
-                description: 'You have been signed out of your account.',
-              });
-              router.replace('/welcome' as never);
-            } catch (e) {
-              console.log('Signout note:', e);
-              signOut();
-              router.replace('/welcome' as never);
-            }
-          },
-        },
-      ],
-    );
+  const handleLogout = async () => {
+    try {
+      haptic.medium();
+      await clerkSignOut();
+      signOut();
+      toast.success('Logged out', {
+        id: 'logout-success',
+        description: 'You have been signed out of your account.',
+      });
+      router.replace('/welcome' as never);
+    } catch (e) {
+      console.log('Signout note:', e);
+      signOut();
+      router.replace('/welcome' as never);
+    }
   };
 
   if (loading && !loaded && !user && !clerkUser) {
@@ -364,9 +349,9 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Change profile photo"
             >
-              <Avatar name={fullName} size={64} photoUrl={photoUrl} />
+              <Avatar name={fullName} size={54} photoUrl={photoUrl} />
               <View style={styles.cameraBadge}>
-                <Ionicons name="camera" size={13} color={colors.white} />
+                <Ionicons name="camera" size={11} color={colors.white} />
               </View>
             </Pressable>
 
@@ -497,7 +482,7 @@ export default function ProfileScreen() {
                       avatarId={pet.avatarId}
                       species={pet.species as any}
                       photoUrl={pet.photoUrl}
-                      size={46}
+                      size={40}
                     />
 
                     {/* Texts and Status on the Right */}
@@ -696,27 +681,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
-    paddingTop: 2,
+    marginBottom: 6,
+    paddingTop: 0,
   },
   screenHeading: {
     ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
   },
   headerButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   headerEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: 'rgba(0, 168, 150, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: 'rgba(0, 168, 150, 0.16)',
@@ -724,15 +709,15 @@ const styles = StyleSheet.create({
   headerEditText: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   headerLogoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.18)',
@@ -740,33 +725,33 @@ const styles = StyleSheet.create({
   headerLogoutText: {
     ...typography.captionBold,
     color: colors.error,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   heroCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    borderRadius: radius.lg,
+    padding: 10,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 8,
+    gap: 6,
   },
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   avatarWrap: {
     position: 'relative',
-    marginRight: 6,
+    marginRight: 2,
   },
   cameraBadge: {
     position: 'absolute',
     bottom: -1,
     right: -1,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -775,19 +760,19 @@ const styles = StyleSheet.create({
   },
   heroTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 1,
     paddingLeft: 2,
   },
   heroName: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   heroEmail: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12.5,
+    fontSize: 12,
   },
   heroPhoneRow: {
     flexDirection: 'row',
@@ -798,49 +783,49 @@ const styles = StyleSheet.create({
   heroPhoneText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 11,
   },
   heroAddressBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: 'rgba(7, 30, 38, 0.03)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.md,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
   },
   heroAddressText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 11,
     flex: 1,
   },
   statsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    gap: 6,
+    marginBottom: 6,
   },
   statBox: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingVertical: 6,
+    borderRadius: radius.md,
+    paddingVertical: 5,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
     gap: 1,
   },
   statIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statNumber: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   statLabel: {
@@ -849,19 +834,19 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
   },
   sectionBlock: {
-    marginBottom: spacing.sm,
+    marginBottom: 5,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
     paddingHorizontal: 2,
   },
   sectionTitle: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '700',
   },
   addPetHeaderBtn: {
@@ -873,22 +858,22 @@ const styles = StyleSheet.create({
   addPetHeaderText: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   emptyPetCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
+    borderRadius: radius.md,
+    padding: spacing.sm,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   emptyPetIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(0, 168, 150, 0.10)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -900,40 +885,41 @@ const styles = StyleSheet.create({
   emptyPetTitle: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '700',
   },
   emptyPetSub: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 10.5,
   },
   petsVerticalList: {
-    gap: 6,
+    gap: 5,
   },
   petListCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: 10,
+    borderRadius: radius.md,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: spacing.md,
+    gap: 10,
   },
   petRightInfo: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   petNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   petNameText: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 14.5,
+    fontSize: 13.5,
     fontWeight: '700',
   },
   vaccineTagSuccess: {
@@ -948,7 +934,7 @@ const styles = StyleSheet.create({
   vaccineTagSuccessText: {
     ...typography.captionBold,
     color: colors.success,
-    fontSize: 8.5,
+    fontSize: 8,
   },
   vaccineTagWarning: {
     flexDirection: 'row',
@@ -962,29 +948,29 @@ const styles = StyleSheet.create({
   vaccineTagWarningText: {
     ...typography.captionBold,
     color: colors.warning,
-    fontSize: 8.5,
+    fontSize: 8,
   },
   petBreedText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 11,
   },
   expandPetsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
+    gap: 4,
+    paddingVertical: 6,
     backgroundColor: 'rgba(0, 168, 150, 0.06)',
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'rgba(0, 168, 150, 0.14)',
-    marginTop: 2,
+    marginTop: 1,
   },
   expandPetsBtnText: {
     ...typography.captionBold,
     color: colors.primaryDark,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '700',
   },
   cvoCleanCard: {
@@ -992,9 +978,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#F3FAF8',
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: 'rgba(0, 168, 150, 0.15)',
     marginTop: 2,
@@ -1002,13 +988,13 @@ const styles = StyleSheet.create({
   cvoLeftRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
     flex: 1,
   },
   cvoBadgeIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 7,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1019,22 +1005,22 @@ const styles = StyleSheet.create({
   cvoTitle: {
     ...typography.title,
     color: colors.primaryDark,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   cvoSub: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 10.5,
+    fontSize: 9.5,
   },
   cvoCallBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.md,
+    paddingHorizontal: 8,
+    paddingVertical: 4.5,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: 'rgba(0, 168, 150, 0.25)',
   },
@@ -1044,10 +1030,10 @@ const styles = StyleSheet.create({
   cvoCallBtnText: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 11.5,
+    fontSize: 10.5,
   },
   footerSpacing: {
-    height: spacing.lg,
+    height: 4,
   },
   modalBackdrop: {
     flex: 1,

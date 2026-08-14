@@ -70,9 +70,9 @@ const VARIANT_STYLES = {
 } as const;
 
 const SIZE_STYLES: Record<ButtonSize, { height: number; paddingH: number; text: typeof typography.button }> = {
-  sm: { height: 40, paddingH: spacing.lg, text: typography.captionBold },
-  md: { height: 50, paddingH: spacing.xl, text: typography.button },
-  lg: { height: 56, paddingH: spacing.xl, text: typography.button },
+  sm: { height: 36, paddingH: spacing.md, text: typography.captionBold },
+  md: { height: 44, paddingH: spacing.lg, text: typography.button },
+  lg: { height: 48, paddingH: spacing.xl, text: typography.button },
 };
 
 export function Button({

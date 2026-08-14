@@ -534,13 +534,18 @@ export default function AuthScreen() {
         setConnectingGoogle(false);
       }
     } catch (err: any) {
-      console.warn('Google OAuth redirected to account selector:', err);
+      console.log('Google OAuth error:', err);
       setConnectingGoogle(false);
-      router.push('/(auth)/google');
+      setNetworkError(
+        err?.errors?.[0]?.longMessage ||
+        err?.message ||
+        'Could not sign in with Google. Please try again.',
+      );
+      haptic.error();
     } finally {
       setConnectingGoogle(false);
     }
-  }, [startOAuthFlow, router]);
+  }, [startOAuthFlow]);
 
   const handleForgot = useCallback(() => {
     haptic.light();

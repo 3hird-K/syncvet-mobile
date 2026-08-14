@@ -84,28 +84,20 @@ export default function AppointmentsScreen() {
   const listRef = useRef<FlatList<AppointmentTab>>(null);
   const scrollX = useSharedValue(0);
 
-  // 1. Get resident's real registered pets (Clerk metadata priority, fallback to local store)
+  // 1. Get resident's real registered pets exclusively from Clerk metadata
   const userPets = useMemo(() => {
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
 
-    if (metaPets.length > 0) {
-      return metaPets.map((p, idx) => ({
-        id: p.id || `clerk-pet-${idx}`,
-        name: p.name || 'My Pet',
-        species: p.species || 'dog',
-        breed: p.breed || '',
-      }));
-    }
+    return metaPets.map((p, idx) => ({
+      id: p.id || `clerk-pet-${idx}`,
+      name: p.name || 'My Pet',
+      species: p.species || 'dog',
+      breed: p.breed || '',
+    }));
+  }, [clerkUser?.unsafeMetadata]);
 
-    if (localPets && localPets.length > 0) {
-      return localPets;
-    }
-
-    return [];
-  }, [clerkUser?.unsafeMetadata, localPets]);
-
-  // 2. Filter appointments to strictly belong to the user's active pets
+  // 2. Filter appointments strictly from user's Clerk metadata appointments
   const { upcoming, past } = useMemo(() => {
     const today = todayISO();
     const validPetIds = new Set(userPets.map((p) => p.id));
@@ -113,10 +105,9 @@ export default function AppointmentsScreen() {
 
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
-    const rawList = metaAppts.length > 0 ? metaAppts : localAppointments;
 
     // Filter to only include appointments for pets the user actually owns
-    const filteredAppts = (rawList as Appointment[]).filter((a) => {
+    const filteredAppts = (metaAppts as Appointment[]).filter((a) => {
       if (!a) return false;
       const matchesId = a.petId ? validPetIds.has(a.petId) : false;
       const matchesName = a.petName ? validPetNames.has(a.petName.toLowerCase().trim()) : false;
@@ -136,7 +127,7 @@ export default function AppointmentsScreen() {
       .sort((a, b) => `${b.date}${b.timeSlot}`.localeCompare(`${a.date}${a.timeSlot}`));
 
     return { upcoming: upcomingList, past: pastList };
-  }, [userPets, clerkUser?.unsafeMetadata, localAppointments]);
+  }, [userPets, clerkUser?.unsafeMetadata]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {

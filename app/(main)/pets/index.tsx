@@ -51,43 +51,26 @@ export default function PetsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  // Extract pets from Clerk metadata + local data store
+  // Extract pets solely from Clerk user metadata
   const allPets: DisplayPet[] = useMemo(() => {
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
 
-    if (metaPets.length > 0) {
-      return metaPets.map((p, idx) => ({
-        id: p.id || `clerk-pet-${idx}`,
-        name: p.name || 'My Pet',
-        species: p.species || 'dog',
-        breed: p.breed || '',
-        gender: p.gender || '',
-        birthYear: p.birthYear,
-        isVaccinated: Boolean(p.isVaccinated),
-        isSpayedNeutered: Boolean(p.isSpayedNeutered),
-        weightCategory: p.weightCategory,
-        notes: p.notes,
-        avatarId: p.avatarId,
-        photoUrl: p.photoUrl,
-      }));
-    }
-
-    if (localPets && localPets.length > 0) {
-      return localPets.map((p) => ({
-        id: p.id,
-        name: p.name,
-        species: p.species,
-        breed: p.breed,
-        gender: p.gender,
-        birthYear: p.birthYear,
-        isVaccinated: true,
-        isSpayedNeutered: false,
-      }));
-    }
-
-    return [];
-  }, [clerkUser?.unsafeMetadata, localPets]);
+    return metaPets.map((p, idx) => ({
+      id: p.id || `clerk-pet-${idx}`,
+      name: p.name || 'My Pet',
+      species: p.species || 'dog',
+      breed: p.breed || '',
+      gender: p.gender || '',
+      birthYear: p.birthYear,
+      isVaccinated: Boolean(p.isVaccinated),
+      isSpayedNeutered: Boolean(p.isSpayedNeutered),
+      weightCategory: p.weightCategory,
+      notes: p.notes,
+      avatarId: p.avatarId,
+      photoUrl: p.photoUrl,
+    }));
+  }, [clerkUser?.unsafeMetadata]);
 
   // Filter & search
   const filteredPets = useMemo(() => {

@@ -215,38 +215,30 @@ export default function NewAppointmentScreen() {
     scrollX.value = e.contentOffset.x;
   });
 
-  // Load resident's pets
+  // Load resident's real registered pets exclusively from Clerk metadata
   const allPets = useMemo(() => {
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-    if (metaPets.length > 0) {
-      return metaPets.map((p: any, idx: number) => ({
-        id: p.id || `clerk-pet-${idx}`,
-        ownerId: ownerId,
-        name: p.name || 'My Pet',
-        species: p.species || 'dog',
-        breed: p.breed || '',
-        gender: p.gender || '',
-        birthYear: p.birthYear,
-        isVaccinated: Boolean(p.isVaccinated),
-        isSpayedNeutered: Boolean(p.isSpayedNeutered),
-        weightCategory: p.weightCategory || 'Medium',
-        notes: p.notes,
-        avatarId: p.avatarId,
-        photoUrl: p.photoUrl,
-        vaccinationDoses: p.vaccinationDoses,
-        lastVaccinationDate: p.lastVaccinationDate,
-        nextVaccinationDate: p.nextVaccinationDate,
-        createdAt: p.createdAt || new Date().toISOString(),
-      }));
-    }
-
-    if (localPets && localPets.length > 0) {
-      return localPets;
-    }
-
-    return [];
-  }, [clerkUser?.unsafeMetadata, localPets, ownerId]);
+    return metaPets.map((p: any, idx: number) => ({
+      id: p.id || `clerk-pet-${idx}`,
+      ownerId: ownerId,
+      name: p.name || 'My Pet',
+      species: p.species || 'dog',
+      breed: p.breed || '',
+      gender: p.gender || '',
+      birthYear: p.birthYear,
+      isVaccinated: Boolean(p.isVaccinated),
+      isSpayedNeutered: Boolean(p.isSpayedNeutered),
+      weightCategory: p.weightCategory || 'Medium',
+      notes: p.notes,
+      avatarId: p.avatarId,
+      photoUrl: p.photoUrl,
+      vaccinationDoses: p.vaccinationDoses,
+      lastVaccinationDate: p.lastVaccinationDate,
+      nextVaccinationDate: p.nextVaccinationDate,
+      createdAt: p.createdAt || new Date().toISOString(),
+    }));
+  }, [clerkUser?.unsafeMetadata, ownerId]);
 
   // Initial form values derived from params
   const initialPetId = params.petId || (allPets.length > 0 ? allPets[0].id : undefined);

@@ -40,9 +40,20 @@ export function PetAvatarPickerModal({
   species = 'dog',
   petName = 'Pet',
 }: PetAvatarPickerModalProps) {
-  const isDefaultCat = species?.toLowerCase() === 'cat';
-  const [activeTab, setActiveTab] = useState<'dog' | 'cat'>(isDefaultCat ? 'cat' : 'dog');
+  const normalizedSpecies = species?.toLowerCase() === 'cat' ? 'cat' : 'dog';
+  const [activeTab, setActiveTab] = useState<'dog' | 'cat'>(normalizedSpecies);
   const [selectedId, setSelectedId] = useState<string | undefined>(currentAvatarId);
+
+  // Sync activeTab whenever modal opens or species changes
+  React.useEffect(() => {
+    if (visible) {
+      setActiveTab(normalizedSpecies);
+      setSelectedId(currentAvatarId);
+    }
+  }, [visible, normalizedSpecies, currentAvatarId]);
+
+  const isDogDisabled = normalizedSpecies === 'cat';
+  const isCatDisabled = normalizedSpecies === 'dog';
 
   const avatarsToDisplay: PetAvatarOption[] = activeTab === 'dog' ? DOG_AVATARS : CAT_AVATARS;
 
@@ -108,19 +119,22 @@ export function PetAvatarPickerModal({
             <View style={styles.tabsRow}>
               <Pressable
                 onPress={() => {
+                  if (isDogDisabled) return;
                   haptic.light();
                   setActiveTab('dog');
                 }}
+                disabled={isDogDisabled}
                 style={[
                   styles.tabBtn,
                   activeTab === 'dog' && styles.tabBtnActive,
+                  isDogDisabled && styles.tabBtnDisabled,
                 ]}
               >
-                <Text style={styles.tabEmoji}>🐶</Text>
                 <Text
                   style={[
                     styles.tabBtnText,
                     activeTab === 'dog' && styles.tabBtnTextActive,
+                    isDogDisabled && styles.tabBtnTextDisabled,
                   ]}
                 >
                   Dog Avatars ({DOG_AVATARS.length})
@@ -129,19 +143,22 @@ export function PetAvatarPickerModal({
 
               <Pressable
                 onPress={() => {
+                  if (isCatDisabled) return;
                   haptic.light();
                   setActiveTab('cat');
                 }}
+                disabled={isCatDisabled}
                 style={[
                   styles.tabBtn,
                   activeTab === 'cat' && styles.tabBtnActive,
+                  isCatDisabled && styles.tabBtnDisabled,
                 ]}
               >
-                <Text style={styles.tabEmoji}>🐱</Text>
                 <Text
                   style={[
                     styles.tabBtnText,
                     activeTab === 'cat' && styles.tabBtnTextActive,
+                    isCatDisabled && styles.tabBtnTextDisabled,
                   ]}
                 >
                   Cat Avatars ({CAT_AVATARS.length})
@@ -290,8 +307,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...shadows.sm,
   },
-  tabEmoji: {
-    fontSize: 14,
+  tabBtnDisabled: {
+    opacity: 0.35,
   },
   tabBtnText: {
     ...typography.captionBold,
@@ -300,6 +317,9 @@ const styles = StyleSheet.create({
   },
   tabBtnTextActive: {
     color: colors.primary,
+  },
+  tabBtnTextDisabled: {
+    color: colors.textMuted,
   },
   uploadCard: {
     flexDirection: 'row',

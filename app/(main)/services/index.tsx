@@ -38,27 +38,21 @@ export default function ServicesScreen() {
   const ownerId = useAuthStore((state) => state.user?.id) || 'cdo-resident-user';
   const localPets = useDataStore((state) => state.pets);
 
-  // Load strictly user's registered pets
+  // Load strictly user's real registered pets from Clerk metadata
   const userPets = useMemo(() => {
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-    if (metaPets.length > 0) {
-      return metaPets.map((p: any, idx: number) => ({
-        id: p.id || `clerk-pet-${idx}`,
-        ownerId,
-        name: p.name || 'My Pet',
-        species: p.species || 'dog',
-        breed: p.breed || '',
-        avatarId: p.avatarId,
-        photoUrl: p.photoUrl,
-        isVaccinated: Boolean(p.isVaccinated),
-      }));
-    }
-    if (localPets && localPets.length > 0) {
-      return localPets;
-    }
-    return [];
-  }, [clerkUser?.unsafeMetadata, localPets, ownerId]);
+    return metaPets.map((p: any, idx: number) => ({
+      id: p.id || `clerk-pet-${idx}`,
+      ownerId,
+      name: p.name || 'My Pet',
+      species: p.species || 'dog',
+      breed: p.breed || '',
+      avatarId: p.avatarId,
+      photoUrl: p.photoUrl,
+      isVaccinated: Boolean(p.isVaccinated),
+    }));
+  }, [clerkUser?.unsafeMetadata, ownerId]);
 
   const [selectedPetId, setSelectedPetId] = useState<string | undefined>(
     params.pet || (userPets.length > 0 ? userPets[0].id : undefined),

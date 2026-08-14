@@ -365,7 +365,7 @@ export default function PetRegistrationScreen() {
                     avatarId={avatarId}
                     species={species}
                     photoUrl={customPhotoUri}
-                    size={52}
+                    size={44}
                     showCameraBadge
                   />
 
@@ -414,7 +414,7 @@ export default function PetRegistrationScreen() {
             <View style={styles.bottom}>
               <Button
                 title="Continue to Breed & Age"
-                size="lg"
+                size="md"
                 onPress={handlePart1Next}
                 variant="primary"
                 showPaw
@@ -832,39 +832,41 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   form: {
-    gap: spacing.lg,
+    gap: 12,
   },
   fieldBlock: {
-    gap: spacing.xs,
+    gap: 3,
   },
   avatarPickerCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: 10,
+    borderRadius: radius.lg,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.08)',
-    gap: 12,
+    gap: 10,
   },
   avatarPickerTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   avatarPickerTitle: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 12.5,
   },
   avatarPickerSub: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 10.5,
   },
   sectionLabel: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    marginBottom: 4,
+    marginBottom: 2,
+    fontSize: 12.5,
   },
   ageHeaderRow: {
     flexDirection: 'row',
@@ -926,8 +928,8 @@ const styles = StyleSheet.create({
     minHeight: 74,
   },
   bottom: {
-    marginTop: spacing.xl,
-    paddingTop: spacing.sm,
-    gap: spacing.lg,
+    marginTop: spacing.md,
+    paddingTop: 2,
+    gap: spacing.md,
   },
 });

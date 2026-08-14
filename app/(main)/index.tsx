@@ -50,36 +50,28 @@ export default function HomeScreen() {
     'Resident';
   const displayPhoto = clerkUser?.imageUrl || user?.photoUrl;
 
-  // Seamless merge of Clerk metadata pets and local store pets
+  // Real data exclusively from Clerk user metadata
   const allPets: Pet[] = useMemo(() => {
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
 
-    if (metaPets.length > 0) {
-      return metaPets.map((p, idx) => ({
-        id: p.id || `clerk-pet-${idx}`,
-        ownerId: user?.id || '',
-        name: p.name || 'My Pet',
-        species: p.species || 'dog',
-        breed: p.breed || '',
-        gender: p.gender || 'male',
-        birthYear: p.birthYear,
-        isVaccinated: Boolean(p.isVaccinated),
-        isSpayedNeutered: Boolean(p.isSpayedNeutered),
-        weightCategory: p.weightCategory || 'medium',
-        notes: p.notes,
-        avatarId: p.avatarId,
-        photoUrl: p.photoUrl,
-        createdAt: p.createdAt || new Date().toISOString(),
-      }));
-    }
-
-    if (localPets && localPets.length > 0) {
-      return localPets;
-    }
-
-    return [];
-  }, [clerkUser?.unsafeMetadata, localPets, user?.id]);
+    return metaPets.map((p, idx) => ({
+      id: p.id || `clerk-pet-${idx}`,
+      ownerId: user?.id || clerkUser?.id || '',
+      name: p.name || 'My Pet',
+      species: p.species || 'dog',
+      breed: p.breed || '',
+      gender: p.gender || 'male',
+      birthYear: p.birthYear,
+      isVaccinated: Boolean(p.isVaccinated),
+      isSpayedNeutered: Boolean(p.isSpayedNeutered),
+      weightCategory: p.weightCategory || 'medium',
+      notes: p.notes,
+      avatarId: p.avatarId,
+      photoUrl: p.photoUrl,
+      createdAt: p.createdAt || new Date().toISOString(),
+    }));
+  }, [clerkUser?.unsafeMetadata, user?.id, clerkUser?.id]);
 
   const vaccinatedCount = useMemo(
     () => allPets.filter((p) => p.isVaccinated).length,
@@ -93,9 +85,8 @@ export default function HomeScreen() {
 
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
-    const pool = metaAppts.length > 0 ? metaAppts : appointments;
 
-    return pool
+    return metaAppts
       .filter((a) => {
         if (!a) return false;
         const matchesId = a.petId ? validPetIds.has(a.petId) : false;
@@ -107,7 +98,7 @@ export default function HomeScreen() {
         );
       })
       .sort((a, b) => (a.date === b.date ? a.timeSlot.localeCompare(b.timeSlot) : a.date.localeCompare(b.date)));
-  }, [allPets, clerkUser?.unsafeMetadata, appointments]);
+  }, [allPets, clerkUser?.unsafeMetadata]);
 
   const nextAppointment = upcomingAppointments[0];
   const recentActivity = useMemo(() => activity.slice(0, 4), [activity]);

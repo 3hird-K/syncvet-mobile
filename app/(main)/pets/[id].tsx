@@ -71,20 +71,20 @@ export default function PetProfileScreen() {
   }, [clerkUser?.unsafeMetadata, ownerId]);
 
   const pet = useMemo(
-    () => pets.find((p) => p.id === id) || metadataPets.find((p) => p.id === id),
-    [pets, metadataPets, id],
+    () => metadataPets.find((p) => p.id === id) || pets.find((p) => p.id === id),
+    [metadataPets, pets, id],
   );
 
   const [customAvatarId, setCustomAvatarId] = useState<string | undefined>(pet?.avatarId);
   const [customPhotoUrl, setCustomPhotoUrl] = useState<string | undefined>(pet?.photoUrl);
 
-  const petAppointments = useMemo(
-    () =>
-      appointments
-        .filter((a) => a.petId === id)
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [appointments, id],
-  );
+  const petAppointments = useMemo(() => {
+    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
+    const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
+    return (metaAppts as any[])
+      .filter((a) => a.petId === id || (pet?.name && a.petName?.toLowerCase().trim() === pet.name.toLowerCase().trim()))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [clerkUser?.unsafeMetadata, id, pet?.name]);
 
   const vaccineHistory = useMemo(
     () =>
