@@ -12,7 +12,7 @@ import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
-import { getFirstName, todayISO } from '@lib/format';
+import { getFirstName, todayISO, formatAge, ageFromBirthYear } from '@lib/format';
 import { SERVICES } from '@lib/services';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
@@ -23,6 +23,7 @@ import { Screen } from '@components/ui/Screen';
 import { SectionHeader } from '@components/ui/SectionHeader';
 import { PetCard } from '@components/ui/PetCard';
 import { PetCoverFlowCarousel } from '@components/ui/PetCoverFlowCarousel';
+import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { ServiceCard } from '@components/ui/ServiceCard';
 import { AppointmentCard } from '@components/ui/AppointmentCard';
 import { ActivityRow } from '@components/ui/ActivityRow';
@@ -153,6 +154,105 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* If owner has exactly 1 pet: Showcase their featured Pet Health Passport card above the registry */}
+        {allPets.length === 1 && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.singlePetHeroCard,
+              shadows.sm,
+              pressed && styles.singlePetHeroCardPressed,
+            ]}
+            onPress={() => {
+              haptic.light();
+              router.push(`/pets/${allPets[0].id}` as never);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`${allPets[0].name}’s Health Passport`}
+          >
+            <View style={styles.singlePetAvatarWrap}>
+              <PopoutPetAvatar
+                avatarId={allPets[0].avatarId}
+                species={allPets[0].species}
+                photoUrl={allPets[0].photoUrl}
+                size={58}
+              />
+            </View>
+
+            <View style={styles.singlePetInfoWrap}>
+              <View style={styles.singlePetNameRow}>
+                <Text style={styles.singlePetNameText} numberOfLines={1}>
+                  {allPets[0].name}
+                </Text>
+                <View
+                  style={
+                    allPets[0].isVaccinated
+                      ? styles.singlePetVaxBadge
+                      : styles.singlePetVaxBadgeWarning
+                  }
+                >
+                  <Ionicons
+                    name={
+                      allPets[0].isVaccinated
+                        ? 'shield-checkmark'
+                        : 'alert-circle'
+                    }
+                    size={10}
+                    color={
+                      allPets[0].isVaccinated
+                        ? colors.success
+                        : colors.warning
+                    }
+                  />
+                  <Text
+                    style={
+                      allPets[0].isVaccinated
+                        ? styles.singlePetVaxText
+                        : styles.singlePetVaxTextWarning
+                    }
+                  >
+                    {allPets[0].isVaccinated ? 'Protected' : 'Needs Shot'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.singlePetSubText} numberOfLines={1}>
+                {allPets[0].breed ||
+                  (allPets[0].species?.toLowerCase() === 'dog' ? 'Dog' : 'Cat')}
+                {allPets[0].birthYear
+                  ? ` · ${formatAge(ageFromBirthYear(allPets[0].birthYear))}`
+                  : ''}
+              </Text>
+
+              <View style={styles.singlePetPassportLinkRow}>
+                <Text style={styles.singlePetPassportLinkText}>
+                  Digital Health Passport
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={13}
+                  color={colors.primary}
+                />
+              </View>
+            </View>
+          </Pressable>
+        )}
+
+        {allPets.length > 1 && (
+          <View style={styles.topCarouselSection}>
+            <PetCoverFlowCarousel
+              pets={allPets}
+              onSelectPet={(pet) => {
+                haptic.light();
+                if (pet?.id) {
+                  router.push(`/pets/${pet.id}` as never);
+                } else {
+                  router.push('/pets' as never);
+                }
+              }}
+            />
+          </View>
+        )}
+
         {/* 2. Unified Pet Health Registry Overview Card */}
         <View style={[styles.overviewCard, shadows.sm]}>
           <View style={styles.overviewTop}>
@@ -215,22 +315,6 @@ export default function HomeScreen() {
             </View>
             <Ionicons name="call-outline" size={13} color={colors.primary} />
           </Pressable>
-        </View>
-
-        {/* 3. My Pets 3D Cover Flow Carousel */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="My Pets"
-            actionLabel={`See all (${allPets.length})`}
-            onAction={() => router.push('/pets' as never)}
-          />
-          <PetCoverFlowCarousel
-            pets={allPets}
-            onSelectPet={() => {
-              haptic.light();
-              router.push('/pets' as never);
-            }}
-          />
         </View>
 
         {/* 4. Upcoming Visit / Preventive Care Banner */}
@@ -402,6 +486,94 @@ const styles = StyleSheet.create({
   },
   avatarWrap: {
     borderRadius: 21,
+  },
+  singlePetHeroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xxl,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.16)',
+    marginBottom: spacing.md,
+    gap: 12,
+  },
+  singlePetHeroCardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.99 }],
+  },
+  singlePetAvatarWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 2,
+  },
+  singlePetInfoWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  singlePetNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  singlePetNameText: {
+    ...typography.heading2,
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '800',
+    flex: 1,
+  },
+  singlePetVaxBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(16, 185, 129, 0.10)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+  },
+  singlePetVaxText: {
+    ...typography.captionBold,
+    color: colors.success,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  singlePetVaxBadgeWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+  },
+  singlePetVaxTextWarning: {
+    ...typography.captionBold,
+    color: colors.warning,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  singlePetSubText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  singlePetPassportLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 2,
+  },
+  singlePetPassportLinkText: {
+    ...typography.captionBold,
+    color: colors.primary,
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  topCarouselSection: {
+    marginBottom: spacing.md,
+    overflow: 'visible',
   },
   overviewCard: {
     backgroundColor: colors.surface,

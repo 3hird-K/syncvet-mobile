@@ -58,33 +58,34 @@ function CoverFlowCard({
     const scale = interpolate(
       diff,
       [-1.5, -1, 0, 1, 1.5],
-      [0.76, 0.84, 1.0, 0.84, 0.76],
+      [0.72, 0.82, 1.0, 0.82, 0.72],
       Extrapolation.CLAMP,
     );
 
-    // Fade cards that are in the background
-    const opacity = interpolate(
+    // Subtle drop for side cards so the active card stands elevated
+    const translateY = interpolate(
       diff,
-      [-1.5, -1, 0, 1, 1.5],
-      [0.45, 0.72, 1.0, 0.72, 0.45],
+      [-1, 0, 1],
+      [6, 0, 6],
       Extrapolation.CLAMP,
     );
 
-    // 3D inward rotation towards center
+    // Gentle inward 3D rotation
     const rotateY = interpolate(
       diff,
       [-1, 0, 1],
-      [-30, 0, 30],
+      [-14, 0, 14],
       Extrapolation.CLAMP,
     );
 
-    const zIndex = Math.round(100 - Math.abs(diff) * 10);
+    const zIndex = Math.round(100 - Math.abs(diff) * 20);
 
     return {
       zIndex,
-      opacity,
+      opacity: 1,
       transform: [
-        { perspective: 900 },
+        { perspective: 1000 },
+        { translateY },
         { scale },
         { rotateY: `${rotateY}deg` },
       ],
@@ -109,17 +110,14 @@ function CoverFlowCard({
         accessibilityRole="button"
         accessibilityLabel={`${pet.name}, ${pet.breed || pet.species}, ${age}`}
       >
-        {/* Clipped Card Surface Backdrop */}
-        <View style={styles.cardClippedBackdrop} />
-
-        {/* Center Extra-Large 3D Popout Avatar */}
+        {/* Card Body with Clean Clipping */}
         <View style={styles.avatarStage}>
           <PopoutPetAvatar
             avatarId={pet.avatarId}
             species={pet.species}
             photoUrl={pet.photoUrl}
-            size={136}
-            scale={1.65}
+            size={116}
+            scale={1.42}
           />
         </View>
 
@@ -144,12 +142,36 @@ export function PetCoverFlowCarousel({
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const scrollX = useSharedValue(0);
+  const scrollRef = React.useRef<Animated.ScrollView>(null);
 
   // Enlarged Cover Flow Card Dimensions
   const cardWidth = Math.min(Math.round(windowWidth * 0.68), 256);
   const cardHeight = Math.round(cardWidth * 1.18); // ~302px
   const snapInterval = Math.round(cardWidth * 0.74); // ~190px
   const sideSpacer = Math.round((windowWidth - snapInterval) / 2);
+
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const activeIndexRef = React.useRef(0);
+  activeIndexRef.current = activeIndex;
+  const isInteracting = React.useRef(false);
+
+  // Auto-switch pet card every 3 seconds when pets > 1
+  React.useEffect(() => {
+    if (pets.length <= 1) return;
+
+    const timer = setInterval(() => {
+      if (isInteracting.current) return;
+      const nextIndex = (activeIndexRef.current + 1) % pets.length;
+      activeIndexRef.current = nextIndex;
+      setActiveIndex(nextIndex);
+      scrollRef.current?.scrollTo({
+        x: nextIndex * snapInterval,
+        animated: true,
+      });
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [pets.length, snapInterval]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -162,6 +184,8 @@ export function PetCoverFlowCarousel({
       haptic.light();
       if (onSelectPet) {
         onSelectPet(pet);
+      } else if (pet.id) {
+        router.push(`/pets/${pet.id}` as never);
       } else {
         router.push('/pets' as never);
       }
@@ -194,56 +218,130 @@ export function PetCoverFlowCarousel({
   }
 
   return (
-    <View style={[styles.carouselContainer, { height: cardHeight + 24 }]}>
-      <Animated.ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={snapInterval}
-        decelerationRate="fast"
-        bounces={false}
-        scrollEventThrottle={16}
-        onScroll={scrollHandler}
-        contentContainerStyle={[
-          styles.scrollTrack,
-          {
-            paddingLeft: sideSpacer,
-            paddingRight: sideSpacer,
-            height: cardHeight + 24,
-          },
-        ]}
-      >
-        {pets.map((pet, index) => (
-          <View
-            key={pet.id}
-            style={{
-              width: snapInterval,
-              height: cardHeight,
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'visible',
-            }}
-          >
-            <CoverFlowCard
-              pet={pet}
-              index={index}
-              scrollX={scrollX}
-              cardWidth={cardWidth}
-              cardHeight={cardHeight}
-              snapInterval={snapInterval}
-              onPress={() => handleCardPress(pet)}
-            />
-          </View>
-        ))}
-      </Animated.ScrollView>
+    <View style={styles.outerWrapper}>
+      <View style={[styles.carouselContainer, { height: cardHeight + 20 }]}>
+        <Animated.ScrollView
+          ref={scrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={snapInterval}
+          decelerationRate="fast"
+          bounces={false}
+          scrollEventThrottle={16}
+          onScroll={scrollHandler}
+          onScrollBeginDrag={() => {
+            isInteracting.current = true;
+          }}
+          onScrollEndDrag={() => {
+            setTimeout(() => {
+              isInteracting.current = false;
+            }, 2500);
+          }}
+          onMomentumScrollEnd={(e) => {
+            const x = e.nativeEvent.contentOffset.x;
+            const index = Math.round(x / snapInterval);
+            const clamped = Math.max(0, Math.min(index, pets.length - 1));
+            activeIndexRef.current = clamped;
+            setActiveIndex(clamped);
+            setTimeout(() => {
+              isInteracting.current = false;
+            }, 1500);
+          }}
+          contentContainerStyle={[
+            styles.scrollTrack,
+            {
+              paddingLeft: sideSpacer,
+              paddingRight: sideSpacer,
+              height: cardHeight + 20,
+            },
+          ]}
+        >
+          {pets.map((pet, index) => (
+            <View
+              key={pet.id}
+              style={{
+                width: snapInterval,
+                height: cardHeight,
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'visible',
+              }}
+            >
+              <CoverFlowCard
+                pet={pet}
+                index={index}
+                scrollX={scrollX}
+                cardWidth={cardWidth}
+                cardHeight={cardHeight}
+                snapInterval={snapInterval}
+                onPress={() => handleCardPress(pet)}
+              />
+            </View>
+          ))}
+        </Animated.ScrollView>
+      </View>
+
+      {/* Modern Switching Indicator Dots */}
+      {pets.length > 1 && (
+        <View style={styles.paginationDotsRow}>
+          {pets.map((pet, idx) => {
+            const isActive = idx === activeIndex;
+            return (
+              <Pressable
+                key={pet.id}
+                onPress={() => {
+                  haptic.light();
+                  activeIndexRef.current = idx;
+                  setActiveIndex(idx);
+                  scrollRef.current?.scrollTo({
+                    x: idx * snapInterval,
+                    animated: true,
+                  });
+                }}
+                style={[
+                  styles.dot,
+                  isActive ? styles.dotActive : styles.dotInactive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Go to pet ${idx + 1}`}
+              />
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
+  },
   carouselContainer: {
     marginHorizontal: -spacing.md,
     overflow: 'visible',
     justifyContent: 'center',
+  },
+  paginationDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  dot: {
+    height: 6,
+    borderRadius: 3,
+  },
+  dotActive: {
+    width: 20,
+    backgroundColor: colors.primary,
+  },
+  dotInactive: {
+    width: 6,
+    backgroundColor: 'rgba(7, 30, 38, 0.15)',
   },
   scrollTrack: {
     alignItems: 'center',
@@ -260,33 +358,23 @@ const styles = StyleSheet.create({
     height: '100%',
     padding: 14,
     justifyContent: 'space-between',
-    overflow: 'visible',
-    position: 'relative',
-  },
-  cardPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  cardClippedBackdrop: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
     borderRadius: 26,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.08)',
     overflow: 'hidden',
+    position: 'relative',
+  },
+  cardPressed: {
+    transform: [{ scale: 0.98 }],
   },
   avatarStage: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
+    marginTop: 10,
     position: 'relative',
-    height: 154,
+    height: 140,
     zIndex: 10,
-    elevation: 10,
-    overflow: 'visible',
   },
   bottomInfoWrap: {
     alignItems: 'center',
