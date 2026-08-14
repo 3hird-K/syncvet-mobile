@@ -15,6 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@theme';
 
@@ -34,6 +35,7 @@ export interface ButtonProps {
   showPaw?: boolean;
   accessibilityLabel?: string;
   testID?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
 const VARIANT_STYLES = {
@@ -72,7 +74,7 @@ const VARIANT_STYLES = {
 const SIZE_STYLES: Record<ButtonSize, { height: number; paddingH: number; text: typeof typography.button }> = {
   sm: { height: 36, paddingH: spacing.md, text: typography.captionBold },
   md: { height: 44, paddingH: spacing.lg, text: typography.button },
-  lg: { height: 48, paddingH: spacing.xl, text: typography.button },
+  lg: { height: 52, paddingH: spacing.xl, text: typography.button },
 };
 
 export function Button({
@@ -88,6 +90,7 @@ export function Button({
   showPaw = false,
   accessibilityLabel,
   testID,
+  style,
 }: ButtonProps) {
   const reducedMotion = useReducedMotion();
   const scale = useSharedValue(1);
@@ -186,6 +189,7 @@ export function Button({
           opacity: isDisabled ? (variant === 'primary' || variant === 'danger' ? 0.55 : 0.4) : 1,
           alignSelf: fullWidth ? 'stretch' : 'flex-start',
         },
+        style,
         pressed && styles.pressed,
       ]}
     >

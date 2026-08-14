@@ -22,6 +22,7 @@ import { Button } from '@components/ui/Button';
 import { BackButton } from '@components/ui/BackButton';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { BackgroundDecoration } from '@components/ui/BackgroundDecoration';
+import { PawLoadingOverlay } from '@components/ui/PawLoading';
 
 export default function GoogleAuthScreen() {
   const router = useRouter();
@@ -163,6 +164,8 @@ export default function GoogleAuthScreen() {
           <Text style={styles.link}>Privacy Policy</Text>.
         </Text>
       </KeyboardAvoidingView>
+
+      <PawLoadingOverlay visible={submitting} />
     </SafeAreaView>
   );
 }

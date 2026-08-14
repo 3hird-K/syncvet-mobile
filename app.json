@@ -8,9 +8,11 @@
     "userInterfaceStyle": "light",
     "scheme": "syncvet",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.syncvet.app"
     },
     "android": {
+      "package": "com.syncvet.app",
       "adaptiveIcon": {
         "backgroundColor": "#0A6E64",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -18,15 +20,6 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
-    },
-    "androidStatusBar": {
-      "barStyle": "dark-content",
-      "backgroundColor": "#00000000",
-      "translucent": true
-    },
-    "androidNavigationBar": {
-      "barStyle": "dark-content",
-      "backgroundColor": "#00000000"
     },
     "web": {
       "favicon": "./assets/favicon.png"

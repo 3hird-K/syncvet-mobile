@@ -16,6 +16,7 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { getFirstName, todayISO, formatAge, ageFromBirthYear } from '@lib/format';
 import { SERVICES } from '@lib/services';
 import { haptic } from '@lib/haptics';
+import { getUserActivities } from '@lib/clerkMetadata';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
@@ -101,7 +102,10 @@ export default function HomeScreen() {
   }, [allPets, clerkUser?.unsafeMetadata]);
 
   const nextAppointment = upcomingAppointments[0];
-  const recentActivity = useMemo(() => activity.slice(0, 4), [activity]);
+  const recentActivity = useMemo(
+    () => getUserActivities(clerkUser).slice(0, 4),
+    [clerkUser?.unsafeMetadata],
+  );
 
   const goService = useCallback(
     (id: string) => {
@@ -597,11 +601,11 @@ export default function HomeScreen() {
         </Animated.View>
 
         {/* 8. Recent Activity */}
-        {recentActivity.length > 0 ? (
-          <Animated.View entering={FadeInDown.delay(300).duration(240)} style={styles.section}>
-            <SectionHeader title="Recent Activity" />
-            <View style={[styles.activityCard, shadows.sm]}>
-              {recentActivity.map((item, index) => (
+        <Animated.View entering={FadeInDown.delay(300).duration(240)} style={styles.section}>
+          <SectionHeader title="Recent Activity" />
+          <View style={[styles.activityCard, shadows.sm]}>
+            {recentActivity.length > 0 ? (
+              recentActivity.map((item, index) => (
                 <ActivityRow
                   key={item.id}
                   title={item.title}
@@ -610,10 +614,18 @@ export default function HomeScreen() {
                   type={item.type}
                   isLast={index === recentActivity.length - 1}
                 />
-              ))}
-            </View>
-          </Animated.View>
-        ) : null}
+              ))
+            ) : (
+              <View style={styles.emptyActivityBox}>
+                <Ionicons name="time-outline" size={24} color={colors.textMuted} />
+                <Text style={styles.emptyActivityTitle}>No recent activity yet</Text>
+                <Text style={styles.emptyActivitySub}>
+                  Your registered pets and appointment bookings will show up here.
+                </Text>
+              </View>
+            )}
+          </View>
+        </Animated.View>
 
         <View style={styles.footerSpacing} />
       </Screen>
@@ -648,21 +660,21 @@ const styles = StyleSheet.create({
   eyebrowText: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 10,
-    letterSpacing: 0.6,
+    fontSize: 10.5,
+    letterSpacing: 0.8,
   },
   greetingHeading: {
-    ...typography.heading1,
+    ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.4,
   },
   greetingSub: {
-    ...typography.caption,
-    color: colors.textSecondary,
+    ...typography.small,
+    color: colors.textMuted,
     fontSize: 12.5,
-    lineHeight: 16,
+    fontWeight: '500',
   },
   headerRight: {
     flexDirection: 'row',
@@ -694,20 +706,24 @@ const styles = StyleSheet.create({
   avatarWrap: {
     borderRadius: 21,
   },
+  topCarouselSection: {
+    marginBottom: spacing.lg,
+    marginHorizontal: -spacing.xl,
+  },
   singlePetHeroCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.xxl,
-    padding: 13,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.16)',
-    marginBottom: spacing.md,
-    gap: 12,
+    borderColor: 'rgba(0, 168, 150, 0.15)',
+    gap: spacing.md,
   },
   singlePetHeroCardPressed: {
-    opacity: 0.94,
-    transform: [{ scale: 0.995 }],
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
   singlePetAvatarWrap: {
     alignItems: 'center',
@@ -725,62 +741,49 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   singlePetNameText: {
-    ...typography.heading2,
+    ...typography.heading3,
     color: colors.textPrimary,
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
     flex: 1,
+    marginRight: 6,
   },
   singlePetVaxBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(16, 185, 129, 0.10)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: radius.pill,
+  },
+  singlePetVaxBadgeWarning: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
   },
   singlePetVaxText: {
     ...typography.captionBold,
     color: colors.success,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  singlePetVaxBadgeWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
+    fontSize: 11,
   },
   singlePetVaxTextWarning: {
     ...typography.captionBold,
     color: colors.warning,
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
   },
   singlePetSubText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 12,
+    ...typography.small,
+    color: colors.textMuted,
+    fontSize: 13,
   },
   singlePetPassportLinkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    marginTop: 2,
+    gap: 4,
+    marginTop: 4,
   },
   singlePetPassportLinkText: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
-  topCarouselSection: {
-    marginBottom: spacing.md,
-    overflow: 'visible',
   },
   onboardingCard: {
     backgroundColor: colors.surface,
@@ -1131,6 +1134,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
     padding: spacing.md,
+  },
+  emptyActivityBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+    gap: 6,
+  },
+  emptyActivityTitle: {
+    ...typography.captionBold,
+    color: colors.textPrimary,
+    fontSize: 13,
+  },
+  emptyActivitySub: {
+    ...typography.small,
+    color: colors.textMuted,
+    textAlign: 'center',
+    fontSize: 11.5,
+    maxWidth: 240,
   },
   footerSpacing: {
     height: spacing.xxl,

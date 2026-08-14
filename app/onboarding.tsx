@@ -89,10 +89,6 @@ export default function OnboardingScreen() {
     scrollX.value = e.contentOffset.x;
   });
 
-  if (status === 'authenticated') {
-    return null;
-  }
-
   const handleGoogleSignIn = useCallback(async () => {
     try {
       haptic.medium();
@@ -174,7 +170,6 @@ export default function OnboardingScreen() {
       }
       haptic.error();
     } finally {
-      setConnectingGoogle(false);
       try {
         await WebBrowser.dismissAuthSession();
       } catch {}
@@ -234,9 +229,10 @@ export default function OnboardingScreen() {
                       onPress={handleGoogleSignIn}
                       loading={connectingGoogle}
                       variant="primary"
+                      style={styles.googleCtaButton}
                       leftIcon={
                         <View style={styles.googleIconBadge}>
-                          <ColoredGoogleIcon size={18} />
+                          <ColoredGoogleIcon size={20} />
                         </View>
                       }
                     />
@@ -303,6 +299,9 @@ export default function OnboardingScreen() {
         maxToRenderPerBatch={1}
         windowSize={4}
       />
+
+      {/* Full-Screen Modern Walking Paw Footprints Loader while checking & routing user */}
+      <PawLoadingOverlay visible={connectingGoogle} />
     </SafeAreaView>
   );
 }
@@ -349,6 +348,10 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 4,
   },
+  googleCtaButton: {
+    height: 56,
+    borderRadius: 28,
+  },
   swipeHint: {
     ...typography.small,
     color: colors.textMuted,
@@ -366,13 +369,13 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   googleIconBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 4,
+    marginRight: 6,
   },
 });
 
