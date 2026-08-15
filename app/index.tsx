@@ -185,13 +185,13 @@ export default function SplashScreen() {
 
         {/* Branding & Subtitle Tag */}
         <Animated.View style={[styles.textWrap, textStyle]}>
-          <View style={styles.tagBadge}>
-            <Text style={styles.subtitleTag}>CITY VETERINARY CARE</Text>
-          </View>
-
-          <Text style={styles.wordmark}>
-            Sync<Text style={styles.accent}>Vet</Text>
-          </Text>
+          <Image
+            source={require('@assets/loadingscreen/syncvet.png')}
+            style={[styles.wordmarkImage, { width: Math.min(width * 0.88, 360) }]}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="SyncVet Wordmark"
+          />
           <Text style={styles.tagline}>Your pet’s care, connected to your city.</Text>
 
           {/* Integrated 90% Width Loading Progress Bar */}
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   heroHighlightImage: {
     height: 230,
@@ -235,28 +235,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
-  tagBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(0, 168, 150, 0.12)',
-    marginBottom: 10,
-  },
-  subtitleTag: {
-    ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  wordmark: {
-    ...typography.heading1,
-    fontSize: 38,
-    color: colors.textPrimary,
-    fontWeight: '800',
-  },
-  accent: {
-    color: colors.primary,
+  wordmarkImage: {
+    height: 125,
+    maxHeight: 145,
+    marginVertical: 6,
   },
   tagline: {
     ...typography.body,

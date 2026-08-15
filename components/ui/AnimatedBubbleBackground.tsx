@@ -134,7 +134,7 @@ export function AnimatedBubbleBackground({ variant = 'default' }: AnimatedBubble
   if (variant === 'splash') {
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {/* Soft top-right ambient bubble */}
+        {/* Soft top-right ambient paw bubble */}
         <FloatingBubble
           size={240}
           top={-40}
@@ -143,8 +143,9 @@ export function AnimatedBubbleBackground({ variant = 'default' }: AnimatedBubble
           duration={4400}
           moveY={20}
           moveX={-12}
+          showPaw
         />
-        {/* Soft top-left ambient bubble */}
+        {/* Soft top-left ambient paw bubble */}
         <FloatingBubble
           size={260}
           top={40}
@@ -153,6 +154,7 @@ export function AnimatedBubbleBackground({ variant = 'default' }: AnimatedBubble
           duration={4800}
           moveY={18}
           moveX={14}
+          showPaw
         />
         {/* Soft mid-right ambient bubble */}
         <FloatingBubble
@@ -163,16 +165,40 @@ export function AnimatedBubbleBackground({ variant = 'default' }: AnimatedBubble
           duration={3600}
           moveY={15}
           moveX={-10}
+          showPaw
         />
-        {/* Soft lower-left ambient bubble */}
+        {/* Soft lower-left ambient paw bubble */}
         <FloatingBubble
-          size={110}
-          bottom={120}
-          left={20}
-          color="rgba(15, 123, 110, 0.12)"
+          size={140}
+          bottom={80}
+          left={-25}
+          color="rgba(0, 168, 150, 0.14)"
           duration={4100}
           moveY={18}
-          moveX={-10}
+          moveX={10}
+          showPaw
+        />
+        {/* Soft bottom-right ambient paw bubble */}
+        <FloatingBubble
+          size={180}
+          bottom={-30}
+          right={-35}
+          color="rgba(15, 123, 110, 0.15)"
+          duration={4500}
+          moveY={22}
+          moveX={-14}
+          showPaw
+        />
+        {/* Soft bottom-center accent paw bubble */}
+        <FloatingBubble
+          size={95}
+          bottom={140}
+          right={30}
+          color="rgba(245, 158, 11, 0.11)"
+          duration={3700}
+          moveY={14}
+          moveX={-8}
+          showPaw
         />
       </View>
     );
