@@ -132,6 +132,189 @@ export default function ServicesScreen() {
     } as never);
   };
 
+  const [scheduledExpanded, setScheduledExpanded] = useState(false);
+
+  // Partition services into scheduled vs available for the active pet
+  const scheduledServices = useMemo(() => {
+    return SERVICES.filter((service) => activeServiceAppointmentsMap.has(service.id)).sort(
+      (a, b) => {
+        const dateA = activeServiceAppointmentsMap.get(a.id)?.date || '';
+        const dateB = activeServiceAppointmentsMap.get(b.id)?.date || '';
+        return dateA.localeCompare(dateB);
+      },
+    );
+  }, [activeServiceAppointmentsMap]);
+
+  const availableServices = useMemo(() => {
+    return SERVICES.filter((service) => !activeServiceAppointmentsMap.has(service.id));
+  }, [activeServiceAppointmentsMap]);
+
+  const displayedScheduledServices = useMemo(() => {
+    if (scheduledExpanded) return scheduledServices;
+    return scheduledServices.slice(0, 2);
+  }, [scheduledServices, scheduledExpanded]);
+
+  const renderServiceCard = (service: ServiceDef) => {
+    const tag = SERVICE_TAGS[service.id] || SERVICE_TAGS.other;
+    const isSpayNeuterDisabled = Boolean(
+      selectedPet?.isSpayedNeutered && service.id === 'spay-neuter',
+    );
+    const existingAppt = activeServiceAppointmentsMap.get(service.id);
+    const isDuplicateScheduled = Boolean(existingAppt);
+    const isDisabled = isSpayNeuterDisabled || isDuplicateScheduled;
+
+    return (
+      <Pressable
+        key={service.id}
+        onPress={() => handleBookService(service.id)}
+        style={({ pressed }) => [
+          styles.serviceCard,
+          isDisabled && styles.serviceCardDisabled,
+          shadows.sm,
+          pressed && !isDisabled && styles.serviceCardPressed,
+        ]}
+      >
+        {/* Card Top Row */}
+        <View style={styles.cardHeaderRow}>
+          <View
+            style={[
+              styles.serviceIconWrap,
+              {
+                backgroundColor: isSpayNeuterDisabled
+                  ? '#F1F5F9'
+                  : isDuplicateScheduled
+                  ? 'rgba(14, 116, 144, 0.08)'
+                  : service.bg,
+              },
+            ]}
+          >
+            <Ionicons
+              name={
+                isSpayNeuterDisabled
+                  ? 'checkmark-circle'
+                  : isDuplicateScheduled
+                  ? 'calendar'
+                  : service.icon
+              }
+              size={22}
+              color={
+                isSpayNeuterDisabled
+                  ? colors.success
+                  : isDuplicateScheduled
+                  ? colors.info
+                  : service.color
+              }
+            />
+          </View>
+
+          <View style={styles.cardTitleWrap}>
+            <Text
+              style={[
+                styles.serviceName,
+                isDisabled && styles.serviceNameDisabled,
+              ]}
+            >
+              {service.name}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.badgePill,
+              {
+                backgroundColor: isSpayNeuterDisabled
+                  ? 'rgba(16, 185, 129, 0.12)'
+                  : isDuplicateScheduled
+                  ? 'rgba(14, 116, 144, 0.12)'
+                  : tag.bg,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgePillText,
+                {
+                  color: isSpayNeuterDisabled
+                    ? colors.success
+                    : isDuplicateScheduled
+                    ? colors.info
+                    : tag.color,
+                },
+              ]}
+            >
+              {isSpayNeuterDisabled
+                ? 'Kapon'
+                : isDuplicateScheduled
+                ? 'Scheduled'
+                : tag.label}
+            </Text>
+          </View>
+        </View>
+
+        {/* Subtitle Tagline */}
+        <Text style={styles.serviceTagline}>
+          {isSpayNeuterDisabled
+            ? `${selectedPet?.name || 'Pet'} is already spayed/neutered.`
+            : isDuplicateScheduled
+            ? `Appointment scheduled on ${formatShortDate(existingAppt.date)}.`
+            : service.tagline}
+        </Text>
+
+        {/* Service Description */}
+        <Text style={styles.serviceDescription}>
+          {isSpayNeuterDisabled
+            ? `${selectedPet?.name || 'Your pet'} has already undergone surgical spaying/neutering. No further Kapon procedure is required.`
+            : isDuplicateScheduled
+            ? `${selectedPet?.name || 'Your pet'} has an active appointment on ${existingAppt.date ? formatWeekdayDate(existingAppt.date) : 'file'}${existingAppt.timeSlot ? ` (${existingAppt.timeSlot})` : ''}. You can schedule another service or await completion.`
+            : service.description}
+        </Text>
+
+        {/* Bottom Action Footer */}
+        <View style={styles.cardFooter}>
+          <View style={styles.locationMeta}>
+            <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+            <Text style={styles.locationMetaText}>{SERVICE_LOCATION}</Text>
+          </View>
+
+          <View style={styles.bookActionRow}>
+            <Text
+              style={[
+                styles.bookActionText,
+                isDisabled && styles.bookActionTextDisabled,
+                isDuplicateScheduled && { color: colors.info },
+              ]}
+            >
+              {isSpayNeuterDisabled
+                ? 'Already Completed'
+                : isDuplicateScheduled
+                ? 'Already Scheduled'
+                : selectedPet
+                ? `Book for ${selectedPet.name}`
+                : service.cta}
+            </Text>
+            <Ionicons
+              name={
+                isSpayNeuterDisabled
+                  ? 'checkmark'
+                  : isDuplicateScheduled
+                  ? 'calendar-outline'
+                  : 'arrow-forward'
+              }
+              size={14}
+              color={
+                isSpayNeuterDisabled
+                  ? colors.success
+                  : isDuplicateScheduled
+                  ? colors.info
+                  : colors.primary
+              }
+            />
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
   const handleRefresh = useCallback(async () => {
     haptic.light();
     try {
@@ -317,166 +500,46 @@ export default function ServicesScreen() {
         <View style={styles.servicesContainer}>
           <Text style={styles.sectionLabel}>Available Clinical Services</Text>
 
-          {SERVICES.map((service) => {
-            const tag = SERVICE_TAGS[service.id] || SERVICE_TAGS.other;
-            const isSpayNeuterDisabled = Boolean(
-              selectedPet?.isSpayedNeutered && service.id === 'spay-neuter',
-            );
-            const existingAppt = activeServiceAppointmentsMap.get(service.id);
-            const isDuplicateScheduled = Boolean(existingAppt);
-            const isDisabled = isSpayNeuterDisabled || isDuplicateScheduled;
+          {/* 1. Scheduled services for this pet (top 2 by default, remainder in dropdown) */}
+          {displayedScheduledServices.map(renderServiceCard)}
 
-            return (
-              <Pressable
-                key={service.id}
-                onPress={() => handleBookService(service.id)}
-                style={({ pressed }) => [
-                  styles.serviceCard,
-                  isDisabled && styles.serviceCardDisabled,
-                  shadows.sm,
-                  pressed && !isDisabled && styles.serviceCardPressed,
-                ]}
-              >
-                {/* Card Top Row */}
-                <View style={styles.cardHeaderRow}>
-                  <View
-                    style={[
-                      styles.serviceIconWrap,
-                      {
-                        backgroundColor: isSpayNeuterDisabled
-                          ? '#F1F5F9'
-                          : isDuplicateScheduled
-                          ? 'rgba(14, 116, 144, 0.08)'
-                          : service.bg,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={
-                        isSpayNeuterDisabled
-                          ? 'checkmark-circle'
-                          : isDuplicateScheduled
-                          ? 'calendar'
-                          : service.icon
-                      }
-                      size={22}
-                      color={
-                        isSpayNeuterDisabled
-                          ? colors.success
-                          : isDuplicateScheduled
-                          ? colors.info
-                          : service.color
-                      }
-                    />
-                  </View>
-
-                  <View style={styles.cardTitleWrap}>
-                    <Text
-                      style={[
-                        styles.serviceName,
-                        isDisabled && styles.serviceNameDisabled,
-                      ]}
-                    >
-                      {service.name}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.badgePill,
-                      {
-                        backgroundColor: isSpayNeuterDisabled
-                          ? 'rgba(16, 185, 129, 0.12)'
-                          : isDuplicateScheduled
-                          ? 'rgba(14, 116, 144, 0.12)'
-                          : tag.bg,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.badgePillText,
-                        {
-                          color: isSpayNeuterDisabled
-                            ? colors.success
-                            : isDuplicateScheduled
-                            ? colors.info
-                            : tag.color,
-                        },
-                      ]}
-                    >
-                      {isSpayNeuterDisabled
-                        ? 'Kapon'
-                        : isDuplicateScheduled
-                        ? 'Scheduled'
-                        : tag.label}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Subtitle Tagline */}
-                <Text style={styles.serviceTagline}>
-                  {isSpayNeuterDisabled
-                    ? `${selectedPet?.name || 'Pet'} is already spayed/neutered.`
-                    : isDuplicateScheduled
-                    ? `Appointment scheduled on ${formatShortDate(existingAppt.date)}.`
-                    : service.tagline}
+          {/* Dropdown toggle button if more than 2 scheduled services */}
+          {scheduledServices.length > 2 && (
+            <Pressable
+              onPress={() => {
+                haptic.light();
+                setScheduledExpanded((prev) => !prev);
+              }}
+              style={[styles.expandDropdownBtn, shadows.sm]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                scheduledExpanded
+                  ? 'Show fewer scheduled bookings'
+                  : `Show all ${scheduledServices.length} scheduled bookings`
+              }
+            >
+              <View style={styles.expandDropdownLeft}>
+                <Ionicons
+                  name={scheduledExpanded ? 'chevron-up-circle' : 'chevron-down-circle'}
+                  size={17}
+                  color={colors.info}
+                />
+                <Text style={styles.expandDropdownBtnText}>
+                  {scheduledExpanded
+                    ? 'Show Fewer Scheduled Bookings'
+                    : `Show All Scheduled Bookings (${scheduledServices.length})`}
                 </Text>
-
-                {/* Service Description */}
-                <Text style={styles.serviceDescription}>
-                  {isSpayNeuterDisabled
-                    ? `${selectedPet?.name || 'Your pet'} has already undergone surgical spaying/neutering. No further Kapon procedure is required.`
-                    : isDuplicateScheduled
-                    ? `${selectedPet?.name || 'Your pet'} has an active appointment on ${existingAppt.date ? formatWeekdayDate(existingAppt.date) : 'file'}${existingAppt.timeSlot ? ` (${existingAppt.timeSlot})` : ''}. You can schedule another service or await completion.`
-                    : service.description}
+              </View>
+              <View style={styles.expandDropdownBadge}>
+                <Text style={styles.expandDropdownBadgeText}>
+                  {scheduledExpanded ? 'Collapse' : `+${scheduledServices.length - 2} more`}
                 </Text>
+              </View>
+            </Pressable>
+          )}
 
-                {/* Bottom Action Footer */}
-                <View style={styles.cardFooter}>
-                  <View style={styles.locationMeta}>
-                    <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-                    <Text style={styles.locationMetaText}>{SERVICE_LOCATION}</Text>
-                  </View>
-
-                  <View style={styles.bookActionRow}>
-                    <Text
-                      style={[
-                        styles.bookActionText,
-                        isDisabled && styles.bookActionTextDisabled,
-                        isDuplicateScheduled && { color: colors.info },
-                      ]}
-                    >
-                      {isSpayNeuterDisabled
-                        ? 'Already Completed'
-                        : isDuplicateScheduled
-                        ? 'Already Scheduled'
-                        : selectedPet
-                        ? `Book for ${selectedPet.name}`
-                        : service.cta}
-                    </Text>
-                    <Ionicons
-                      name={
-                        isSpayNeuterDisabled
-                          ? 'checkmark'
-                          : isDuplicateScheduled
-                          ? 'calendar-outline'
-                          : 'arrow-forward'
-                      }
-                      size={14}
-                      color={
-                        isSpayNeuterDisabled
-                          ? colors.success
-                          : isDuplicateScheduled
-                          ? colors.info
-                          : colors.primary
-                      }
-                    />
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
+          {/* 2. Available services open for booking */}
+          {availableServices.map(renderServiceCard)}
         </View>
 
         {/* Official Clinic Contact Information Hub */}
@@ -827,6 +890,42 @@ const styles = StyleSheet.create({
   },
   bookActionTextDisabled: {
     color: colors.success,
+  },
+  expandDropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0F9FF',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(14, 116, 144, 0.18)',
+    borderStyle: 'dashed',
+    marginVertical: 2,
+  },
+  expandDropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  expandDropdownBtnText: {
+    ...typography.captionBold,
+    color: colors.info,
+    fontSize: 12.5,
+    fontFamily: typography.font.bold,
+  },
+  expandDropdownBadge: {
+    backgroundColor: 'rgba(14, 116, 144, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+  },
+  expandDropdownBadgeText: {
+    ...typography.captionBold,
+    color: colors.info,
+    fontSize: 10.5,
+    fontFamily: typography.font.bold,
   },
   infoHubCard: {
     backgroundColor: colors.surface,
