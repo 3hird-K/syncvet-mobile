@@ -35,3 +35,4 @@ export { AddressPicker } from './ui/AddressPicker';
 export { DropdownSelect } from './ui/DropdownSelect';
 export { MeltingBallTabBar } from './navigation/MeltingBallTabBar';
 export * from './home';
+export * from './pets';
