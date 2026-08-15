@@ -109,15 +109,6 @@ export function AddressPicker({
     { label: 'Macasandig, CDO', query: 'Macasandig, Cagayan de Oro' },
     { label: 'Bulua, CDO', query: 'Bulua, Cagayan de Oro' },
     { label: 'Barra, Opol', query: 'Barra, Opol' },
-    { label: 'Molugan, El Salvador', query: 'Molugan, El Salvador' },
-    { label: 'Tagoloan, MisOr', query: 'Poblacion, Tagoloan' },
-    { label: 'Villanueva, MisOr', query: 'Poblacion, Villanueva' },
-    { label: 'Jasaan, MisOr', query: 'Poblacion, Jasaan' },
-    { label: 'Claveria, MisOr', query: 'Poblacion, Claveria' },
-    { label: 'Initao, MisOr', query: 'Poblacion, Initao' },
-    { label: 'Gingoog City', query: 'Gingoog City' },
-    { label: 'Manolo Fortich', query: 'Manolo Fortich' },
-    { label: 'Iligan City', query: 'Iligan City' },
   ];
 
   return (
@@ -247,8 +238,7 @@ export function AddressPicker({
             {!searchQuery ? (
               <View style={styles.quickPicksWrap}>
                 <View style={styles.quickPicksHeader}>
-                  <Ionicons name="sparkles" size={13} color={colors.primary} />
-                  <Text style={styles.quickPicksTitle}>Popular Misamis Oriental & Regional Hubs:</Text>
+                  <Text style={styles.quickPicksTitle}>Popular Locations:</Text>
                 </View>
                 <View style={styles.quickPicksRow}>
                   {MIS_OR_POPULAR_PICKS.map((item) => (
