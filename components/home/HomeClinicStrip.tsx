@@ -39,7 +39,7 @@ export function HomeClinicStrip() {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xs,
   },
   stripCard: {
     flexDirection: 'row',

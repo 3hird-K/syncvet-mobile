@@ -578,8 +578,6 @@ export default function PetProfileScreen() {
             )}
           </View>
         </View>
-
-        <View style={styles.bottomSpacing} />
       </Screen>
 
       {/* Pet Avatar Customizer Modal */}
@@ -977,8 +975,5 @@ const styles = StyleSheet.create({
   },
   bottomCtaWrap: {
     marginTop: spacing.md,
-  },
-  bottomSpacing: {
-    height: spacing.xl,
   },
 });

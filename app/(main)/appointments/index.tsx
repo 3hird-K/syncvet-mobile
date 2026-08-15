@@ -263,8 +263,6 @@ export default function AppointmentsScreen() {
                 ))}
               </View>
             )}
-
-            <View style={styles.bottomSpacer} />
           </ScrollView>
         </SlideWrapper>
       );
@@ -412,7 +410,7 @@ const styles = StyleSheet.create({
   tabScrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-    paddingBottom: 110,
+    paddingBottom: 85,
   },
   tabContextRow: {
     flexDirection: 'row',
@@ -485,8 +483,5 @@ const styles = StyleSheet.create({
   },
   cardList: {
     gap: spacing.md,
-  },
-  bottomSpacer: {
-    height: spacing.xl,
   },
 });

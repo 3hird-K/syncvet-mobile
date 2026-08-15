@@ -412,7 +412,7 @@ export default function AddPetScreen() {
             <View style={styles.sectionHeadingWrap}>
               <Text style={styles.sectionTitle}>Species & Name</Text>
               <Text style={styles.sectionDesc}>
-                Select species, avatar, and pet’s official name.
+                Select species, enter name, and choose avatar.
               </Text>
             </View>
 
@@ -439,6 +439,22 @@ export default function AddPetScreen() {
                 ]}
                 value={species}
                 onChange={handleSpeciesChange}
+              />
+            </View>
+
+            {/* Pet's Name Input (Prominently visible directly under Species) */}
+            <View style={styles.fieldBlock}>
+              <Input
+                label="Pet's Name"
+                required
+                value={fields.name.value}
+                onChangeText={(v) => setValue('name', v)}
+                onBlur={() => validateField('name')}
+                error={fields.name.error}
+                returnKeyType="done"
+                leftIcon={<Ionicons name="paw" size={18} color={colors.primary} />}
+                placeholder={species === 'dog' ? 'e.g. Milo, Browny, Max' : 'e.g. Luna, Whiskers, Mingming'}
+                editable={!submitting}
               />
             </View>
 
@@ -469,21 +485,6 @@ export default function AddPetScreen() {
 
                 <Ionicons name="chevron-forward" size={16} color={colors.primary} />
               </Pressable>
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Input
-                label="Pet's Name"
-                required
-                value={fields.name.value}
-                onChangeText={(v) => setValue('name', v)}
-                onBlur={() => validateField('name')}
-                error={fields.name.error}
-                returnKeyType="done"
-                leftIcon={<Ionicons name="paw" size={18} color={colors.primary} />}
-                placeholder={species === 'dog' ? 'e.g. Milo, Browny, Max' : 'e.g. Luna, Whiskers, Mingming'}
-                editable={!submitting}
-              />
             </View>
 
             {/* Swipe to continue prompt */}
@@ -891,7 +892,7 @@ export default function AddPetScreen() {
             scrollEventThrottle={16}
             onScroll={scrollHandler}
             onMomentumScrollEnd={onMomentumScrollEnd}
-            onTouchStart={() => {
+            onScrollBeginDrag={() => {
               if (!isCurrentPartValid) {
                 canAdvanceFromStep(subPart);
               }
@@ -990,7 +991,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 110,
   },
   slideInner: {
     gap: 12,

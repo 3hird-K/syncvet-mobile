@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.08)',
     marginTop: spacing.md,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.xs,
     gap: 6,
   },
   infoHubHeader: {

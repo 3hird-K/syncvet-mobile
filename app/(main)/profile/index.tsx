@@ -585,8 +585,6 @@ export default function ProfileScreen() {
             <Text style={styles.cvoCallBtnText}>Call CVO</Text>
           </Pressable>
         </View>
-
-        <View style={styles.footerSpacing} />
       </Screen>
 
       {/* Update Profile Modal */}

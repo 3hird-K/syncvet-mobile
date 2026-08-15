@@ -144,8 +144,6 @@ export default function PetsScreen() {
             ))}
           </View>
         )}
-
-        <View style={styles.bottomSpacer} />
       </Screen>
     </AnimatedScreen>
   );
@@ -155,13 +153,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-    paddingBottom: 110,
     backgroundColor: colors.background,
   },
   petsList: {
     gap: 0,
-  },
-  bottomSpacer: {
-    height: spacing.xl,
   },
 });

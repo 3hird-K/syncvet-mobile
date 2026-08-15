@@ -1351,7 +1351,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 110,
   },
   slideInner: {
     gap: spacing.md,

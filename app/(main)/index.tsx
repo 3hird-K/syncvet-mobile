@@ -131,16 +131,7 @@ export default function HomeScreen() {
 
         {/* 7. City Veterinary Office Operating Schedule & Direct Helpline */}
         <HomeClinicStrip />
-
-        {/* Floating bottom tab bar safe clearance */}
-        <View style={styles.footerSpacing} />
       </Screen>
     </AnimatedScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  footerSpacing: {
-    height: 110,
-  },
-});
