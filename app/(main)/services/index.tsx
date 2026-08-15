@@ -12,7 +12,9 @@ import { useUser } from '@clerk/expo';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { SERVICES, SERVICE_LOCATION, type ServiceDef } from '@lib/services';
+import { formatShortDate, formatWeekdayDate } from '@lib/format';
 import { haptic } from '@lib/haptics';
+import { toast } from '@components/ui/Sonner';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
@@ -37,9 +39,13 @@ export default function ServicesScreen() {
   const { loading, loaded } = useResidentData();
   const ownerId = useAuthStore((state) => state.user?.id) || 'cdo-resident-user';
   const localPets = useDataStore((state) => state.pets);
+  const appointments = useDataStore((state) => state.appointments);
 
-  // Load strictly user's real registered pets from Clerk metadata
+  // Load user's real registered pets with offline support
   const userPets = useMemo(() => {
+    if (localPets && localPets.length > 0) {
+      return localPets;
+    }
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
     return metaPets.map((p: any, idx: number) => ({
@@ -51,8 +57,9 @@ export default function ServicesScreen() {
       avatarId: p.avatarId,
       photoUrl: p.photoUrl,
       isVaccinated: Boolean(p.isVaccinated),
+      isSpayedNeutered: Boolean(p.isSpayedNeutered),
     }));
-  }, [clerkUser?.unsafeMetadata, ownerId]);
+  }, [localPets, clerkUser?.unsafeMetadata, ownerId]);
 
   const [selectedPetId, setSelectedPetId] = useState<string | undefined>(
     params.pet || (userPets.length > 0 ? userPets[0].id : undefined),
@@ -63,7 +70,57 @@ export default function ServicesScreen() {
     [userPets, selectedPetId],
   );
 
+  // Active appointments for the selected pet (status is not cancelled or completed)
+  const activePetAppointments = useMemo(() => {
+    if (!selectedPetId && !selectedPet?.name) return [];
+    const pool = appointments && appointments.length > 0
+      ? appointments
+      : (((clerkUser?.unsafeMetadata as any)?.appointments || []) as any[]);
+
+    return pool.filter((a) => {
+      if (!a) return false;
+      const isFinished = a.status === 'cancelled' || a.status === 'completed';
+      if (isFinished) return false;
+      const matchesId = a.petId === selectedPetId;
+      const matchesName = selectedPet?.name
+        ? (a.petName || '').toLowerCase().trim() === selectedPet.name.toLowerCase().trim()
+        : false;
+      return matchesId || matchesName;
+    });
+  }, [appointments, clerkUser?.unsafeMetadata, selectedPetId, selectedPet?.name]);
+
+  // Map of serviceId -> active appointment for the selected pet
+  const activeServiceAppointmentsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const appt of activePetAppointments) {
+      if (appt.serviceId) {
+        map.set(appt.serviceId, appt);
+      }
+    }
+    return map;
+  }, [activePetAppointments]);
+
   const handleBookService = (serviceId: string) => {
+    if (serviceId === 'spay-neuter' && selectedPet?.isSpayedNeutered) {
+      haptic.warning();
+      toast.info('Already Spayed / Neutered', {
+        id: 'services-spay-disabled',
+        description: `${selectedPet.name} is already recorded as spayed/neutered.`,
+      });
+      return;
+    }
+
+    const existingAppt = activeServiceAppointmentsMap.get(serviceId);
+    if (existingAppt) {
+      haptic.warning();
+      const sDef = SERVICES.find((s) => s.id === serviceId);
+      toast.info('Service Already Scheduled', {
+        id: 'services-duplicate-disabled',
+        description: `${selectedPet?.name || 'This pet'} already has an active ${sDef?.name || 'service'} appointment on ${existingAppt.date ? formatWeekdayDate(existingAppt.date) : 'file'}.`,
+      });
+      return;
+    }
+
     haptic.light();
     router.push({
       pathname: '/appointments/new',
@@ -262,39 +319,117 @@ export default function ServicesScreen() {
 
           {SERVICES.map((service) => {
             const tag = SERVICE_TAGS[service.id] || SERVICE_TAGS.other;
+            const isSpayNeuterDisabled = Boolean(
+              selectedPet?.isSpayedNeutered && service.id === 'spay-neuter',
+            );
+            const existingAppt = activeServiceAppointmentsMap.get(service.id);
+            const isDuplicateScheduled = Boolean(existingAppt);
+            const isDisabled = isSpayNeuterDisabled || isDuplicateScheduled;
+
             return (
               <Pressable
                 key={service.id}
                 onPress={() => handleBookService(service.id)}
                 style={({ pressed }) => [
                   styles.serviceCard,
+                  isDisabled && styles.serviceCardDisabled,
                   shadows.sm,
-                  pressed && styles.serviceCardPressed,
+                  pressed && !isDisabled && styles.serviceCardPressed,
                 ]}
               >
                 {/* Card Top Row */}
                 <View style={styles.cardHeaderRow}>
-                  <View style={[styles.serviceIconWrap, { backgroundColor: service.bg }]}>
-                    <Ionicons name={service.icon} size={22} color={service.color} />
+                  <View
+                    style={[
+                      styles.serviceIconWrap,
+                      {
+                        backgroundColor: isSpayNeuterDisabled
+                          ? '#F1F5F9'
+                          : isDuplicateScheduled
+                          ? 'rgba(14, 116, 144, 0.08)'
+                          : service.bg,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        isSpayNeuterDisabled
+                          ? 'checkmark-circle'
+                          : isDuplicateScheduled
+                          ? 'calendar'
+                          : service.icon
+                      }
+                      size={22}
+                      color={
+                        isSpayNeuterDisabled
+                          ? colors.success
+                          : isDuplicateScheduled
+                          ? colors.info
+                          : service.color
+                      }
+                    />
                   </View>
 
                   <View style={styles.cardTitleWrap}>
-                    <Text style={styles.serviceName}>{service.name}</Text>
+                    <Text
+                      style={[
+                        styles.serviceName,
+                        isDisabled && styles.serviceNameDisabled,
+                      ]}
+                    >
+                      {service.name}
+                    </Text>
                   </View>
 
-                  <View style={[styles.badgePill, { backgroundColor: tag.bg }]}>
-                    <Text style={[styles.badgePillText, { color: tag.color }]}>
-                      {tag.label}
+                  <View
+                    style={[
+                      styles.badgePill,
+                      {
+                        backgroundColor: isSpayNeuterDisabled
+                          ? 'rgba(16, 185, 129, 0.12)'
+                          : isDuplicateScheduled
+                          ? 'rgba(14, 116, 144, 0.12)'
+                          : tag.bg,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.badgePillText,
+                        {
+                          color: isSpayNeuterDisabled
+                            ? colors.success
+                            : isDuplicateScheduled
+                            ? colors.info
+                            : tag.color,
+                        },
+                      ]}
+                    >
+                      {isSpayNeuterDisabled
+                        ? 'Kapon'
+                        : isDuplicateScheduled
+                        ? 'Scheduled'
+                        : tag.label}
                     </Text>
                   </View>
                 </View>
 
                 {/* Subtitle Tagline */}
-                <Text style={styles.serviceTagline}>{service.tagline}</Text>
+                <Text style={styles.serviceTagline}>
+                  {isSpayNeuterDisabled
+                    ? `${selectedPet?.name || 'Pet'} is already spayed/neutered.`
+                    : isDuplicateScheduled
+                    ? `Appointment scheduled on ${formatShortDate(existingAppt.date)}.`
+                    : service.tagline}
+                </Text>
 
                 {/* Service Description */}
                 <Text style={styles.serviceDescription}>
-                  {service.description}
+                  {isSpayNeuterDisabled
+                    ? `${selectedPet?.name || 'Your pet'} has already undergone surgical spaying/neutering. No further Kapon procedure is required.`
+                    : isDuplicateScheduled
+                    ? `${selectedPet?.name || 'Your pet'} has an active appointment on ${existingAppt.date ? formatWeekdayDate(existingAppt.date) : 'file'}${existingAppt.timeSlot ? ` (${existingAppt.timeSlot})` : ''}. You can schedule another service or await completion.`
+                    : service.description}
                 </Text>
 
                 {/* Bottom Action Footer */}
@@ -305,10 +440,38 @@ export default function ServicesScreen() {
                   </View>
 
                   <View style={styles.bookActionRow}>
-                    <Text style={styles.bookActionText}>
-                      {selectedPet ? `Book for ${selectedPet.name}` : service.cta}
+                    <Text
+                      style={[
+                        styles.bookActionText,
+                        isDisabled && styles.bookActionTextDisabled,
+                        isDuplicateScheduled && { color: colors.info },
+                      ]}
+                    >
+                      {isSpayNeuterDisabled
+                        ? 'Already Completed'
+                        : isDuplicateScheduled
+                        ? 'Already Scheduled'
+                        : selectedPet
+                        ? `Book for ${selectedPet.name}`
+                        : service.cta}
                     </Text>
-                    <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+                    <Ionicons
+                      name={
+                        isSpayNeuterDisabled
+                          ? 'checkmark'
+                          : isDuplicateScheduled
+                          ? 'calendar-outline'
+                          : 'arrow-forward'
+                      }
+                      size={14}
+                      color={
+                        isSpayNeuterDisabled
+                          ? colors.success
+                          : isDuplicateScheduled
+                          ? colors.info
+                          : colors.primary
+                      }
+                    />
                   </View>
                 </View>
               </Pressable>
@@ -576,6 +739,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(7, 30, 38, 0.08)',
     gap: 8,
   },
+  serviceCardDisabled: {
+    opacity: 0.65,
+    backgroundColor: '#F8FAFC',
+    borderColor: 'rgba(7, 30, 38, 0.05)',
+  },
   serviceCardPressed: {
     backgroundColor: '#F8FCFB',
     transform: [{ scale: 0.99 }],
@@ -601,6 +769,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 15,
     fontFamily: typography.font.bold,
+  },
+  serviceNameDisabled: {
+    color: colors.textSecondary,
   },
   serviceTagline: {
     ...typography.captionBold,
@@ -653,6 +824,9 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontSize: 12,
     fontFamily: typography.font.bold,
+  },
+  bookActionTextDisabled: {
+    color: colors.success,
   },
   infoHubCard: {
     backgroundColor: colors.surface,

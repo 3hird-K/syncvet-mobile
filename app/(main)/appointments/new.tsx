@@ -272,6 +272,55 @@ export default function NewAppointmentScreen() {
     [allPets, selectedPetId],
   );
 
+  // Active appointments for the selected pet (status is pending or confirmed, not cancelled or completed)
+  const activePetAppointments = useMemo(() => {
+    if (!selectedPetId && !selectedPet?.name) return [];
+    const pool = appointments && appointments.length > 0
+      ? appointments
+      : (((clerkUser?.unsafeMetadata as any)?.appointments || []) as any[]);
+
+    return pool.filter((a) => {
+      if (!a) return false;
+      const isFinished = a.status === 'cancelled' || a.status === 'completed';
+      if (isFinished) return false;
+      const matchesId = a.petId === selectedPetId;
+      const matchesName = selectedPet?.name
+        ? (a.petName || '').toLowerCase().trim() === selectedPet.name.toLowerCase().trim()
+        : false;
+      return matchesId || matchesName;
+    });
+  }, [appointments, clerkUser?.unsafeMetadata, selectedPetId, selectedPet?.name]);
+
+  // Map of serviceId -> active appointment for the selected pet
+  const activeServiceAppointmentsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const appt of activePetAppointments) {
+      if (appt.serviceId) {
+        map.set(appt.serviceId, appt);
+      }
+    }
+    return map;
+  }, [activePetAppointments]);
+
+  // If selected service is invalid for this pet (already spayed/neutered or already has an active appointment), automatically switch to an available service
+  useEffect(() => {
+    const isSpayNeuterBlocked = selectedPet?.isSpayedNeutered && selectedServiceId === 'spay-neuter';
+    const isAlreadyScheduled = activeServiceAppointmentsMap.has(selectedServiceId);
+
+    if (isSpayNeuterBlocked || isAlreadyScheduled) {
+      const validService = SERVICES.find((s) => {
+        if (selectedPet?.isSpayedNeutered && s.id === 'spay-neuter') return false;
+        if (activeServiceAppointmentsMap.has(s.id)) return false;
+        return true;
+      });
+
+      if (validService && validService.id !== selectedServiceId) {
+        setSelectedServiceId(validService.id);
+        setClinicalReason('');
+      }
+    }
+  }, [selectedPet?.isSpayedNeutered, selectedServiceId, activeServiceAppointmentsMap]);
+
   const selectedService = useMemo(
     () => getService(selectedServiceId) || SERVICES[0],
     [selectedServiceId],
@@ -362,6 +411,29 @@ export default function NewAppointmentScreen() {
           }
           return false;
         }
+        if (selectedServiceId === 'spay-neuter' && selectedPet?.isSpayedNeutered) {
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Spay / Neuter Unavailable', {
+              id: 'booking-spay-disabled',
+              description: `${selectedPet?.name || 'This pet'} is already recorded as spayed/neutered.`,
+            });
+          }
+          return false;
+        }
+        if (activeServiceAppointmentsMap.has(selectedServiceId)) {
+          const existing = activeServiceAppointmentsMap.get(selectedServiceId);
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            toast.error('Service Already Scheduled', {
+              id: 'booking-duplicate-service-disabled',
+              description: `${selectedPet?.name || 'This pet'} already has an active ${selectedService?.name || 'service'} appointment on ${existing?.date ? formatWeekdayDate(existing.date) : 'file'}.`,
+            });
+          }
+          return false;
+        }
         return true;
       }
       if (currentStep === 3) {
@@ -380,7 +452,7 @@ export default function NewAppointmentScreen() {
       }
       return true;
     },
-    [selectedPetId, selectedServiceId, dateISO, timeSlot],
+    [selectedPetId, selectedPet, selectedServiceId, selectedService, activeServiceAppointmentsMap, dateISO, timeSlot],
   );
 
   const goToSlide = useCallback(
@@ -677,10 +749,33 @@ export default function NewAppointmentScreen() {
               {SERVICES.map((s) => {
                 const isSelected = s.id === selectedServiceId;
                 const isVaccine = s.id === 'vaccination';
+                const isSpayNeuterDisabled = Boolean(
+                  selectedPet?.isSpayedNeutered && s.id === 'spay-neuter',
+                );
+                const existingAppt = activeServiceAppointmentsMap.get(s.id);
+                const isDuplicateScheduled = Boolean(existingAppt);
+                const isDisabled = isSpayNeuterDisabled || isDuplicateScheduled;
+
                 return (
                   <Pressable
                     key={s.id}
                     onPress={() => {
+                      if (isSpayNeuterDisabled) {
+                        haptic.warning();
+                        toast.info('Already Spayed / Neutered', {
+                          id: 'booking-spay-disabled-toast',
+                          description: `${selectedPet?.name || 'This pet'} is already recorded as spayed/neutered.`,
+                        });
+                        return;
+                      }
+                      if (isDuplicateScheduled) {
+                        haptic.warning();
+                        toast.info('Service Already Scheduled', {
+                          id: 'booking-duplicate-scheduled-toast',
+                          description: `${selectedPet?.name || 'This pet'} already has an active ${s.name} appointment on ${existingAppt?.date ? formatWeekdayDate(existingAppt.date) : 'file'}.`,
+                        });
+                        return;
+                      }
                       haptic.light();
                       setSelectedServiceId(s.id);
                       setClinicalReason('');
@@ -689,37 +784,90 @@ export default function NewAppointmentScreen() {
                     style={[
                       styles.serviceOptionCard,
                       isSelected && styles.serviceOptionCardActive,
+                      isDisabled && styles.serviceOptionCardDisabled,
                       shadows.sm,
                     ]}
+                    accessibilityState={{ disabled: isDisabled }}
                   >
                     <View
                       style={[
                         styles.serviceIconWrap,
-                        { backgroundColor: s.bg },
+                        {
+                          backgroundColor: isSpayNeuterDisabled
+                            ? '#F1F5F9'
+                            : isDuplicateScheduled
+                            ? 'rgba(14, 116, 144, 0.08)'
+                            : s.bg,
+                        },
                       ]}
                     >
-                      <Ionicons name={s.icon} size={24} color={s.color} />
+                      <Ionicons
+                        name={
+                          isSpayNeuterDisabled
+                            ? 'checkmark-circle'
+                            : isDuplicateScheduled
+                            ? 'calendar'
+                            : s.icon
+                        }
+                        size={24}
+                        color={
+                          isSpayNeuterDisabled
+                            ? colors.success
+                            : isDuplicateScheduled
+                            ? colors.info
+                            : s.color
+                        }
+                      />
                     </View>
 
                     <View style={styles.serviceTextWrap}>
                       <View style={styles.serviceTitleRow}>
-                        <Text style={styles.serviceOptionTitle}>{s.name}</Text>
-                        {isVaccine && (
+                        <Text
+                          style={[
+                            styles.serviceOptionTitle,
+                            isDisabled && styles.serviceOptionTitleDisabled,
+                          ]}
+                        >
+                          {s.name}
+                        </Text>
+                        {isVaccine && !isDisabled && (
                           <View style={styles.freeBadge}>
                             <Text style={styles.freeBadgeText}>Free Ordinance</Text>
                           </View>
                         )}
+                        {isSpayNeuterDisabled && (
+                          <View style={styles.alreadyKaponBadge}>
+                            <Ionicons name="checkmark" size={10} color={colors.success} />
+                            <Text style={styles.alreadyKaponBadgeText}>Kapon</Text>
+                          </View>
+                        )}
+                        {isDuplicateScheduled && (
+                          <View style={styles.alreadyScheduledBadge}>
+                            <Ionicons name="calendar-outline" size={10} color={colors.info} />
+                            <Text style={styles.alreadyScheduledBadgeText}>Scheduled</Text>
+                          </View>
+                        )}
                       </View>
-                      <Text style={styles.serviceOptionDesc}>{s.tagline}</Text>
+                      <Text style={styles.serviceOptionDesc}>
+                        {isSpayNeuterDisabled
+                          ? `${selectedPet?.name || 'Pet'} is already spayed/neutered. Procedure not needed.`
+                          : isDuplicateScheduled
+                          ? `Already scheduled on ${formatShortDate(existingAppt.date)}${existingAppt.timeSlot ? ` (${existingAppt.timeSlot})` : ''}. Choose another service.`
+                          : s.tagline}
+                      </Text>
                     </View>
 
                     <View
                       style={[
                         styles.radioCircle,
                         isSelected && styles.radioCircleSelected,
+                        isDisabled && styles.radioCircleDisabled,
                       ]}
                     >
-                      {isSelected && <View style={styles.radioDot} />}
+                      {isSelected && !isDisabled && <View style={styles.radioDot} />}
+                      {isDisabled && (
+                        <Ionicons name="lock-closed" size={11} color={colors.textMuted} />
+                      )}
                     </View>
                   </Pressable>
                 );
@@ -1530,6 +1678,48 @@ const styles = StyleSheet.create({
   serviceOptionCardActive: {
     borderColor: colors.primary,
     backgroundColor: '#F0FAF8',
+  },
+  serviceOptionCardDisabled: {
+    opacity: 0.62,
+    backgroundColor: '#F8FAFC',
+    borderColor: 'rgba(7, 30, 38, 0.05)',
+  },
+  serviceOptionTitleDisabled: {
+    color: colors.textSecondary,
+  },
+  alreadyKaponBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: radius.pill,
+  },
+  alreadyKaponBadgeText: {
+    ...typography.captionBold,
+    color: colors.success,
+    fontSize: 9.5,
+    fontFamily: typography.font.bold,
+  },
+  alreadyScheduledBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(14, 116, 144, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: radius.pill,
+  },
+  alreadyScheduledBadgeText: {
+    ...typography.captionBold,
+    color: colors.info,
+    fontSize: 9.5,
+    fontFamily: typography.font.bold,
+  },
+  radioCircleDisabled: {
+    borderColor: 'rgba(7, 30, 38, 0.12)',
+    backgroundColor: '#F1F5F9',
   },
   serviceIconWrap: {
     width: 44,

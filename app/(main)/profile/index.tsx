@@ -376,9 +376,9 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Change profile photo"
             >
-              <Avatar name={fullName} size={56} photoUrl={photoUrl} />
+              <Avatar name={fullName} size={48} photoUrl={photoUrl} />
               <View style={styles.cameraBadge}>
-                <Ionicons name="camera" size={11} color={colors.white} />
+                <Ionicons name="camera" size={10} color={colors.white} />
               </View>
             </Pressable>
 
@@ -396,7 +396,7 @@ export default function ProfileScreen() {
 
               {mobileNumber ? (
                 <View style={styles.heroPhoneRow}>
-                  <Ionicons name="call-outline" size={11.5} color={colors.textSecondary} />
+                  <Ionicons name="call-outline" size={11} color={colors.textSecondary} />
                   <Text style={styles.heroPhoneText}>{mobileNumber}</Text>
                 </View>
               ) : null}
@@ -405,14 +405,14 @@ export default function ProfileScreen() {
 
           {/* Residence Address Bar */}
           <View style={styles.heroAddressBar}>
-            <Ionicons name="location-sharp" size={13} color={colors.primary} />
+            <Ionicons name="location-sharp" size={12} color={colors.primary} />
             <Text style={styles.heroAddressText} numberOfLines={1}>
               {address}
             </Text>
           </View>
         </View>
 
-        {/* 3-Column Modern Stats Row */}
+        {/* 3-Column Modern Compact Stats Row */}
         <View style={styles.statsRow}>
           <Pressable
             style={[styles.statBox, shadows.sm]}
@@ -421,8 +421,8 @@ export default function ProfileScreen() {
               router.push('/pets' as never);
             }}
           >
-            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(0, 168, 150, 0.12)' }]}>
-              <Ionicons name="paw" size={15} color={colors.primary} />
+            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(0, 168, 150, 0.10)' }]}>
+              <Ionicons name="paw" size={14} color={colors.primary} />
             </View>
             <Text style={styles.statNumber}>{stats.pets}</Text>
             <Text style={styles.statLabel}>Registered</Text>
@@ -435,8 +435,8 @@ export default function ProfileScreen() {
               router.push('/appointments' as never);
             }}
           >
-            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(14, 116, 144, 0.12)' }]}>
-              <Ionicons name="calendar" size={15} color={colors.info} />
+            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(14, 116, 144, 0.10)' }]}>
+              <Ionicons name="calendar" size={14} color={colors.info} />
             </View>
             <Text style={styles.statNumber}>{stats.upcoming}</Text>
             <Text style={styles.statLabel}>Upcoming</Text>
@@ -444,16 +444,55 @@ export default function ProfileScreen() {
 
           <Pressable
             style={[styles.statBox, shadows.sm]}
-            onPress={() => {
+            onPress={async () => {
               haptic.light();
-              router.push('/appointments' as never);
+              if (pendingCount > 0 && isOnline) {
+                try {
+                  await syncNow();
+                  toast.success('Sync complete', { description: 'All queued items synced.' });
+                } catch {
+                  toast.error('Sync failed', { description: 'Will retry automatically.' });
+                }
+              } else {
+                toast.info('Sync Queue', {
+                  description:
+                    pendingCount > 0
+                      ? `${pendingCount} change${pendingCount > 1 ? 's' : ''} queued to sync.`
+                      : 'All records are synced with City Vet.',
+                });
+              }
             }}
           >
-            <View style={[styles.statIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
-              <Ionicons name="checkmark-done" size={15} color={colors.success} />
+            <View
+              style={[
+                styles.statIconWrap,
+                {
+                  backgroundColor:
+                    pendingCount > 0
+                      ? 'rgba(245, 158, 11, 0.12)'
+                      : 'rgba(16, 185, 129, 0.10)',
+                },
+              ]}
+            >
+              <Ionicons
+                name={
+                  pendingCount > 0
+                    ? 'cloud-upload-outline'
+                    : 'cloud-done-outline'
+                }
+                size={14}
+                color={pendingCount > 0 ? colors.warning : colors.success}
+              />
             </View>
-            <Text style={styles.statNumber}>{stats.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
+            <Text
+              style={[
+                styles.statNumber,
+                pendingCount > 0 && { color: colors.warning },
+              ]}
+            >
+              {pendingCount}
+            </Text>
+            <Text style={styles.statLabel}>To Sync</Text>
           </Pressable>
         </View>
 
@@ -663,7 +702,7 @@ export default function ProfileScreen() {
               <Ionicons name="business" size={16} color={colors.white} />
             </View>
             <View style={styles.cvoTextWrap}>
-              <Text style={styles.cvoTitle}>City Veterinary Office · CDO</Text>
+              <Text style={styles.cvoTitle}>City Vet Office · CDO</Text>
               <Text style={styles.cvoSub}>Mon – Fri · 8:00 AM – 5:00 PM</Text>
             </View>
           </View>
@@ -841,16 +880,16 @@ const styles = StyleSheet.create({
   heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    padding: 10,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: spacing.sm,
+    gap: 6,
   },
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   avatarWrap: {
     position: 'relative',
@@ -860,18 +899,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -1,
     right: -1,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.surface,
   },
   heroTextWrap: {
     flex: 1,
-    gap: 2,
+    gap: 1,
     paddingLeft: 2,
   },
   nameBadgeRow: {
@@ -882,55 +921,55 @@ const styles = StyleSheet.create({
   heroName: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 16,
+    fontSize: 14.5,
     fontFamily: typography.font.bold,
   },
   heroEmail: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   heroPhoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 1,
+    gap: 3.5,
+    marginTop: 0.5,
   },
   heroPhoneText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 11,
   },
   heroAddressBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: 'rgba(7, 30, 38, 0.03)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.md,
+    paddingHorizontal: 8,
+    paddingVertical: 4.5,
+    borderRadius: radius.sm,
   },
   heroAddressText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 11,
     flex: 1,
   },
   statsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   statBox: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingVertical: 9,
+    borderRadius: radius.xl,
+    paddingVertical: 10,
     paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 2,
+    gap: 2.5,
   },
   statIconWrap: {
     width: 26,
@@ -942,13 +981,15 @@ const styles = StyleSheet.create({
   statNumber: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 15.5,
+    fontSize: 15,
+    lineHeight: 18,
     fontFamily: typography.font.bold,
   },
   statLabel: {
     ...typography.caption,
     color: colors.textMuted,
     fontSize: 10.5,
+    lineHeight: 13,
   },
   sectionBlock: {
     marginBottom: spacing.xs,
@@ -1192,7 +1233,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderWidth: 1,
     borderColor: 'rgba(10, 110, 100, 0.14)',
-    marginTop: spacing.xs,
+    marginTop: spacing.md,
   },
   cvoLeftRow: {
     flexDirection: 'row',
