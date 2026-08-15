@@ -24,10 +24,10 @@ export function SectionHeader({ title, actionLabel, onAction }: SectionHeaderPro
             onAction();
           }}
           hitSlop={8}
-          style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+          style={({ pressed }) => [styles.actionPill, pressed && styles.actionPressed]}
         >
           <Text style={styles.actionText}>{actionLabel}</Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} />
+          <Ionicons name="chevron-forward" size={12} color={colors.textSecondary} />
         </Pressable>
       ) : null}
     </View>
@@ -43,19 +43,27 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.heading3,
+    fontSize: 19,
+    fontFamily: typography.font.bold,
     color: colors.textPrimary,
   },
-  action: {
+  actionPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    paddingVertical: spacing.xs,
+    gap: 3,
+    backgroundColor: 'rgba(7, 30, 38, 0.05)',
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: 14,
   },
   actionPressed: {
-    opacity: 0.6,
+    opacity: 0.7,
+    backgroundColor: 'rgba(7, 30, 38, 0.09)',
   },
   actionText: {
-    ...typography.captionBold,
-    color: colors.primaryDark,
+    ...typography.small,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
 });
