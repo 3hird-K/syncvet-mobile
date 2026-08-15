@@ -68,7 +68,8 @@ export function HomePetsSection({ pets }: HomePetsSectionProps) {
       <Animated.View entering={FadeInDown.delay(60).duration(260)} style={styles.section}>
         <SectionHeader
           title="My Pets"
-          actionLabel="View all"
+          icon={<Ionicons name="paw-outline" size={17} color={colors.primaryDark} />}
+          actionLabel="View All"
           onAction={() => {
             haptic.light();
             router.push('/pets' as never);
@@ -145,7 +146,8 @@ export function HomePetsSection({ pets }: HomePetsSectionProps) {
     <Animated.View entering={FadeInDown.delay(60).duration(260)} style={styles.section}>
       <SectionHeader
         title="My Pets"
-        actionLabel="View all"
+        icon={<Ionicons name="paw-outline" size={17} color={colors.primaryDark} />}
+        actionLabel="View All"
         onAction={() => {
           haptic.light();
           router.push('/pets' as never);

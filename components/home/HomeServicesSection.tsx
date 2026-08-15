@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { spacing } from '@theme';
+import { colors, spacing } from '@theme';
 import { SERVICES } from '@lib/services';
 import { haptic } from '@lib/haptics';
 import { SectionHeader } from '@components/ui/SectionHeader';
@@ -25,7 +25,8 @@ export function HomeServicesSection() {
     <Animated.View entering={FadeInDown.delay(180).duration(260)} style={styles.section}>
       <SectionHeader
         title="Veterinary Services"
-        actionLabel="View all"
+        icon={<Ionicons name="grid-outline" size={17} color={colors.primaryDark} />}
+        actionLabel="View All"
         onAction={() => {
           haptic.light();
           router.push('/services' as never);

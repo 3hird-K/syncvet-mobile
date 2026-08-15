@@ -316,8 +316,8 @@ export default function PetProfileScreen() {
               avatarId={customAvatarId || pet.avatarId}
               species={pet.species}
               photoUrl={customPhotoUrl || pet.photoUrl}
-              size={138}
-              scale={1.65}
+              size={92}
+              scale={1.35}
               showCameraBadge
               onPress={() => {
                 haptic.light();
@@ -422,7 +422,7 @@ export default function PetProfileScreen() {
             <View style={[styles.specIconWrap, { backgroundColor: 'rgba(37, 99, 235, 0.08)' }]}>
               <Ionicons
                 name={pet.gender === 'male' ? 'male' : 'female'}
-                size={16}
+                size={13}
                 color={pet.gender === 'male' ? '#2563EB' : '#DB2777'}
               />
             </View>
@@ -435,7 +435,7 @@ export default function PetProfileScreen() {
           {/* Spayed / Neutered */}
           <View style={[styles.specBox, shadows.sm]}>
             <View style={[styles.specIconWrap, { backgroundColor: 'rgba(0, 168, 150, 0.08)' }]}>
-              <Ionicons name="cut-outline" size={16} color={colors.primary} />
+              <Ionicons name="cut-outline" size={13} color={colors.primary} />
             </View>
             <Text style={styles.specValue}>
               {pet.isSpayedNeutered ? 'Fixed / Kapon' : 'Intact'}
@@ -446,7 +446,7 @@ export default function PetProfileScreen() {
           {/* Size / Weight */}
           <View style={[styles.specBox, shadows.sm]}>
             <View style={[styles.specIconWrap, { backgroundColor: 'rgba(245, 158, 11, 0.08)' }]}>
-              <Ionicons name="scale-outline" size={16} color={colors.warning} />
+              <Ionicons name="scale-outline" size={13} color={colors.warning} />
             </View>
             <Text style={styles.specValue}>
               {pet.weightCategory
@@ -665,24 +665,25 @@ const styles = StyleSheet.create({
   heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: spacing.xs,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 12,
+    gap: 8,
   },
   avatarCenterWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 4,
+    marginVertical: 2,
     overflow: 'visible',
   },
   heroCenterInfo: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    marginTop: 2,
-    marginBottom: 4,
+    gap: 1,
+    marginTop: 0,
+    marginBottom: 2,
   },
   nameCenterRow: {
     flexDirection: 'row',
@@ -691,15 +692,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   heroName: {
-    ...typography.heading2,
+    ...typography.heading3,
     color: colors.textPrimary,
-    fontSize: 22,
+    fontSize: 18.5,
     fontWeight: '800',
     textAlign: 'center',
   },
   speciesTag: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: radius.pill,
   },
   speciesTagDog: {
@@ -710,7 +711,7 @@ const styles = StyleSheet.create({
   },
   speciesTagText: {
     ...typography.captionBold,
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '700',
   },
   speciesTagTextDog: {
@@ -722,21 +723,21 @@ const styles = StyleSheet.create({
   heroBreedText: {
     ...typography.body,
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
   },
   heroAgeText: {
     ...typography.caption,
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
   },
   vaxStatusBanner: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: radius.lg,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.md,
     borderWidth: 1,
-    gap: 8,
+    gap: 4,
   },
   vaxBannerProtected: {
     backgroundColor: 'rgba(16, 185, 129, 0.06)',
@@ -752,7 +753,7 @@ const styles = StyleSheet.create({
   },
   vaxBannerTitle: {
     ...typography.captionBold,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -766,24 +767,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 8,
+    paddingTop: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(16, 185, 129, 0.16)',
-    gap: 12,
+    gap: 8,
   },
   vaxDateCol: {
     alignItems: 'center',
-    gap: 2,
+    gap: 1,
   },
   vaxDateLabel: {
     ...typography.small,
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 9.5,
   },
   vaxDateValue: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: '600',
   },
   vaxDateValueHighlight: {
@@ -793,43 +794,44 @@ const styles = StyleSheet.create({
   vaxBannerHelpText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 10.5,
     textAlign: 'center',
   },
   specsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    gap: 6,
+    marginBottom: spacing.xs,
   },
   specBox: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    borderRadius: radius.md,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 2,
+    gap: 1,
   },
   specIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginBottom: 0,
   },
   specValue: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 11.5,
+    fontSize: 11,
+    fontWeight: '700',
     textAlign: 'center',
   },
   specLabel: {
     ...typography.caption,
     color: colors.textMuted,
-    fontSize: 10,
+    fontSize: 9.5,
   },
   notesCard: {
     backgroundColor: colors.surface,

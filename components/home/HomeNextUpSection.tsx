@@ -24,9 +24,13 @@ export function HomeNextUpSection({
   return (
     <Animated.View entering={FadeInDown.delay(100).duration(260)} style={styles.section}>
       <SectionHeader
-        title="Next Up"
-        actionLabel={nextAppointment ? 'View all' : undefined}
-        onAction={nextAppointment ? () => router.push('/appointments' as never) : undefined}
+        title="Clinic Appointments"
+        icon={<Ionicons name="calendar-outline" size={17} color={colors.primaryDark} />}
+        actionLabel="View All"
+        onAction={() => {
+          haptic.light();
+          router.push('/appointments' as never);
+        }}
       />
 
       {nextAppointment ? (
