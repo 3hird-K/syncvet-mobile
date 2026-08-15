@@ -12,8 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
-import { useOAuth } from '@clerk/expo';
+import { useGoogleAuth } from '@hooks/useGoogleAuth';
 import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
@@ -50,21 +49,26 @@ export default function OnboardingScreen() {
   const [current, setCurrent] = useState(initialIndex);
   const setCompleted = useOnboardingStore((state) => state.setCompleted);
 
-  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
-  const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const {
+    handleGoogleSignIn,
+    connecting: connectingGoogle,
+    error: googleError,
+  } = useGoogleAuth();
+
+  useEffect(() => {
+    if (googleError) {
+      toast.error('Google Sign-In', { description: googleError });
+    }
+  }, [googleError]);
 
   const status = useAuthStore((state) => state.status);
 
-  // Warm up browser for OAuth
-  useEffect(() => {
-    void WebBrowser.warmUpAsync();
-    return () => {
-      void WebBrowser.coolDownAsync();
-    };
-  }, []);
-
   useEffect(() => {
     if (status === 'authenticated') {
+      try {
+        void WebBrowser.dismissAuthSession();
+        void WebBrowser.coolDownAsync();
+      } catch {}
       router.replace('/(main)');
     }
   }, [status, router]);
@@ -88,93 +92,6 @@ export default function OnboardingScreen() {
   const scrollHandler = useAnimatedScrollHandler((e) => {
     scrollX.value = e.contentOffset.x;
   });
-
-  const handleGoogleSignIn = useCallback(async () => {
-    try {
-      haptic.medium();
-      setConnectingGoogle(true);
-
-      try {
-        await WebBrowser.dismissAuthSession();
-      } catch {}
-
-      const redirectUrl = Linking.createURL('/(auth)', { scheme: 'syncvet' });
-      const { createdSessionId, signIn: clerkSignInFlow, signUp: clerkSignUpFlow, setActive } =
-        await startOAuthFlow({ redirectUrl });
-
-      const sessionId = createdSessionId || clerkSignInFlow?.createdSessionId || clerkSignUpFlow?.createdSessionId;
-
-      if (sessionId && setActive) {
-        await setActive({ session: sessionId });
-        haptic.success();
-        setCompleted();
-
-        const clerkEmail =
-          clerkSignUpFlow?.emailAddress ??
-          clerkSignInFlow?.identifier ??
-          '';
-        const firstName = clerkSignUpFlow?.firstName || clerkSignInFlow?.userData?.firstName || '';
-        const lastName = clerkSignUpFlow?.lastName || clerkSignInFlow?.userData?.lastName || '';
-        const clerkName =
-          firstName && lastName
-            ? `${firstName} ${lastName}`
-            : firstName || (clerkEmail ? clerkEmail.split('@')[0] : 'Resident');
-
-        await useAuthStore.getState().googleSignIn({
-          email: clerkEmail || 'user@syncvet.app',
-          fullName: clerkName || 'SyncVet Resident',
-        });
-
-        const currentUser = useAuthStore.getState().user;
-        const metadata = (clerkSignUpFlow?.unsafeMetadata || (clerkSignInFlow?.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
-        const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
-        const hasCompletedProfile = Boolean(
-          metadata?.profileCompleted &&
-          metadata?.mobileNumber &&
-          metadata?.address &&
-          clerkPets.length > 0
-        );
-
-        if (hasCompletedProfile) {
-          if (metadata?.mobileNumber || metadata?.address) {
-            await useAuthStore.getState().saveOwnerProfile(
-              (metadata?.mobileNumber as string) || currentUser?.mobileNumber || '',
-              (metadata?.address as string) || currentUser?.address || '',
-            );
-          }
-          await useAuthStore.getState().markRegistrationComplete();
-          router.replace('/(main)');
-        } else {
-          router.replace('/(register)/owner');
-        }
-      } else {
-        setConnectingGoogle(false);
-      }
-    } catch (err: any) {
-      console.log('Google OAuth error on onboarding:', err);
-      setConnectingGoogle(false);
-      const rawMsg =
-        err?.errors?.[0]?.longMessage ||
-        err?.message ||
-        'Could not sign in with Google. Please try again.';
-
-      // Suppress standard dismiss/cancel warnings
-      if (
-        !rawMsg.toLowerCase().includes('cancel') &&
-        !rawMsg.toLowerCase().includes('dismiss') &&
-        !rawMsg.toLowerCase().includes('closed')
-      ) {
-        toast.error('Google Sign-In', {
-          description: rawMsg,
-        });
-      }
-      haptic.error();
-    } finally {
-      try {
-        await WebBrowser.dismissAuthSession();
-      } catch {}
-    }
-  }, [startOAuthFlow, setCompleted, router]);
 
   const skip = useCallback(() => {
     haptic.light();

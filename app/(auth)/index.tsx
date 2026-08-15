@@ -31,7 +31,7 @@ import type { RefObject } from 'react';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
-import { useClerk, useOAuth } from '@clerk/expo';
+import { useClerk } from '@clerk/expo';
 
 import { colors, radius, spacing, typography } from '@theme';
 import {
@@ -43,6 +43,7 @@ import {
 import type { PasswordStrength } from '@lib/validation';
 import { haptic } from '@lib/haptics';
 import { useForm } from '@hooks/useForm';
+import { useGoogleAuth } from '@hooks/useGoogleAuth';
 import { useAuthStore } from '@store/useAuthStore';
 import { AuthError } from '@services/auth';
 import { Button } from '@components/ui/Button';
@@ -377,7 +378,6 @@ export default function AuthScreen() {
   const initialMode: AuthMode = params.mode === 'signin' ? 'signin' : 'signup';
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [submitting, setSubmitting] = useState(false);
-  const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -461,7 +461,7 @@ export default function AuthScreen() {
     [width],
   );
 
-  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { handleGoogleSignIn: handleGoogle, connecting: connectingGoogle } = useGoogleAuth();
   const clerk = useClerk();
 
   const [pendingVerification, setPendingVerification] = useState(false);
@@ -472,87 +472,6 @@ export default function AuthScreen() {
   React.useEffect(() => {
     router.replace({ pathname: '/onboarding', params: { slide: '3' } });
   }, [router]);
-
-  // Warm up browser for OAuth
-  React.useEffect(() => {
-    void WebBrowser.warmUpAsync();
-    return () => {
-      void WebBrowser.coolDownAsync();
-    };
-  }, []);
-
-  const handleGoogle = useCallback(async () => {
-    try {
-      haptic.medium();
-      setConnectingGoogle(true);
-      setNetworkError(undefined);
-
-      const redirectUrl = Linking.createURL('/(auth)', { scheme: 'syncvet' });
-
-      const { createdSessionId, signIn: clerkSignInFlow, signUp: clerkSignUpFlow, setActive } =
-        await startOAuthFlow({ redirectUrl });
-
-      const sessionId = createdSessionId || clerkSignInFlow?.createdSessionId || clerkSignUpFlow?.createdSessionId;
-
-      if (sessionId && setActive) {
-        await setActive({ session: sessionId });
-        haptic.success();
-
-        const clerkEmail =
-          clerkSignUpFlow?.emailAddress ??
-          clerkSignInFlow?.identifier ??
-          '';
-        const firstName = clerkSignUpFlow?.firstName || clerkSignInFlow?.userData?.firstName || '';
-        const lastName = clerkSignUpFlow?.lastName || clerkSignInFlow?.userData?.lastName || '';
-        const clerkName =
-          firstName && lastName
-            ? `${firstName} ${lastName}`
-            : firstName || (clerkEmail ? clerkEmail.split('@')[0] : 'Resident');
-
-        await useAuthStore.getState().googleSignIn({
-          email: clerkEmail || 'user@syncvet.app',
-          fullName: clerkName || 'SyncVet Resident',
-        });
-
-        const currentUser = useAuthStore.getState().user;
-        const metadata = (clerkSignUpFlow?.unsafeMetadata || (clerkSignInFlow?.userData as any)?.unsafeMetadata || {}) as Record<string, any>;
-        const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
-        const hasCompletedProfile = Boolean(
-          metadata?.profileCompleted &&
-          metadata?.mobileNumber &&
-          metadata?.address &&
-          clerkPets.length > 0
-        );
-
-        if (hasCompletedProfile) {
-          if (metadata?.mobileNumber || metadata?.address) {
-            await useAuthStore.getState().saveOwnerProfile(
-              (metadata?.mobileNumber as string) || currentUser?.mobileNumber || '',
-              (metadata?.address as string) || currentUser?.address || '',
-            );
-          }
-          await useAuthStore.getState().markRegistrationComplete();
-          router.replace('/(main)');
-        } else {
-          router.replace('/(register)/owner');
-        }
-      } else {
-        // Dismissed or no session created, reset loading
-        setConnectingGoogle(false);
-      }
-    } catch (err: any) {
-      console.log('Google OAuth error:', err);
-      setConnectingGoogle(false);
-      setNetworkError(
-        err?.errors?.[0]?.longMessage ||
-        err?.message ||
-        'Could not sign in with Google. Please try again.',
-      );
-      haptic.error();
-    } finally {
-      setConnectingGoogle(false);
-    }
-  }, [startOAuthFlow]);
 
   const handleForgot = useCallback(() => {
     haptic.light();
