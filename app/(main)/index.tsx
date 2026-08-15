@@ -1154,6 +1154,6 @@ const styles = StyleSheet.create({
     maxWidth: 240,
   },
   footerSpacing: {
-    height: spacing.xxl,
+    height: 90,
   },
 });

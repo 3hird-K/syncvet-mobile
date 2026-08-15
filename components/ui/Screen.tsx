@@ -116,10 +116,12 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: 100,
   },
 });

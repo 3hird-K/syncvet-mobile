@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
   tabScrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxl,
+    paddingBottom: 100,
   },
   tabContextRow: {
     flexDirection: 'row',
