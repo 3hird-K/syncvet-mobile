@@ -146,19 +146,20 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       // 1. Attempt Native Google Authentication flow first on iOS and Android
       if (Platform.OS === 'android' || Platform.OS === 'ios') {
         try {
-          const { createdSessionId, setActive, signIn, signUp } =
-            await startGoogleAuthenticationFlow();
+          const result = await startGoogleAuthenticationFlow();
+          const nativeSessionId =
+            result?.createdSessionId ||
+            result?.signIn?.createdSessionId ||
+            result?.signUp?.createdSessionId;
 
-          if (createdSessionId && setActive) {
-            await setActive({ session: createdSessionId });
+          if (nativeSessionId && result?.setActive) {
+            await result.setActive({ session: nativeSessionId });
             haptic.success();
-            await handlePostAuthRouting(signUp, signIn);
+            await handlePostAuthRouting(result.signUp, result.signIn);
             return true;
           }
 
-          // User cancelled native one-tap picker
-          setConnecting(false);
-          return false;
+          console.log('Native Google flow did not return session, proceeding to SSO flow');
         } catch (nativeErr: any) {
           if (
             nativeErr?.code === 'SIGN_IN_CANCELLED' ||
