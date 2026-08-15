@@ -322,20 +322,13 @@ export default function PetRegistrationScreen() {
         photoUrl: customPhotoUri,
       };
 
-      await addPet(ownerId, petPayload);
-
-      if (clerkUser) {
-        const existingPets = ((clerkUser.unsafeMetadata?.pets as any[]) || []);
-        await updateClerkUnsafeMetadata(clerkUser, {
-          profileCompleted: true,
-          pets: [...existingPets, petPayload],
-        });
-      }
+      await addPet(ownerId, petPayload, clerkUser);
+      await useAuthStore.getState().markRegistrationComplete();
 
       haptic.success();
       router.replace('/(register)/success');
     } catch {
-      setNetworkError('We couldn’t save your pet profile. Check your connection and try again.');
+      setNetworkError('We couldn’t save your pet profile. Please try again.');
       haptic.error();
     } finally {
       setSubmitting(false);

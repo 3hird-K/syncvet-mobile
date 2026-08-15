@@ -14,13 +14,14 @@ export default function RegisterLayout() {
   const segments = useSegments();
   const status = useAuthStore((state) => state.status);
   const { user: clerkUser } = useUser();
+  const currentUser = useAuthStore((state) => state.user);
   const metadata = clerkUser?.unsafeMetadata;
   const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
   const hasCompletedProfile = Boolean(
-    metadata?.profileCompleted &&
-    metadata?.mobileNumber &&
-    metadata?.address &&
-    clerkPets.length > 0
+    (currentUser?.profileCompleted || metadata?.profileCompleted) &&
+    (currentUser?.mobileNumber || metadata?.mobileNumber) &&
+    (currentUser?.address || metadata?.address) &&
+    (clerkPets.length > 0 || (currentUser?.profileCompleted))
   );
 
   const segmentPath = segments.join('/');

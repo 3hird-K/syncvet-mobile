@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 import { ClerkProvider, ClerkLoaded } from '@clerk/expo';
+import { resourceCache } from '@clerk/expo/resource-cache';
 import {
   PlusJakartaSans_400Regular,
   PlusJakartaSans_500Medium,
@@ -20,6 +21,7 @@ import { colors } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
 import { tokenCache } from '@lib/tokenCache';
 import { Toaster } from '@components/ui/Sonner';
+import { NetworkToastListener } from '@components/ui/NetworkToastListener';
 
 // Silence Clerk development keys notice in development
 LogBox.ignoreLogs([
@@ -77,7 +79,11 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError, restoreSession]);
 
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+    <ClerkProvider
+      publishableKey={publishableKey}
+      tokenCache={tokenCache}
+      __experimental_resourceCache={resourceCache}
+    >
       <ClerkLoaded>
         <GestureHandlerRootView style={styles.root}>
           <SafeAreaProvider>
@@ -92,6 +98,7 @@ export default function RootLayout() {
               />
             ) : null}
             <Toaster />
+            <NetworkToastListener />
           </SafeAreaProvider>
         </GestureHandlerRootView>
       </ClerkLoaded>

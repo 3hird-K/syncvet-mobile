@@ -104,6 +104,11 @@ export function HomePetsSection({ pets }: HomePetsSectionProps) {
               <Text style={styles.petName} numberOfLines={1}>
                 {pet.name}
               </Text>
+              {pet._pendingSync ? (
+                <View style={styles.pendingTag}>
+                  <Text style={styles.pendingTagText}>Pending</Text>
+                </View>
+              ) : null}
               <View
                 style={[
                   styles.vaxBadge,
@@ -219,6 +224,11 @@ export function HomePetsSection({ pets }: HomePetsSectionProps) {
                   <Text style={styles.multiPetName} numberOfLines={1}>
                     {pet.name}
                   </Text>
+                  {pet._pendingSync ? (
+                    <View style={styles.pendingTag}>
+                      <Text style={styles.pendingTagText}>Pending</Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 <Text style={styles.multiPetBreed} numberOfLines={1}>
@@ -347,6 +357,20 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     fontFamily: typography.font.bold,
     flex: 1,
+  },
+  pendingTag: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  pendingTagText: {
+    ...typography.captionBold,
+    fontSize: 9.5,
+    fontFamily: typography.font.bold,
+    color: colors.warning,
   },
   petBreed: {
     ...typography.small,

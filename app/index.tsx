@@ -61,31 +61,6 @@ export default function SplashScreen() {
           if (profileCompleted) {
             await useAuthStore.getState().markRegistrationComplete();
           }
-          const clerkPets = (metadata.pets as any[]) || [];
-          const ownerId = useAuthStore.getState().user?.id;
-          if (ownerId && clerkPets.length > 0) {
-            let hasMissingId = false;
-            const updatedClerkPets = clerkPets.map((pet, idx) => {
-              if (!pet.id) {
-                hasMissingId = true;
-                return { ...pet, id: `pet-${Date.now()}-${idx}` };
-              }
-              return pet;
-            });
-
-            if (hasMissingId && clerkUser) {
-              await updateClerkUnsafeMetadata(clerkUser, {
-                pets: updatedClerkPets,
-              });
-            }
-
-            const currentPets = useDataStore.getState().pets;
-            if (currentPets.length === 0) {
-              for (const pet of updatedClerkPets) {
-                await useDataStore.getState().addPet(ownerId, pet);
-              }
-            }
-          }
         })
         .catch(() => {});
     }
@@ -133,11 +108,14 @@ export default function SplashScreen() {
     if (isAuth) {
       const metadata = clerkUser?.unsafeMetadata;
       const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+      const cachedPets = useDataStore.getState().pets;
+
+      const hasPets = clerkPets.length > 0 || cachedPets.length > 0;
       const hasCompletedProfile = Boolean(
-        metadata?.profileCompleted &&
-        metadata?.mobileNumber &&
-        metadata?.address &&
-        clerkPets.length > 0
+        (currentUser?.profileCompleted || metadata?.profileCompleted) &&
+        (currentUser?.mobileNumber || metadata?.mobileNumber) &&
+        (currentUser?.address || metadata?.address) &&
+        hasPets
       );
 
       if (hasCompletedProfile) {

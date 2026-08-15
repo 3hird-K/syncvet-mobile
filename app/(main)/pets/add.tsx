@@ -141,6 +141,7 @@ export default function AddPetScreen() {
   const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
   const addPet = useDataStore((state) => state.addPet);
+  const ownerId = user?.id || clerkUser?.id || '';
   const [submitting, setSubmitting] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
 
@@ -362,22 +363,15 @@ export default function AddPetScreen() {
         photoUrl: customPhotoUri,
       };
 
-      await addPet(ownerId, petPayload);
-
-      if (clerkUser) {
-        const existingPets = ((clerkUser.unsafeMetadata?.pets as any[]) || []);
-        await updateClerkUnsafeMetadata(clerkUser, {
-          pets: [...existingPets, petPayload],
-        });
-      }
+      await addPet(ownerId, petPayload, clerkUser);
 
       toast.success(`${petPayload.name} registered!`, {
         id: 'pet-registered-success',
-        description: 'City Veterinary health passport has been created.',
+        description: 'Pet passport created and saved locally.',
       });
       router.replace('/pets' as never);
     } catch {
-      setNetworkError('We couldn’t register your pet. Please check your connection.');
+      setNetworkError('We couldn’t register your pet. Please try again.');
       haptic.error();
     } finally {
       setSubmitting(false);

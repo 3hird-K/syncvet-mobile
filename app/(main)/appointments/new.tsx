@@ -215,8 +215,11 @@ export default function NewAppointmentScreen() {
     scrollX.value = e.contentOffset.x;
   });
 
-  // Load resident's real registered pets exclusively from Clerk metadata
+  // Load resident's real registered pets (local-first with offline support)
   const allPets = useMemo(() => {
+    if (localPets && localPets.length > 0) {
+      return localPets;
+    }
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
     return metaPets.map((p: any, idx: number) => ({
@@ -238,7 +241,7 @@ export default function NewAppointmentScreen() {
       nextVaccinationDate: p.nextVaccinationDate,
       createdAt: p.createdAt || new Date().toISOString(),
     }));
-  }, [clerkUser?.unsafeMetadata, ownerId]);
+  }, [localPets, clerkUser?.unsafeMetadata, ownerId]);
 
   // Initial form values derived from params
   const initialPetId = params.petId || (allPets.length > 0 ? allPets[0].id : undefined);
@@ -463,37 +466,19 @@ export default function NewAppointmentScreen() {
     try {
       const fullNotes = [clinicalReason, notes.trim()].filter(Boolean).join(' — ');
 
-      const newAppointment = await bookAppointment(ownerId, {
-        petId: selectedPet.id,
-        petName: selectedPet.name,
-        serviceId: selectedService.id,
-        date: dateISO,
-        timeSlot,
-        location: SERVICE_LOCATION,
-        notes: fullNotes || undefined,
-      });
-
-      // Also persist to Clerk metadata for multi-device sync
-      if (clerkUser) {
-        const existingAppts = ((clerkUser.unsafeMetadata?.appointments as any[]) || []);
-        await updateClerkUnsafeMetadata(clerkUser, {
-          appointments: [
-            ...existingAppts,
-            {
-              id: newAppointment.id,
-              petId: selectedPet.id,
-              petName: selectedPet.name,
-              serviceId: selectedService.id,
-              date: dateISO,
-              timeSlot,
-              location: SERVICE_LOCATION,
-              notes: fullNotes || undefined,
-              status: 'confirmed',
-              createdAt: new Date().toISOString(),
-            },
-          ],
-        });
-      }
+      const newAppointment = await bookAppointment(
+        ownerId,
+        {
+          petId: selectedPet.id,
+          petName: selectedPet.name,
+          serviceId: selectedService.id,
+          date: dateISO,
+          timeSlot,
+          location: SERVICE_LOCATION,
+          notes: fullNotes || undefined,
+        },
+        clerkUser,
+      );
 
       haptic.success();
       const refNumber = `CVO-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -516,7 +501,7 @@ export default function NewAppointmentScreen() {
       haptic.error();
       toast.error('Booking Failed', {
         id: 'booking-failed-error',
-        description: 'Unable to schedule this visit. Please check your connection and try again.',
+        description: 'Unable to schedule this visit. Please try again.',
       });
     } finally {
       setSubmitting(false);

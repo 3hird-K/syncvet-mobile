@@ -164,27 +164,18 @@ export default function PetProfileScreen() {
       setCustomPhotoUrl(undefined);
     }
 
-    // Update in Clerk metadata
-    if (clerkUser) {
-      const existingPets = ((clerkUser.unsafeMetadata?.pets as any[]) || []);
-      const updatedPets = existingPets.map((p: any, idx: number) => {
-        if ((p.id || `clerk-pet-${idx}`) === pet.id) {
-          return {
-            ...p,
-            avatarId: avatarId === 'custom' ? undefined : avatarId,
-            photoUrl: customPhotoUri || (avatarId === 'custom' ? p.photoUrl : undefined),
-          };
-        }
-        return p;
-      });
+    const updatedPet: Pet = {
+      ...pet,
+      avatarId: avatarId === 'custom' ? undefined : avatarId,
+      photoUrl: customPhotoUri || (avatarId === 'custom' ? pet.photoUrl : undefined),
+    };
 
-      await updateClerkUnsafeMetadata(clerkUser, {
-        pets: updatedPets,
-      });
+    if (ownerId) {
+      await useDataStore.getState().updatePet(updatedPet, clerkUser);
     }
 
     toast.success(`${pet.name}’s avatar updated!`, {
-      description: 'New 3D profile picture is now active.',
+      description: 'New profile picture saved locally.',
     });
   };
 
@@ -192,22 +183,12 @@ export default function PetProfileScreen() {
     setDeleting(true);
     try {
       if (ownerId) {
-        await deletePet(ownerId, pet.id);
-      }
-
-      if (clerkUser) {
-        const existingPets = ((clerkUser.unsafeMetadata?.pets as any[]) || []);
-        const updatedPets = existingPets.filter(
-          (p: any, idx: number) => (p.id || `clerk-pet-${idx}`) !== pet.id,
-        );
-        await updateClerkUnsafeMetadata(clerkUser, {
-          pets: updatedPets,
-        });
+        await deletePet(ownerId, pet.id, clerkUser);
       }
 
       setDeleteModalVisible(false);
       toast.info(`${pet.name} removed`, {
-        description: 'Pet passport has been deleted.',
+        description: 'Pet passport deleted.',
       });
       router.replace('/pets' as never);
     } catch (err) {
@@ -220,36 +201,11 @@ export default function PetProfileScreen() {
 
   const handleSavePetInfo = async (updatedPet: Pet) => {
     if (ownerId) {
-      await useDataStore.getState().updatePet(updatedPet);
-    }
-
-    if (clerkUser) {
-      const existingPets = ((clerkUser.unsafeMetadata?.pets as any[]) || []);
-      const updatedPets = existingPets.map((p: any, idx: number) => {
-        if ((p.id || `clerk-pet-${idx}`) === pet.id) {
-          return {
-            ...p,
-            name: updatedPet.name,
-            species: updatedPet.species,
-            breed: updatedPet.breed,
-            gender: updatedPet.gender,
-            birthYear: updatedPet.birthYear,
-            isVaccinated: updatedPet.isVaccinated,
-            isSpayedNeutered: updatedPet.isSpayedNeutered,
-            weightCategory: updatedPet.weightCategory,
-            notes: updatedPet.notes,
-          };
-        }
-        return p;
-      });
-
-      await updateClerkUnsafeMetadata(clerkUser, {
-        pets: updatedPets,
-      });
+      await useDataStore.getState().updatePet(updatedPet, clerkUser);
     }
 
     toast.success(`${updatedPet.name}’s passport updated!`, {
-      description: 'Pet details and medical notes have been saved.',
+      description: 'Pet details and medical notes saved locally.',
     });
   };
 

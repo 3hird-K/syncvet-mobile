@@ -17,7 +17,13 @@ export interface Pet {
   notes?: string;
   avatarId?: string;
   photoUrl?: string;
+  vaccinationDoses?: number;
+  lastVaccinationDate?: string;
+  nextVaccinationDate?: string;
   createdAt: string;
+  updatedAt?: string;
+  /** True when changes are queued locally and pending remote sync */
+  _pendingSync?: boolean;
 }
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
@@ -36,6 +42,9 @@ export interface Appointment {
   location: string;
   notes?: string;
   createdAt: string;
+  updatedAt?: string;
+  /** True when changes are queued locally and pending remote sync */
+  _pendingSync?: boolean;
 }
 
 export interface BookingInput {
@@ -62,6 +71,7 @@ export interface ActivityItem {
   detail?: string;
   /** ISO timestamp. */
   date: string;
+  updatedAt?: string;
 }
 
-export type PetInput = Omit<Pet, 'id' | 'createdAt' | 'ownerId'>;
+export type PetInput = Omit<Pet, 'id' | 'createdAt' | 'ownerId' | 'updatedAt' | '_pendingSync'>;

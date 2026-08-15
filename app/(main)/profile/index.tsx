@@ -34,6 +34,8 @@ import { Button } from '@components/ui/Button';
 import { AddressPicker } from '@components/ui/AddressPicker';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
+import { useNetworkStatus } from '@hooks/useNetworkStatus';
+import { syncQueue, syncEngine } from '@services/sync';
 import { toast } from '@components/ui/Sonner';
 import { ProfileScreenSkeleton } from '@components/ui/Skeleton';
 import { PawLoadingOverlay } from '@components/ui/PawLoading';
@@ -57,11 +59,19 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { signOut: clerkSignOut } = useAuth();
   const { user: clerkUser } = useUser();
+  const { isOnline } = useNetworkStatus();
   const user = useAuthStore((state) => state.user);
   const signOut = useAuthStore((state) => state.signOut);
-  const localPets = useDataStore((state) => state.pets);
-  const appointments = useDataStore((state) => state.appointments);
-  const { loading, loaded } = useResidentData();
+  const {
+    pets: storePets,
+    appointments: storeAppts,
+    loading,
+    loaded,
+    isSyncing,
+    pendingCount,
+    lastSyncedAt,
+    syncNow,
+  } = useResidentData();
 
   // Extract Profile Data
   const fullName =
@@ -104,30 +114,37 @@ export default function ProfileScreen() {
   const [phoneError, setPhoneError] = useState<string | undefined>();
   const [editError, setEditError] = useState<string | undefined>();
 
-  // Read pets exclusively from Clerk metadata
-  const metadataPets: MetadataPet[] = useMemo(() => {
-    if (Array.isArray(metadata.pets) && metadata.pets.length > 0) {
+  // Read pets (local-first with offline pending creation support)
+  const residentPets: MetadataPet[] = useMemo(() => {
+    if (storePets && storePets.length > 0) {
+      return storePets;
+    }
+    if (Array.isArray(metadata.pets)) {
       return metadata.pets;
     }
     return [];
-  }, [metadata.pets]);
+  }, [storePets, metadata.pets]);
 
   const [petsExpanded, setPetsExpanded] = useState(false);
   const DEFAULT_VISIBLE_PETS = 2;
   const visiblePets = petsExpanded
-    ? metadataPets
-    : metadataPets.slice(0, DEFAULT_VISIBLE_PETS);
-  const hasMorePets = metadataPets.length > DEFAULT_VISIBLE_PETS;
+    ? residentPets
+    : residentPets.slice(0, DEFAULT_VISIBLE_PETS);
+  const hasMorePets = residentPets.length > DEFAULT_VISIBLE_PETS;
 
   const stats = useMemo(() => {
     const today = todayISO();
-    const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
-    const upcoming = metaAppts.filter(
+    const appts =
+      storeAppts && storeAppts.length > 0
+        ? storeAppts
+        : (Array.isArray(metadata.appointments) ? metadata.appointments : []);
+
+    const upcoming = (appts as any[]).filter(
       (a: any) => a.status !== 'cancelled' && a.status !== 'completed' && a.date >= today,
     ).length;
-    const completed = metaAppts.filter((a: any) => a.status === 'completed').length;
-    return { pets: metadataPets.length, upcoming, completed };
-  }, [metadataPets, metadata.appointments]);
+    const completed = (appts as any[]).filter((a: any) => a.status === 'completed').length;
+    return { pets: residentPets.length, upcoming, completed };
+  }, [residentPets, storeAppts, metadata.appointments]);
 
   const handleChangeProfilePhoto = async () => {
     try {
@@ -249,26 +266,22 @@ export default function ProfileScreen() {
       const firstName = nameParts[0] || editName.trim();
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      if (clerkUser) {
-        try {
-          await clerkUser.update({
-            firstName,
-            lastName,
-          });
-        } catch (e) {
-          console.log('Clerk name update note:', e);
-        }
-
-        await updateClerkUnsafeMetadata(clerkUser, {
-          mobileNumber: editPhone.trim(),
-          address: editAddress.trim(),
-        });
-      }
+      const ownerId = user?.id || clerkUser?.id || '';
 
       await useAuthStore.getState().saveOwnerProfile(editPhone.trim(), editAddress.trim());
+
+      if (ownerId) {
+        await syncQueue.enqueue(ownerId, 'profile', ownerId, 'UPDATE_PROFILE', {
+          mobileNumber: editPhone.trim(),
+          address: editAddress.trim(),
+          fullName: editName.trim(),
+        });
+        syncEngine.sync(ownerId, clerkUser).catch(() => {});
+      }
+
       setEditModalVisible(false);
       toast.success('Profile updated successfully!', {
-        description: 'Name, phone and address have been saved.',
+        description: 'Details saved locally.',
       });
     } catch (err: any) {
       console.log('Update profile error:', err);
@@ -307,14 +320,11 @@ export default function ProfileScreen() {
   const handleRefresh = useCallback(async () => {
     haptic.light();
     try {
-      await clerkUser?.reload();
-      if (user?.id) {
-        await useDataStore.getState().loadAll(user.id);
-      }
+      await syncNow();
     } catch (e) {
       console.log('Profile refresh error:', e);
     }
-  }, [clerkUser, user?.id]);
+  }, [syncNow]);
 
   if (loading && !loaded && !user && !clerkUser) {
     return (
@@ -479,7 +489,7 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
 
-          {metadataPets.length === 0 ? (
+          {residentPets.length === 0 ? (
             <Pressable
               style={[styles.emptyPetCard, shadows.sm]}
               onPress={() => {
@@ -554,6 +564,96 @@ export default function ProfileScreen() {
               })}
             </View>
           )}
+        </View>
+
+        {/* Cloud & Offline Synchronization Status */}
+        <View style={[styles.syncCard, shadows.sm]}>
+          <View style={styles.syncLeftRow}>
+            <View
+              style={[
+                styles.syncBadgeIcon,
+                !isOnline
+                  ? styles.syncBadgeIconOffline
+                  : pendingCount > 0
+                  ? styles.syncBadgeIconPending
+                  : styles.syncBadgeIconOnline,
+              ]}
+            >
+              <Ionicons
+                name={
+                  !isOnline
+                    ? 'cloud-offline-outline'
+                    : pendingCount > 0
+                    ? 'arrow-up-circle-outline'
+                    : 'cloud-done-outline'
+                }
+                size={18}
+                color={
+                  !isOnline
+                    ? colors.textMuted
+                    : pendingCount > 0
+                    ? colors.warning
+                    : colors.primaryDark
+                }
+              />
+            </View>
+            <View style={styles.syncTextWrap}>
+              <Text style={styles.syncTitle} numberOfLines={1}>
+                Data & Cloud Sync
+              </Text>
+              <View style={styles.syncMetaRow}>
+                <View
+                  style={[
+                    styles.syncStatusDot,
+                    { backgroundColor: isOnline ? colors.success : '#94A3B8' },
+                  ]}
+                />
+                <Text style={styles.syncStatusLabel}>
+                  {isOnline ? 'Online' : 'Offline'}
+                </Text>
+                <Text style={styles.syncDotSeparator}>·</Text>
+                <Text style={styles.syncSub} numberOfLines={1}>
+                  {!isOnline
+                    ? pendingCount > 0
+                      ? `${pendingCount} queued`
+                      : 'Saved locally'
+                    : isSyncing
+                    ? 'Syncing...'
+                    : pendingCount > 0
+                    ? `${pendingCount} pending`
+                    : 'All records synced'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {isOnline ? (
+            <Pressable
+              onPress={async () => {
+                haptic.light();
+                try {
+                  await syncNow();
+                  toast.success('Sync complete', { description: 'All records are up to date.' });
+                } catch {
+                  toast.error('Sync failed', { description: 'Please try again in a moment.' });
+                }
+              }}
+              disabled={isSyncing}
+              style={({ pressed }) => [
+                styles.syncActionBtn,
+                isSyncing && styles.syncActionBtnLoading,
+                pressed && styles.syncActionBtnPressed,
+              ]}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Sync data"
+            >
+              <Ionicons name="sync" size={12} color={colors.primaryDark} />
+              <Text style={styles.syncActionBtnText}>
+                {isSyncing ? 'Syncing' : 'Sync'}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* City Veterinary Office Station Strip */}
@@ -979,6 +1079,108 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.textSecondary,
     fontSize: 11.5,
+  },
+  syncCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.08)',
+    marginTop: spacing.sm,
+    gap: 8,
+  },
+  syncLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  syncBadgeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  syncBadgeIconOnline: {
+    backgroundColor: 'rgba(0, 168, 150, 0.10)',
+  },
+  syncBadgeIconOffline: {
+    backgroundColor: '#F1F5F9',
+  },
+  syncBadgeIconPending: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  },
+  syncTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  syncTitle: {
+    ...typography.title,
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontFamily: typography.font.bold,
+  },
+  syncMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
+  },
+  syncStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    flexShrink: 0,
+  },
+  syncStatusLabel: {
+    ...typography.captionBold,
+    color: colors.textSecondary,
+    fontSize: 10.5,
+    flexShrink: 0,
+  },
+  syncDotSeparator: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 10,
+    flexShrink: 0,
+  },
+  syncSub: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 10.5,
+    flex: 1,
+  },
+  syncActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.18)',
+    flexShrink: 0,
+  },
+  syncActionBtnLoading: {
+    opacity: 0.8,
+  },
+  syncActionBtnPressed: {
+    backgroundColor: 'rgba(0, 168, 150, 0.16)',
+  },
+  syncActionBtnText: {
+    ...typography.captionBold,
+    color: colors.primaryDark,
+    fontSize: 11,
+    fontFamily: typography.font.bold,
   },
   cvoCleanCard: {
     flexDirection: 'row',

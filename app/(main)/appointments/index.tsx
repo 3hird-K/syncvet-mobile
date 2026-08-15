@@ -75,7 +75,13 @@ export default function AppointmentsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { user: clerkUser } = useUser();
-  const { loading, loaded } = useResidentData();
+  const {
+    pets: storePets,
+    appointments: storeAppointments,
+    loading,
+    loaded,
+    syncNow,
+  } = useResidentData();
 
   const [activeTab, setActiveTab] = useState<AppointmentTab>('upcoming');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -85,22 +91,22 @@ export default function AppointmentsScreen() {
     haptic.light();
     setRefreshing(true);
     try {
-      await clerkUser?.reload();
-      if (clerkUser?.id) {
-        await useDataStore.getState().loadAll(clerkUser.id);
-      }
+      await syncNow();
     } catch (e) {
       console.log('Appointments refresh error:', e);
     } finally {
       setRefreshing(false);
     }
-  }, [clerkUser]);
+  }, [syncNow]);
 
   const listRef = useRef<FlatList<AppointmentTab>>(null);
   const scrollX = useSharedValue(0);
 
-  // 1. Get resident's real registered pets exclusively from Clerk metadata
+  // 1. Get resident's real registered pets
   const userPets = useMemo(() => {
+    if (storePets && storePets.length > 0) {
+      return storePets;
+    }
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
 
@@ -110,9 +116,9 @@ export default function AppointmentsScreen() {
       species: p.species || 'dog',
       breed: p.breed || '',
     }));
-  }, [clerkUser?.unsafeMetadata]);
+  }, [storePets, clerkUser?.unsafeMetadata]);
 
-  // 2. Filter appointments strictly from user's Clerk metadata appointments
+  // 2. Filter appointments (local-first with offline pending booking support)
   const { upcoming, past } = useMemo(() => {
     const today = todayISO();
     const validPetIds = new Set(userPets.map((p) => p.id));
@@ -120,9 +126,13 @@ export default function AppointmentsScreen() {
 
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
+    const apptPool =
+      storeAppointments && storeAppointments.length > 0
+        ? storeAppointments
+        : (metaAppts as Appointment[]);
 
-    // Filter to only include appointments for pets the user actually owns
-    const filteredAppts = (metaAppts as Appointment[]).filter((a) => {
+    // Filter to only include appointments for pets the user owns
+    const filteredAppts = (apptPool as Appointment[]).filter((a) => {
       if (!a) return false;
       const matchesId = a.petId ? validPetIds.has(a.petId) : false;
       const matchesName = a.petName ? validPetNames.has(a.petName.toLowerCase().trim()) : false;
@@ -142,7 +152,7 @@ export default function AppointmentsScreen() {
       .sort((a, b) => `${b.date}${b.timeSlot}`.localeCompare(`${a.date}${a.timeSlot}`));
 
     return { upcoming: upcomingList, past: pastList };
-  }, [userPets, clerkUser?.unsafeMetadata]);
+  }, [userPets, storeAppointments, clerkUser?.unsafeMetadata]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {

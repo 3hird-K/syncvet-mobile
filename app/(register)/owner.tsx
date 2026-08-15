@@ -19,6 +19,7 @@ import { BackButton } from '@components/ui/BackButton';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
+import { syncQueue, syncEngine } from '@services/sync';
 
 const CLINIC_OPTIONS = [
   { label: 'Main City Vet Clinic', value: 'main' },
@@ -77,24 +78,26 @@ export default function OwnerRegistrationScreen() {
 
       await saveOwnerProfile(mobile, addr);
 
-      if (clerkUser) {
-        await updateClerkUnsafeMetadata(clerkUser, {
+      const ownerId = user?.id || clerkUser?.id || '';
+      if (ownerId) {
+        await syncQueue.enqueue(ownerId, 'profile', ownerId, 'UPDATE_PROFILE', {
           mobileNumber: mobile,
           address: addr,
         });
+        syncEngine.sync(ownerId, clerkUser).catch(() => {});
       }
 
       haptic.success();
       router.push('/(register)/pet');
     } catch {
       setNetworkError(
-        'We couldn’t save your details. Check your connection and try again.',
+        'We couldn’t save your details. Please try again.',
       );
       haptic.error();
     } finally {
       setSubmitting(false);
     }
-  }, [validateAll, saveOwnerProfile, fields.mobileNumber.value, fields.address.value, clerkUser, router]);
+  }, [validateAll, saveOwnerProfile, fields.mobileNumber.value, fields.address.value, user?.id, clerkUser, router]);
 
   const reducedMotion = useReducedMotion();
   const enterAnim = reducedMotion ? FadeIn.duration(120) : ZoomIn.duration(280);

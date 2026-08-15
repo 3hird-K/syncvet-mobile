@@ -8,7 +8,6 @@ import type {
   Pet,
   PetInput,
 } from './types';
-import { addDays, toISODate } from '@lib/format';
 
 interface OwnerData {
   pets: Pet[];
@@ -20,8 +19,6 @@ function ownerKey(ownerId: string): string {
   return `syncvet.data.${ownerId}`;
 }
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -31,9 +28,8 @@ function emptyOwnerData(): OwnerData {
 }
 
 /**
- * Mock data layer for resident content. Persists per-owner records in
- * AsyncStorage and mimics network latency so the real backend can be swapped
- * in through the DataService interface.
+ * Local Data Service layer for resident content. Persists per-owner records in
+ * AsyncStorage immediately for true offline-first performance and zero UI latency.
  */
 export class MockDataService implements DataService {
   async getPets(ownerId: string): Promise<Pet[]> {
@@ -42,22 +38,25 @@ export class MockDataService implements DataService {
   }
 
   async addPet(ownerId: string, input: PetInput): Promise<Pet> {
-    await delay(700);
     const data = await this.load(ownerId);
+    const now = new Date().toISOString();
     const pet: Pet = {
       ...input,
-      id: uid('pet'),
+      id: (input as any).id || uid('pet'),
       ownerId,
-      createdAt: new Date().toISOString(),
+      createdAt: (input as any).createdAt || now,
+      updatedAt: now,
+      _pendingSync: true,
     };
-    data.pets.push(pet);
+    data.pets = [pet, ...data.pets.filter((p) => p.id !== pet.id)];
     data.activity.unshift({
       id: uid('act'),
       ownerId,
       type: 'registration',
       title: `${pet.name} registered`,
       detail: `${titleCase(pet.species)} · ${pet.breed}`,
-      date: new Date().toISOString(),
+      date: now,
+      updatedAt: now,
     });
     await this.save(ownerId, data);
     return pet;
@@ -65,8 +64,17 @@ export class MockDataService implements DataService {
 
   async updatePet(pet: Pet): Promise<void> {
     const data = await this.load(pet.ownerId);
+    const now = new Date().toISOString();
+    const updated: Pet = {
+      ...pet,
+      updatedAt: now,
+    };
     const index = data.pets.findIndex((p) => p.id === pet.id);
-    if (index >= 0) data.pets[index] = pet;
+    if (index >= 0) {
+      data.pets[index] = updated;
+    } else {
+      data.pets.push(updated);
+    }
     await this.save(pet.ownerId, data);
   }
 
@@ -86,14 +94,16 @@ export class MockDataService implements DataService {
     ownerId: string,
     input: BookingInput,
   ): Promise<Appointment> {
-    await delay(900);
     const data = await this.load(ownerId);
+    const now = new Date().toISOString();
     const appointment: Appointment = {
       ...input,
-      id: uid('apt'),
+      id: (input as any).id || uid('apt'),
       ownerId,
       status: 'pending',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
+      _pendingSync: true,
     };
     data.appointments.push(appointment);
     data.activity.unshift({
@@ -102,7 +112,8 @@ export class MockDataService implements DataService {
       type: 'booking',
       title: 'Appointment request submitted',
       detail: `${appointment.petName} · ${serviceLabel(appointment.serviceId)}`,
-      date: new Date().toISOString(),
+      date: now,
+      updatedAt: now,
     });
     await this.save(ownerId, data);
     return appointment;
@@ -110,16 +121,19 @@ export class MockDataService implements DataService {
 
   async cancelAppointment(ownerId: string, appointmentId: string): Promise<void> {
     const data = await this.load(ownerId);
+    const now = new Date().toISOString();
     const appointment = data.appointments.find((a) => a.id === appointmentId);
     if (appointment && appointment.status !== 'completed') {
       appointment.status = 'cancelled';
+      appointment.updatedAt = now;
       data.activity.unshift({
         id: uid('act'),
         ownerId,
         type: 'booking',
         title: 'Appointment cancelled',
         detail: `${appointment.petName} · ${serviceLabel(appointment.serviceId)}`,
-        date: new Date().toISOString(),
+        date: now,
+        updatedAt: now,
       });
     }
     await this.save(ownerId, data);
@@ -135,30 +149,32 @@ export class MockDataService implements DataService {
     input: Omit<ActivityItem, 'id' | 'ownerId' | 'date'>,
   ): Promise<void> {
     const data = await this.load(ownerId);
+    const now = new Date().toISOString();
     data.activity.unshift({
       ...input,
       id: uid('act'),
       ownerId,
-      date: new Date().toISOString(),
+      date: now,
+      updatedAt: now,
     });
     await this.save(ownerId, data);
   }
 
-  private async load(ownerId: string): Promise<OwnerData> {
-    const raw = await AsyncStorage.getItem(ownerKey(ownerId));
-    if (raw) {
-      try {
+  public async load(ownerId: string): Promise<OwnerData> {
+    if (!ownerId) return emptyOwnerData();
+    try {
+      const raw = await AsyncStorage.getItem(ownerKey(ownerId));
+      if (raw) {
         return JSON.parse(raw) as OwnerData;
-      } catch {
-        // fall through
       }
-    }
+    } catch {}
     const initial = emptyOwnerData();
     await this.save(ownerId, initial);
     return initial;
   }
 
-  private async save(ownerId: string, data: OwnerData): Promise<void> {
+  public async save(ownerId: string, data: OwnerData): Promise<void> {
+    if (!ownerId) return;
     await AsyncStorage.setItem(ownerKey(ownerId), JSON.stringify(data));
   }
 }

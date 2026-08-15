@@ -14,6 +14,7 @@ export interface AuthUser {
   profileCompleted: boolean;
   role: UserRole;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface AuthSession {

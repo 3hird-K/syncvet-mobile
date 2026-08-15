@@ -72,6 +72,12 @@ export function PetPassportCard({ pet, index }: PetPassportCardProps) {
                   {isDog ? 'Canine' : 'Feline'}
                 </Text>
               </View>
+
+              {pet._pendingSync ? (
+                <View style={styles.pendingHeaderBadge}>
+                  <Text style={styles.pendingHeaderBadgeText}>Pending</Text>
+                </View>
+              ) : null}
             </View>
 
             <Text style={styles.petBreed} numberOfLines={1}>
@@ -87,6 +93,14 @@ export function PetPassportCard({ pet, index }: PetPassportCardProps) {
 
         {/* Immunization & Vital Status Row */}
         <View style={styles.statusChipsRow}>
+          {/* Pending Sync Badge if modified offline */}
+          {pet._pendingSync ? (
+            <View style={styles.pendingSyncBadge}>
+              <Ionicons name="cloud-upload-outline" size={11} color={colors.warning} />
+              <Text style={styles.pendingSyncText}>Pending Sync</Text>
+            </View>
+          ) : null}
+
           {/* Anti-Rabies Protection Status */}
           {pet.isVaccinated ? (
             <View style={styles.vaxBadgeGreen}>
@@ -213,6 +227,20 @@ const styles = StyleSheet.create({
   speciesBadgeTextCat: {
     color: '#DB2777',
   },
+  pendingHeaderBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  pendingHeaderBadgeText: {
+    ...typography.captionBold,
+    fontSize: 9.5,
+    fontFamily: typography.font.bold,
+    color: colors.warning,
+  },
   petBreed: {
     ...typography.small,
     fontSize: 11.5,
@@ -226,6 +254,23 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
+  },
+  pendingSyncBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 7.5,
+    paddingVertical: 3.5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.30)',
+  },
+  pendingSyncText: {
+    ...typography.captionBold,
+    fontSize: 10.5,
+    fontFamily: typography.font.bold,
+    color: colors.warning,
   },
   vaxBadgeGreen: {
     flexDirection: 'row',

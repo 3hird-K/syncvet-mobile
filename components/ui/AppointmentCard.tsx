@@ -30,7 +30,7 @@ export function AppointmentCard({
   const localPets = useDataStore((state) => state.pets);
   const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
   const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-  const petPool = metaPets.length > 0 ? metaPets : localPets;
+  const petPool = clerkUser ? metaPets : localPets;
 
   const pet = petPool.find(
     (p: any) =>
@@ -89,7 +89,15 @@ export function AppointmentCard({
           </Text>
         </View>
 
-        <StatusBadge status={appointment.status} />
+        <View style={styles.badgeCol}>
+          {appointment._pendingSync ? (
+            <View style={styles.pendingBadge}>
+              <Ionicons name="cloud-upload-outline" size={10} color={colors.warning} />
+              <Text style={styles.pendingBadgeText}>Pending</Text>
+            </View>
+          ) : null}
+          <StatusBadge status={appointment.status} />
+        </View>
       </View>
 
       {/* 2. Compact Service & Schedule Bar */}
@@ -178,6 +186,27 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     fontSize: 11.5,
+  },
+  badgeCol: {
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.28)',
+  },
+  pendingBadgeText: {
+    ...typography.captionBold,
+    fontSize: 9.5,
+    fontFamily: typography.font.bold,
+    color: colors.warning,
   },
   metaBar: {
     flexDirection: 'row',

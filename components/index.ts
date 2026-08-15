@@ -32,6 +32,7 @@ export { Stepper } from './ui/Stepper';
 export { PawLoading } from './ui/PawLoading';
 export { AddressPicker } from './ui/AddressPicker';
 export { DropdownSelect } from './ui/DropdownSelect';
+export { SyncStatusBar } from './ui/SyncStatusBar';
 export { MeltingBallTabBar } from './navigation/MeltingBallTabBar';
 export * from './home';
 export * from './pets';

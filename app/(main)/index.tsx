@@ -5,7 +5,6 @@ import { useUser } from '@clerk/expo';
 import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
-import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
@@ -24,7 +23,7 @@ import type { Pet } from '@services/data';
 export default function HomeScreen() {
   const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
-  const { loading, loaded } = useResidentData();
+  const { pets: storePets, appointments: storeAppointments, loading, loaded, syncNow } = useResidentData();
 
   const displayName =
     clerkUser?.fullName ||
@@ -33,14 +32,17 @@ export default function HomeScreen() {
     'Resident';
   const displayPhoto = clerkUser?.imageUrl || user?.photoUrl;
 
-  // Real data exclusively from Clerk user metadata
+  // Local-first source of truth with offline pending creation support
   const allPets: Pet[] = useMemo(() => {
+    if (storePets && storePets.length > 0) {
+      return storePets;
+    }
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
 
     return metaPets.map((p, idx) => ({
       id: p.id || `clerk-pet-${idx}`,
-      ownerId: user?.id || clerkUser?.id || '',
+      ownerId: clerkUser?.id || '',
       name: p.name || 'My Pet',
       species: p.species || 'dog',
       breed: p.breed || '',
@@ -54,17 +56,18 @@ export default function HomeScreen() {
       photoUrl: p.photoUrl,
       createdAt: p.createdAt || new Date().toISOString(),
     }));
-  }, [clerkUser?.unsafeMetadata, user?.id, clerkUser?.id]);
+  }, [storePets, clerkUser?.unsafeMetadata, clerkUser?.id]);
 
   const upcomingAppointments = useMemo(() => {
     const today = todayISO();
     const validPetIds = new Set(allPets.map((p) => p.id));
     const validPetNames = new Set(allPets.map((p) => p.name?.toLowerCase().trim()));
 
-    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
+    const apptPool = storeAppointments && storeAppointments.length > 0
+      ? storeAppointments
+      : ((clerkUser?.unsafeMetadata?.appointments || []) as any[]);
 
-    return metaAppts
+    return (apptPool as any[])
       .filter((a) => {
         if (!a) return false;
         const matchesId = a.petId ? validPetIds.has(a.petId) : false;
@@ -76,21 +79,18 @@ export default function HomeScreen() {
         );
       })
       .sort((a, b) => (a.date === b.date ? a.timeSlot.localeCompare(b.timeSlot) : a.date.localeCompare(b.date)));
-  }, [allPets, clerkUser?.unsafeMetadata]);
+  }, [allPets, storeAppointments, clerkUser?.unsafeMetadata]);
 
   const nextAppointment = upcomingAppointments[0];
 
   const handleRefresh = useCallback(async () => {
     haptic.light();
     try {
-      await clerkUser?.reload();
-      if (user?.id) {
-        await useDataStore.getState().loadAll(user.id);
-      }
+      await syncNow();
     } catch (e) {
       console.log('Refresh error:', e);
     }
-  }, [clerkUser, user?.id]);
+  }, [syncNow]);
 
   if (loading && !loaded && allPets.length === 0) {
     return (

@@ -5,7 +5,6 @@ import { useUser } from '@clerk/expo';
 import { colors, spacing } from '@theme';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
-import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
@@ -23,19 +22,22 @@ import type { Pet } from '@services/data';
 export default function PetsScreen() {
   const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
-  const { loading, loaded } = useResidentData();
+  const { pets: storePets, loading, loaded, syncNow } = useResidentData();
 
   const [activeFilter, setActiveFilter] = useState<PetFilterCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Extract resident's pets directly from Clerk user unsafeMetadata
+  // Local-first source of truth with offline pending creation support
   const allPets: Pet[] = useMemo(() => {
+    if (storePets && storePets.length > 0) {
+      return storePets;
+    }
     const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
     const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
 
     return metaPets.map((p, idx) => ({
       id: p.id || `clerk-pet-${idx}`,
-      ownerId: p.ownerId || user?.id || 'resident-owner',
+      ownerId: clerkUser?.id || '',
       name: p.name || 'My Pet',
       species: p.species || 'dog',
       breed: p.breed || '',
@@ -50,7 +52,7 @@ export default function PetsScreen() {
       createdAt: p.createdAt || new Date().toISOString(),
       updatedAt: p.updatedAt || new Date().toISOString(),
     }));
-  }, [clerkUser?.unsafeMetadata, user?.id]);
+  }, [storePets, clerkUser?.unsafeMetadata, clerkUser?.id]);
 
   // Real-time search & filter
   const filteredPets = useMemo(() => {
@@ -81,14 +83,11 @@ export default function PetsScreen() {
   const handleRefresh = useCallback(async () => {
     haptic.light();
     try {
-      await clerkUser?.reload();
-      if (user?.id) {
-        await useDataStore.getState().loadAll(user.id);
-      }
+      await syncNow();
     } catch (e) {
       console.log('Pets refresh error:', e);
     }
-  }, [clerkUser, user?.id]);
+  }, [syncNow]);
 
   if (loading && !loaded && allPets.length === 0) {
     return (

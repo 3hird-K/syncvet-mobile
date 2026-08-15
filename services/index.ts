@@ -5,3 +5,6 @@ export * from './auth/types';
 export { getDataService } from './data';
 export type { DataService } from './data/DataService';
 export * from './data/types';
+
+export * from './network';
+export * from './sync';
