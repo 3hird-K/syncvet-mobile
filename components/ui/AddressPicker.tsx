@@ -127,7 +127,7 @@ export function AddressPicker({
           ]}
           numberOfLines={1}
         >
-          {selectedLocation || 'Select Barangay, City (Misamis Oriental)'}
+          {selectedLocation || 'Select Barangay, City, Province (Philippines)'}
         </Text>
 
         <View style={styles.rightChevron}>
@@ -206,7 +206,7 @@ export function AddressPicker({
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search barangay, city, or municipality..."
+                placeholder="Search barangay, city, or province in PH..."
                 placeholderTextColor={colors.textDisabled}
                 style={styles.searchInput}
                 autoCorrect={false}
@@ -225,20 +225,20 @@ export function AddressPicker({
               ) : null}
             </View>
 
-            {/* Quick Misamis Oriental Picks */}
+            {/* Quick Popular Picks */}
             {!searchQuery ? (
               <View style={styles.quickPicksWrap}>
                 <View style={styles.quickPicksHeader}>
                   <Ionicons name="sparkles" size={13} color={colors.primary} />
-                  <Text style={styles.quickPicksTitle}>Popular in Misamis Oriental:</Text>
+                  <Text style={styles.quickPicksTitle}>Popular Locations:</Text>
                 </View>
                 <View style={styles.quickPicksRow}>
-                  {['Carmen, CDO', 'Nazareth, CDO', 'Lapasan, CDO', 'Barra, Opol', 'Tagoloan'].map(
+                  {['Carmen, CDO', 'Nazareth, CDO', 'Barra, Opol', 'Lahug, Cebu', 'Davao City', 'BGC, Taguig', 'Quezon City'].map(
                     (name) => (
                       <Pressable
                         key={name}
                         onPress={() => {
-                          const match = MISAMIS_ORIENTAL_LOCATIONS.find((loc) =>
+                          const match = filteredLocations.find((loc) =>
                             loc.fullLocation.toLowerCase().includes(name.split(',')[0].toLowerCase()),
                           );
                           if (match) handleSelectLocation(match);
