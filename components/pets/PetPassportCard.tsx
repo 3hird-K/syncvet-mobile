@@ -187,13 +187,13 @@ const styles = StyleSheet.create({
   },
   petName: {
     ...typography.title,
-    fontSize: 16.5,
+    fontSize: 15,
     fontFamily: typography.font.bold,
     color: colors.textPrimary,
   },
   speciesBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: radius.pill,
   },
   speciesBadgeDog: {
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   },
   petBreed: {
     ...typography.small,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textMuted,
   },
   chevronWrap: {
@@ -232,8 +232,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(16, 185, 129, 0.10)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7.5,
+    paddingVertical: 3.5,
     borderRadius: radius.pill,
   },
   vaxBadgeAmber: {
@@ -241,19 +241,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(245, 158, 11, 0.10)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7.5,
+    paddingVertical: 3.5,
     borderRadius: radius.pill,
   },
   vaxBadgeTextGreen: {
     ...typography.captionBold,
-    fontSize: 11,
+    fontSize: 10.5,
     fontFamily: typography.font.bold,
     color: colors.success,
   },
   vaxBadgeTextAmber: {
     ...typography.captionBold,
-    fontSize: 11,
+    fontSize: 10.5,
     fontFamily: typography.font.bold,
     color: colors.warning,
   },
@@ -262,13 +262,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3.5,
     backgroundColor: 'rgba(7, 30, 38, 0.04)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7.5,
+    paddingVertical: 3.5,
     borderRadius: radius.pill,
   },
   vitalChipText: {
     ...typography.captionBold,
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textSecondary,
   },
   cardFooter: {

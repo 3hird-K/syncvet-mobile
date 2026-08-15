@@ -1563,10 +1563,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   serviceOptionTitle: {
-    ...typography.heading2,
+    ...typography.title,
     color: colors.textPrimary,
-    fontSize: 15.5,
-    fontWeight: '700',
+    fontSize: 14.5,
+    fontFamily: typography.font.bold,
   },
   freeBadge: {
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
@@ -1578,11 +1578,12 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     color: colors.success,
     fontSize: 9.5,
+    fontFamily: typography.font.bold,
   },
   serviceOptionDesc: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   reasonsSection: {
     gap: 8,
@@ -1591,7 +1592,8 @@ const styles = StyleSheet.create({
   reasonsTitle: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 12.5,
+    fontSize: 12,
+    fontFamily: typography.font.bold,
   },
   reasonsChips: {
     flexDirection: 'row',
@@ -1613,11 +1615,11 @@ const styles = StyleSheet.create({
   reasonChipText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   reasonChipTextActive: {
-    color: colors.primary,
-    fontWeight: '700',
+    color: colors.primaryDark,
+    fontFamily: typography.font.bold,
   },
   notesSection: {
     gap: 6,
@@ -1626,7 +1628,8 @@ const styles = StyleSheet.create({
   notesLabel: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 12.5,
+    fontSize: 12,
+    fontFamily: typography.font.bold,
   },
   notesInput: {
     backgroundColor: colors.surface,
@@ -1637,14 +1640,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     ...typography.body,
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 12.5,
     minHeight: 70,
     textAlignVertical: 'top',
   },
   scheduleGroupLabel: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 13,
+    fontSize: 12.5,
+    fontFamily: typography.font.bold,
     marginTop: spacing.xs,
   },
   datesScroll: {
@@ -1686,7 +1690,7 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     color: colors.textPrimary,
     fontSize: 13,
-    fontWeight: '700',
+    fontFamily: typography.font.bold,
   },
   dateLabelActive: {
     color: colors.white,
@@ -1705,8 +1709,8 @@ const styles = StyleSheet.create({
   sessionHeaderTitle: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 12.5,
-    fontWeight: '700',
+    fontSize: 12,
+    fontFamily: typography.font.bold,
   },
   timeSlotsGrid: {
     flexDirection: 'row',
@@ -1740,11 +1744,12 @@ const styles = StyleSheet.create({
   timeSlotText: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 12.5,
+    fontSize: 12,
+    fontFamily: typography.font.bold,
   },
   timeSlotTextActive: {
-    color: colors.primary,
-    fontWeight: '700',
+    color: colors.primaryDark,
+    fontFamily: typography.font.bold,
   },
   timeSlotTextDisabled: {
     color: colors.textDisabled,

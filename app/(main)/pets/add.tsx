@@ -999,17 +999,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionTitle: {
-    ...typography.heading2,
+    ...typography.heading3,
     color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontFamily: typography.font.bold,
   },
   sectionDesc: {
     ...typography.body,
     color: colors.textSecondary,
-    fontSize: 12.5,
+    fontSize: 12,
     marginTop: 2,
-    lineHeight: 17,
+    lineHeight: 16,
   },
   fieldBlock: {
     gap: 3,
@@ -1017,7 +1017,8 @@ const styles = StyleSheet.create({
   fieldLabel: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 12.5,
+    fontSize: 12,
+    fontFamily: typography.font.bold,
     marginBottom: 2,
   },
   avatarPickerCard: {
@@ -1039,6 +1040,7 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     color: colors.textPrimary,
     fontSize: 12.5,
+    fontFamily: typography.font.bold,
   },
   avatarPickerSub: {
     ...typography.small,
@@ -1069,8 +1071,8 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
   },
   breedChipTextSelected: {
-    color: colors.primary,
-    fontWeight: '700',
+    color: colors.primaryDark,
+    fontFamily: typography.font.bold,
   },
   summaryBox: {
     flexDirection: 'row',
@@ -1090,13 +1092,13 @@ const styles = StyleSheet.create({
   summaryPetName: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontFamily: typography.font.bold,
   },
   summaryPetMeta: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11.5,
   },
   summaryBadgeRow: {
     flexDirection: 'row',
@@ -1114,6 +1116,7 @@ const styles = StyleSheet.create({
   summaryStatusText: {
     ...typography.captionBold,
     fontSize: 10,
+    fontFamily: typography.font.bold,
   },
   swipePromptPill: {
     flexDirection: 'row',
@@ -1130,9 +1133,9 @@ const styles = StyleSheet.create({
   },
   swipePromptText: {
     ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 12.5,
-    fontWeight: '700',
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontFamily: typography.font.bold,
   },
   swipePromptIconWrap: {
     width: 22,

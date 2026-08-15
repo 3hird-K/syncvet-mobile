@@ -171,12 +171,12 @@ const styles = StyleSheet.create({
   petName: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 15.5,
-    fontWeight: '800',
+    fontSize: 14.5,
+    fontFamily: typography.font.bold,
   },
   petBreedText: {
     ...typography.caption,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     fontSize: 11.5,
   },
   metaBar: {
@@ -185,8 +185,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: 'rgba(7, 30, 38, 0.025)',
     borderRadius: radius.md,
-    paddingVertical: 6,
-    paddingHorizontal: 9,
+    paddingVertical: 5.5,
+    paddingHorizontal: 8,
     gap: 6,
   },
   servicePill: {
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     color: colors.primaryDark,
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: typography.font.bold,
     flexShrink: 1,
   },
   schedulePill: {
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     color: colors.textPrimary,
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: typography.font.bold,
   },
   footerRow: {
     flexDirection: 'row',
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
   locationText: {
     ...typography.small,
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 10.5,
   },
   detailsAction: {
     flexDirection: 'row',
@@ -239,7 +239,8 @@ const styles = StyleSheet.create({
   },
   footerText: {
     ...typography.captionBold,
-    color: colors.primary,
+    color: colors.primaryDark,
     fontSize: 11,
+    fontFamily: typography.font.bold,
   },
 });
