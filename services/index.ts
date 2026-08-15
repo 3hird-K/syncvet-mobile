@@ -8,3 +8,4 @@ export * from './data/types';
 
 export * from './network';
 export * from './sync';
+export * from './notifications';

@@ -9,6 +9,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -22,7 +23,6 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { phoneRule } from '@lib/validation';
-import { getPetAvatarSource } from '@lib/petAvatars';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
@@ -32,9 +32,9 @@ import { Avatar } from '@components/ui/Avatar';
 import { Input } from '@components/ui/Input';
 import { Button } from '@components/ui/Button';
 import { AddressPicker } from '@components/ui/AddressPicker';
-import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
+import { useNotificationPreferences } from '@hooks/useNotificationPreferences';
 import { syncQueue, syncEngine } from '@services/sync';
 import { toast } from '@components/ui/Sonner';
 import { ProfileScreenSkeleton } from '@components/ui/Skeleton';
@@ -107,6 +107,14 @@ export default function ProfileScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState(fullName);
   const [editPhone, setEditPhone] = useState(mobileNumber);
+
+  // Notification Preferences & OS Permissions
+  const {
+    preferences: notifPrefs,
+    isGranted: notifGranted,
+    updatePreference: updateNotifPref,
+    requestPermission: requestNotifPermission,
+  } = useNotificationPreferences();
   const [editAddress, setEditAddress] = useState(address);
   const [savingProfile, setSavingProfile] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -125,12 +133,6 @@ export default function ProfileScreen() {
     return [];
   }, [storePets, metadata.pets]);
 
-  const [petsExpanded, setPetsExpanded] = useState(false);
-  const DEFAULT_VISIBLE_PETS = 2;
-  const visiblePets = petsExpanded
-    ? residentPets
-    : residentPets.slice(0, DEFAULT_VISIBLE_PETS);
-  const hasMorePets = residentPets.length > DEFAULT_VISIBLE_PETS;
 
   const stats = useMemo(() => {
     const today = todayISO();
@@ -376,9 +378,9 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Change profile photo"
             >
-              <Avatar name={fullName} size={48} photoUrl={photoUrl} />
+              <Avatar name={fullName} size={62} photoUrl={photoUrl} />
               <View style={styles.cameraBadge}>
-                <Ionicons name="camera" size={10} color={colors.white} />
+                <Ionicons name="camera" size={11.5} color={colors.white} />
               </View>
             </Pressable>
 
@@ -496,201 +498,153 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        {/* Registered Pets - Modern Cards */}
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionTitleLeft}>
-              <Ionicons name="paw" size={16} color={colors.primary} />
-              <Text style={styles.sectionTitle}>My Registered Pets</Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                haptic.light();
-                if (hasMorePets) {
-                  setPetsExpanded((prev) => !prev);
-                } else {
-                  router.push('/pets' as never);
-                }
-              }}
-              style={styles.addPetHeaderBtn}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={petsExpanded ? 'Show fewer pets' : 'Show all pets'}
-            >
-              <Text style={styles.addPetHeaderText}>
-                {hasMorePets && petsExpanded ? 'Show Fewer Pets' : 'Show All Pets'}
-              </Text>
-              <Ionicons
-                name={hasMorePets && petsExpanded ? 'chevron-up' : 'chevron-forward'}
-                size={13}
-                color={colors.primaryDark}
-              />
-            </Pressable>
-          </View>
 
-          {residentPets.length === 0 ? (
-            <Pressable
-              style={[styles.emptyPetCard, shadows.sm]}
-              onPress={() => {
-                haptic.light();
-                router.push('/pets/add' as never);
-              }}
-            >
-              <View style={styles.emptyPetIcon}>
-                <Ionicons name="paw-outline" size={22} color={colors.primary} />
-              </View>
-              <View style={styles.emptyPetTextWrap}>
-                <Text style={styles.emptyPetTitle}>Register Your First Pet</Text>
-                <Text style={styles.emptyPetSub}>Get a digital City Vet health passport</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-            </Pressable>
-          ) : (
-            <View style={styles.petsVerticalList}>
-              {visiblePets.map((pet, idx) => {
-                const isDog = pet.species?.toLowerCase() === 'dog';
-                return (
-                  <Pressable
-                    key={pet.id || `pet-${idx}`}
-                    style={[styles.petListCard, shadows.sm]}
-                    onPress={() => {
-                      haptic.light();
-                      if (pet.id) {
-                        router.push(`/pets/${pet.id}` as never);
-                      } else {
-                        router.push('/pets' as never);
-                      }
-                    }}
-                  >
-                    {/* Pop-Out Avatar on the Left */}
-                    <PopoutPetAvatar
-                      avatarId={pet.avatarId}
-                      species={pet.species as any}
-                      photoUrl={pet.photoUrl}
-                      size={44}
-                    />
+        {/* Sync & Notification Preferences Card */}
+        <View style={[styles.prefHubCard, shadows.sm]}>
 
-                    {/* Texts and Status on the Right */}
-                    <View style={styles.petRightInfo}>
-                      <View style={styles.petNameRow}>
-                        <Text style={styles.petNameText} numberOfLines={1}>
-                          {pet.name}
-                        </Text>
-                        {pet.isVaccinated ? (
-                          <View style={styles.vaccineTagSuccess}>
-                            <Ionicons name="shield-checkmark" size={10} color={colors.success} />
-                            <Text style={styles.vaccineTagSuccessText}>Vaccinated</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.vaccineTagWarning}>
-                            <Ionicons name="alert-circle" size={10} color={colors.warning} />
-                            <Text style={styles.vaccineTagWarningText}>Needs Shot</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <Text style={styles.petBreedText} numberOfLines={1}>
-                        {pet.breed || (isDog ? 'Dog' : 'Cat')}
-                        {pet.gender
-                          ? ` · ${pet.gender === 'male' ? 'Male ♂' : 'Female ♀'}`
-                          : ''}
-                      </Text>
-                    </View>
-
-                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        {/* Cloud & Offline Synchronization Status */}
-        <View style={[styles.syncCard, shadows.sm]}>
-          <View style={styles.syncLeftRow}>
-            <View
-              style={[
-                styles.syncBadgeIcon,
-                !isOnline
-                  ? styles.syncBadgeIconOffline
-                  : pendingCount > 0
-                  ? styles.syncBadgeIconPending
-                  : styles.syncBadgeIconOnline,
-              ]}
-            >
-              <Ionicons
-                name={
-                  !isOnline
-                    ? 'cloud-offline-outline'
-                    : pendingCount > 0
-                    ? 'arrow-up-circle-outline'
-                    : 'cloud-done-outline'
-                }
-                size={18}
-                color={
-                  !isOnline
-                    ? colors.textMuted
-                    : pendingCount > 0
-                    ? colors.warning
-                    : colors.primaryDark
-                }
-              />
-            </View>
-            <View style={styles.syncTextWrap}>
-              <Text style={styles.syncTitle} numberOfLines={1}>
-                Data & Cloud Sync
-              </Text>
-              <View style={styles.syncMetaRow}>
-                <View
-                  style={[
-                    styles.syncStatusDot,
-                    { backgroundColor: isOnline ? colors.success : '#94A3B8' },
-                  ]}
+          {/* Row 1: Cloud & Local Sync */}
+          <View style={styles.prefRow}>
+            <View style={styles.prefRowLeft}>
+              <View style={[styles.prefRowIconBox, { backgroundColor: 'rgba(0, 168, 150, 0.10)' }]}>
+                <Ionicons
+                  name={
+                    !isOnline
+                      ? 'cloud-offline-outline'
+                      : pendingCount > 0
+                      ? 'arrow-up-circle-outline'
+                      : 'cloud-done-outline'
+                  }
+                  size={18}
+                  color={
+                    !isOnline
+                      ? colors.textMuted
+                      : pendingCount > 0
+                      ? colors.warning
+                      : colors.primaryDark
+                  }
                 />
-                <Text style={styles.syncStatusLabel}>
-                  {isOnline ? 'Online' : 'Offline'}
-                </Text>
-                <Text style={styles.syncDotSeparator}>·</Text>
-                <Text style={styles.syncSub} numberOfLines={1}>
+              </View>
+              <View style={styles.prefRowTextWrap}>
+                <Text style={styles.prefRowTitle}>Cloud Sync</Text>
+                <Text style={styles.prefRowSub} numberOfLines={1}>
                   {!isOnline
                     ? pendingCount > 0
-                      ? `${pendingCount} queued`
+                      ? `${pendingCount} queued offline`
                       : 'Saved locally'
                     : isSyncing
-                    ? 'Syncing...'
+                    ? 'Syncing with cloud...'
                     : pendingCount > 0
-                    ? `${pendingCount} pending`
-                    : 'All records synced'}
+                    ? `${pendingCount} pending changes`
+                    : 'Up to date'}
                 </Text>
               </View>
             </View>
+
+            {isOnline ? (
+              <Pressable
+                onPress={async () => {
+                  haptic.light();
+                  try {
+                    await syncNow();
+                    toast.success('Sync complete', { description: 'All records are up to date.' });
+                  } catch {
+                    toast.error('Sync failed', { description: 'Please try again in a moment.' });
+                  }
+                }}
+                disabled={isSyncing}
+                style={({ pressed }) => [
+                  styles.prefSyncBtn,
+                  isSyncing && styles.prefSyncBtnLoading,
+                  pressed && styles.prefSyncBtnPressed,
+                ]}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Sync data now"
+              >
+                <Ionicons name="sync" size={11} color={colors.primaryDark} />
+                <Text style={styles.prefSyncBtnText}>
+                  {isSyncing ? 'Syncing' : 'Sync'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
-          {isOnline ? (
+          {/* Divider */}
+          <View style={styles.prefDivider} />
+
+          {/* Row 2: Appointment Reminders */}
+          <View style={styles.prefRow}>
+            <View style={styles.prefRowLeft}>
+              <View style={[styles.prefRowIconBox, { backgroundColor: 'rgba(14, 116, 144, 0.10)' }]}>
+                <Ionicons name="calendar-outline" size={18} color={colors.info} />
+              </View>
+              <View style={styles.prefRowTextWrap}>
+                <Text style={styles.prefRowTitle}>Appointment Reminders</Text>
+                <Text style={styles.prefRowSub}>1 day & 2 hours before visit</Text>
+              </View>
+            </View>
+
+            <Switch
+              value={notifPrefs.appointmentsEnabled}
+              onValueChange={(val) => {
+                haptic.light();
+                updateNotifPref('appointmentsEnabled', val);
+              }}
+              trackColor={{ false: '#CBD5E1', true: colors.primaryDark }}
+              thumbColor={colors.white}
+              ios_backgroundColor="#CBD5E1"
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={styles.prefDivider} />
+
+          {/* Row 3: Vaccine Due Reminders */}
+          <View style={styles.prefRow}>
+            <View style={styles.prefRowLeft}>
+              <View style={[styles.prefRowIconBox, { backgroundColor: 'rgba(16, 185, 129, 0.10)' }]}>
+                <Ionicons name="medkit-outline" size={18} color={colors.success} />
+              </View>
+              <View style={styles.prefRowTextWrap}>
+                <Text style={styles.prefRowTitle}>Vaccine Due Alerts</Text>
+                <Text style={styles.prefRowSub}>7 days & 1 day before due date</Text>
+              </View>
+            </View>
+
+            <Switch
+              value={notifPrefs.vaccinesEnabled}
+              onValueChange={(val) => {
+                haptic.light();
+                updateNotifPref('vaccinesEnabled', val);
+              }}
+              trackColor={{ false: '#CBD5E1', true: colors.primaryDark }}
+              thumbColor={colors.white}
+              ios_backgroundColor="#CBD5E1"
+            />
+          </View>
+
+          {!notifGranted ? (
             <Pressable
               onPress={async () => {
                 haptic.light();
-                try {
-                  await syncNow();
-                  toast.success('Sync complete', { description: 'All records are up to date.' });
-                } catch {
-                  toast.error('Sync failed', { description: 'Please try again in a moment.' });
+                const granted = await requestNotifPermission();
+                if (granted) {
+                  toast.success('Notifications Enabled', {
+                    description: 'Scheduled reminders will now trigger on your device.',
+                  });
+                } else {
+                  toast.info('Permission Required', {
+                    description: 'Please enable notifications in your device system settings.',
+                  });
                 }
               }}
-              disabled={isSyncing}
               style={({ pressed }) => [
-                styles.syncActionBtn,
-                isSyncing && styles.syncActionBtnLoading,
-                pressed && styles.syncActionBtnPressed,
+                styles.enableNotifBtn,
+                pressed && styles.enableNotifBtnPressed,
               ]}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel="Sync data"
             >
-              <Ionicons name="sync" size={12} color={colors.primaryDark} />
-              <Text style={styles.syncActionBtnText}>
-                {isSyncing ? 'Syncing' : 'Sync'}
-              </Text>
+              <Ionicons name="notifications-circle" size={16} color={colors.white} />
+              <Text style={styles.enableNotifBtnText}>Enable Device Notifications</Text>
             </Pressable>
           ) : null}
         </View>
@@ -880,16 +834,17 @@ const styles = StyleSheet.create({
   heroCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    padding: 10,
-    marginBottom: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 6,
+    gap: 10,
   },
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 14,
   },
   avatarWrap: {
     position: 'relative',
@@ -899,9 +854,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -1,
     right: -1,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
@@ -910,7 +865,7 @@ const styles = StyleSheet.create({
   },
   heroTextWrap: {
     flex: 1,
-    gap: 1,
+    gap: 2.5,
     paddingLeft: 2,
   },
   nameBadgeRow: {
@@ -921,38 +876,38 @@ const styles = StyleSheet.create({
   heroName: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 14.5,
+    fontSize: 15.5,
     fontFamily: typography.font.bold,
   },
   heroEmail: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 11.5,
+    fontSize: 12,
   },
   heroPhoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3.5,
-    marginTop: 0.5,
+    gap: 4,
+    marginTop: 1,
   },
   heroPhoneText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 11.5,
   },
   heroAddressBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     backgroundColor: 'rgba(7, 30, 38, 0.03)',
-    paddingHorizontal: 8,
-    paddingVertical: 4.5,
-    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: radius.md,
   },
   heroAddressText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 11.5,
     flex: 1,
   },
   statsRow: {
@@ -1121,106 +1076,119 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 11.5,
   },
-  syncCard: {
+  expandPetsDropdownBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 168, 150, 0.06)',
+    borderRadius: radius.lg,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.14)',
+    marginTop: 2,
+  },
+  expandPetsDropdownText: {
+    ...typography.captionBold,
+    color: colors.primaryDark,
+    fontSize: 11.5,
+    fontFamily: typography.font.bold,
+  },
+  prefHubCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.08)',
     marginTop: spacing.sm,
+    gap: 6,
+  },
+  prefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
     gap: 8,
   },
-  syncLeftRow: {
+  prefRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     flex: 1,
     minWidth: 0,
   },
-  syncBadgeIcon: {
+  prefRowIconBox: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  syncBadgeIconOnline: {
-    backgroundColor: 'rgba(0, 168, 150, 0.10)',
-  },
-  syncBadgeIconOffline: {
-    backgroundColor: '#F1F5F9',
-  },
-  syncBadgeIconPending: {
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-  },
-  syncTextWrap: {
+  prefRowTextWrap: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1.5,
   },
-  syncTitle: {
+  prefRowTitle: {
     ...typography.title,
     color: colors.textPrimary,
     fontSize: 13,
     fontFamily: typography.font.bold,
   },
-  syncMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 0,
-  },
-  syncStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    flexShrink: 0,
-  },
-  syncStatusLabel: {
-    ...typography.captionBold,
-    color: colors.textSecondary,
-    fontSize: 10.5,
-    flexShrink: 0,
-  },
-  syncDotSeparator: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 10,
-    flexShrink: 0,
-  },
-  syncSub: {
+  prefRowSub: {
     ...typography.caption,
     color: colors.textMuted,
     fontSize: 10.5,
-    flex: 1,
   },
-  syncActionBtn: {
+  prefSyncBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(0, 168, 150, 0.08)',
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.18)',
+    borderColor: 'rgba(0, 168, 150, 0.20)',
     flexShrink: 0,
   },
-  syncActionBtnLoading: {
-    opacity: 0.8,
+  prefSyncBtnLoading: {
+    opacity: 0.7,
   },
-  syncActionBtnPressed: {
+  prefSyncBtnPressed: {
     backgroundColor: 'rgba(0, 168, 150, 0.16)',
   },
-  syncActionBtnText: {
+  prefSyncBtnText: {
     ...typography.captionBold,
     color: colors.primaryDark,
     fontSize: 11,
+    fontFamily: typography.font.bold,
+  },
+  prefDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(7, 30, 38, 0.06)',
+    marginVertical: 1,
+  },
+  enableNotifBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primaryDark,
+    paddingVertical: 8,
+    borderRadius: radius.lg,
+    marginTop: 4,
+  },
+  enableNotifBtnPressed: {
+    opacity: 0.85,
+  },
+  enableNotifBtnText: {
+    ...typography.captionBold,
+    color: colors.white,
+    fontSize: 11.5,
     fontFamily: typography.font.bold,
   },
   cvoCleanCard: {

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getDataService } from '@services/data';
 import { syncEngine, syncQueue } from '@services/sync';
+import { reminderEngine } from '@services/notifications';
 import type {
   ActivityItem,
   Appointment,
@@ -191,6 +192,9 @@ export const useDataStore = create<DataState>((set, get) => {
         // Register session with sync engine for automatic background synchronization
         syncEngine.registerSession(ownerId, clerkUser);
 
+        // Reconcile scheduled notifications for active resident
+        reminderEngine.reconcile(activePets, activeAppts, undefined, ownerId).catch(() => {});
+
         if (clerkUser) {
           syncEngine.sync(ownerId, clerkUser).catch(() => {});
         }
@@ -224,6 +228,9 @@ export const useDataStore = create<DataState>((set, get) => {
         JSON.stringify({ pets: currentPets, appointments: currentAppts, activity: currentAct }),
       );
 
+      // Reconcile reminders
+      reminderEngine.reconcile(currentPets, currentAppts, undefined, ownerId).catch(() => {});
+
       // Queue durable mutation
       await syncQueue.enqueue(ownerId, 'pet', pet.id, 'CREATE_PET', pet);
       const pendingCount = await syncQueue.getPendingCount(ownerId);
@@ -249,6 +256,8 @@ export const useDataStore = create<DataState>((set, get) => {
         JSON.stringify({ pets: currentPets, appointments: currentAppts, activity: currentAct }),
       );
 
+      reminderEngine.reconcile(currentPets, currentAppts, undefined, pet.ownerId).catch(() => {});
+
       await syncQueue.enqueue(pet.ownerId, 'pet', pet.id, 'UPDATE_PET', updatedPet);
       const pendingCount = await syncQueue.getPendingCount(pet.ownerId);
       set({ pendingCount });
@@ -269,6 +278,8 @@ export const useDataStore = create<DataState>((set, get) => {
         `syncvet.data.${ownerId}`,
         JSON.stringify({ pets: currentPets, appointments: currentAppts, activity: currentAct }),
       );
+
+      reminderEngine.reconcile(currentPets, currentAppts, undefined, ownerId).catch(() => {});
 
       await syncQueue.enqueue(ownerId, 'pet', petId, 'DELETE_PET', { id: petId });
       const pendingCount = await syncQueue.getPendingCount(ownerId);
@@ -301,6 +312,8 @@ export const useDataStore = create<DataState>((set, get) => {
         JSON.stringify({ pets: currentPets, appointments: currentAppts, activity: currentAct }),
       );
 
+      reminderEngine.reconcile(currentPets, currentAppts, undefined, ownerId).catch(() => {});
+
       await syncQueue.enqueue(ownerId, 'appointment', appointment.id, 'BOOK_APPOINTMENT', appointment);
       const pendingCount = await syncQueue.getPendingCount(ownerId);
       set({ pendingCount });
@@ -323,6 +336,8 @@ export const useDataStore = create<DataState>((set, get) => {
         `syncvet.data.${ownerId}`,
         JSON.stringify({ pets: currentPets, appointments: currentAppts, activity: currentAct }),
       );
+
+      reminderEngine.reconcile(currentPets, currentAppts, undefined, ownerId).catch(() => {});
 
       await syncQueue.enqueue(ownerId, 'appointment', appointmentId, 'CANCEL_APPOINTMENT', { id: appointmentId });
       const pendingCount = await syncQueue.getPendingCount(ownerId);
@@ -372,6 +387,8 @@ export const useDataStore = create<DataState>((set, get) => {
           pets: activePets,
           appointments: activeAppts,
         });
+
+        reminderEngine.reconcile(activePets, activeAppts, undefined, ownerId).catch(() => {});
       }
     },
   };

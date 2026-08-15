@@ -22,6 +22,7 @@ import { useAuthStore } from '@store/useAuthStore';
 import { tokenCache } from '@lib/tokenCache';
 import { Toaster } from '@components/ui/Sonner';
 import { NetworkToastListener } from '@components/ui/NetworkToastListener';
+import { notificationService, notificationRouter } from '@services/notifications';
 
 // Silence Clerk development keys notice in development
 LogBox.ignoreLogs([
@@ -68,6 +69,14 @@ export default function RootLayout() {
       RNStatusBar.setTranslucent(true);
       RNStatusBar.setBackgroundColor('transparent');
     }
+
+    // Initialize native notification channels and response routing listeners
+    notificationService.init().catch(() => {});
+    notificationRouter.setupListeners();
+
+    return () => {
+      notificationRouter.cleanup();
+    };
   }, []);
 
   useEffect(() => {

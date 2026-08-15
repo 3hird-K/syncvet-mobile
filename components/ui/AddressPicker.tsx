@@ -63,7 +63,7 @@ export function AddressPicker({
   }, [value]);
 
   const filteredLocations = useMemo(() => {
-    return searchPhilippineLocations(searchQuery, 12);
+    return searchPhilippineLocations(searchQuery, 30);
   }, [searchQuery]);
 
   const handleOpenModal = useCallback(() => {
@@ -101,6 +101,24 @@ export function AddressPicker({
     },
     [selectedLocation, onChange],
   );
+
+  const MIS_OR_POPULAR_PICKS = [
+    { label: 'Carmen, CDO', query: 'Carmen, Cagayan de Oro' },
+    { label: 'Nazareth, CDO', query: 'Nazareth, Cagayan de Oro' },
+    { label: 'Lapasan, CDO', query: 'Lapasan, Cagayan de Oro' },
+    { label: 'Macasandig, CDO', query: 'Macasandig, Cagayan de Oro' },
+    { label: 'Bulua, CDO', query: 'Bulua, Cagayan de Oro' },
+    { label: 'Barra, Opol', query: 'Barra, Opol' },
+    { label: 'Molugan, El Salvador', query: 'Molugan, El Salvador' },
+    { label: 'Tagoloan, MisOr', query: 'Poblacion, Tagoloan' },
+    { label: 'Villanueva, MisOr', query: 'Poblacion, Villanueva' },
+    { label: 'Jasaan, MisOr', query: 'Poblacion, Jasaan' },
+    { label: 'Claveria, MisOr', query: 'Poblacion, Claveria' },
+    { label: 'Initao, MisOr', query: 'Poblacion, Initao' },
+    { label: 'Gingoog City', query: 'Gingoog City' },
+    { label: 'Manolo Fortich', query: 'Manolo Fortich' },
+    { label: 'Iligan City', query: 'Iligan City' },
+  ];
 
   return (
     <View style={styles.container}>
@@ -225,34 +243,37 @@ export function AddressPicker({
               ) : null}
             </View>
 
-            {/* Quick Popular Picks */}
+            {/* Quick Popular Picks (Misamis Oriental & Regional Hubs) */}
             {!searchQuery ? (
               <View style={styles.quickPicksWrap}>
                 <View style={styles.quickPicksHeader}>
                   <Ionicons name="sparkles" size={13} color={colors.primary} />
-                  <Text style={styles.quickPicksTitle}>Popular Locations:</Text>
+                  <Text style={styles.quickPicksTitle}>Popular Misamis Oriental & Regional Hubs:</Text>
                 </View>
                 <View style={styles.quickPicksRow}>
-                  {['Carmen, CDO', 'Nazareth, CDO', 'Barra, Opol', 'Lahug, Cebu', 'Davao City', 'BGC, Taguig', 'Quezon City'].map(
-                    (name) => (
-                      <Pressable
-                        key={name}
-                        onPress={() => {
-                          const match = filteredLocations.find((loc) =>
-                            loc.fullLocation.toLowerCase().includes(name.split(',')[0].toLowerCase()),
-                          );
-                          if (match) handleSelectLocation(match);
-                        }}
-                        style={({ pressed }) => [
-                          styles.quickChip,
-                          pressed && styles.quickChipPressed,
-                        ]}
-                      >
-                        <Ionicons name="location-sharp" size={12} color={colors.primaryDark} />
-                        <Text style={styles.quickChipText}>{name}</Text>
-                      </Pressable>
-                    ),
-                  )}
+                  {MIS_OR_POPULAR_PICKS.map((item) => (
+                    <Pressable
+                      key={item.label}
+                      onPress={() => {
+                        const match = filteredLocations.find((loc) =>
+                          loc.fullLocation.toLowerCase().includes(item.query.toLowerCase()),
+                        );
+                        if (match) {
+                          handleSelectLocation(match);
+                        } else {
+                          const direct = searchPhilippineLocations(item.query, 1)[0];
+                          if (direct) handleSelectLocation(direct);
+                        }
+                      }}
+                      style={({ pressed }) => [
+                        styles.quickChip,
+                        pressed && styles.quickChipPressed,
+                      ]}
+                    >
+                      <Ionicons name="location-sharp" size={12} color={colors.primaryDark} />
+                      <Text style={styles.quickChipText}>{item.label}</Text>
+                    </Pressable>
+                  ))}
                 </View>
               </View>
             ) : null}
