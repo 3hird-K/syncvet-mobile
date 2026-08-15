@@ -271,6 +271,7 @@ export function AppointmentDetailModal({
                     title={submitting ? 'Cancelling…' : 'Cancel Appointment'}
                     variant="danger"
                     size="md"
+                    leftIcon={<Ionicons name="close-circle-outline" size={16} color={colors.white} />}
                     onPress={handleCancelAppointment}
                     loading={submitting}
                     disabled={submitting}

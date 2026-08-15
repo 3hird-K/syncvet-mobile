@@ -15,7 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, ViewStyle, TextStyle } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@theme';
 
@@ -40,26 +40,26 @@ export interface ButtonProps {
 
 const VARIANT_STYLES = {
   primary: {
-    bg: colors.primary,
-    pressedBg: colors.primaryStrong,
+    bg: colors.primaryDark,
+    pressedBg: '#085C54',
     text: colors.white,
     border: 'transparent',
   },
   secondary: {
-    bg: colors.primaryLight,
-    pressedBg: colors.primaryLighter,
+    bg: 'rgba(10, 110, 100, 0.10)',
+    pressedBg: 'rgba(10, 110, 100, 0.16)',
     text: colors.primaryDark,
     border: 'transparent',
   },
   outline: {
     bg: 'transparent',
-    pressedBg: colors.surfaceMuted,
+    pressedBg: 'rgba(10, 110, 100, 0.06)',
     text: colors.primaryDark,
-    border: colors.borderStrong,
+    border: 'rgba(10, 110, 100, 0.22)',
   },
   ghost: {
     bg: 'transparent',
-    pressedBg: colors.surfaceMuted,
+    pressedBg: 'rgba(7, 30, 38, 0.05)',
     text: colors.primaryDark,
     border: 'transparent',
   },
@@ -71,10 +71,34 @@ const VARIANT_STYLES = {
   },
 } as const;
 
-const SIZE_STYLES: Record<ButtonSize, { height: number; paddingH: number; text: typeof typography.button }> = {
-  sm: { height: 36, paddingH: spacing.md, text: typography.captionBold },
-  md: { height: 44, paddingH: spacing.lg, text: typography.button },
-  lg: { height: 52, paddingH: spacing.xl, text: typography.button },
+const SIZE_STYLES: Record<ButtonSize, { height: number; paddingH: number; text: TextStyle }> = {
+  sm: {
+    height: 36,
+    paddingH: 14,
+    text: {
+      ...typography.captionBold,
+      fontSize: 12,
+      fontFamily: typography.font.bold,
+    },
+  },
+  md: {
+    height: 44,
+    paddingH: 18,
+    text: {
+      ...typography.captionBold,
+      fontSize: 13.5,
+      fontFamily: typography.font.bold,
+    },
+  },
+  lg: {
+    height: 50,
+    paddingH: 22,
+    text: {
+      ...typography.title,
+      fontSize: 15,
+      fontFamily: typography.font.bold,
+    },
+  },
 };
 
 export function Button({
@@ -113,18 +137,22 @@ export function Button({
 
   const scaleStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ scale: withSpring(scale.value, {
-        damping: 18,
-        stiffness: 300,
-        mass: 0.6,
-      }) }],
+      transform: [
+        {
+          scale: withSpring(scale.value, {
+            damping: 18,
+            stiffness: 300,
+            mass: 0.6,
+          }),
+        },
+      ],
     };
   });
 
   const handlePressIn = useCallback(() => {
     if (isDisabled) return;
     bg.value = 1;
-    if (!reducedMotion) scale.value = 0.97;
+    if (!reducedMotion) scale.value = 0.98;
   }, [isDisabled, reducedMotion, scale, bg]);
 
   const handlePressOut = useCallback(() => {
@@ -183,7 +211,7 @@ export function Button({
         {
           height: sizeStyle.height,
           paddingHorizontal: sizeStyle.paddingH,
-          borderRadius: radius.lg,
+          borderRadius: radius.pill,
           borderWidth: variant === 'outline' ? 1.5 : 0,
           borderColor: variantStyle.border,
           opacity: isDisabled ? (variant === 'primary' || variant === 'danger' ? 0.55 : 0.4) : 1,
@@ -196,7 +224,11 @@ export function Button({
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { borderRadius: radius.lg, borderWidth: variant === 'outline' ? 1.5 : 0, borderColor: variantStyle.border },
+          {
+            borderRadius: radius.pill,
+            borderWidth: variant === 'outline' ? 1.5 : 0,
+            borderColor: variantStyle.border,
+          },
           bgStyle,
         ]}
       />
@@ -209,6 +241,7 @@ const styles = StyleSheet.create({
   base: {
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   pressed: {
     opacity: 0.92,
@@ -225,10 +258,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconLeft: {
-    marginRight: spacing.sm,
+    marginRight: 6,
   },
   iconRight: {
-    marginLeft: spacing.sm,
+    marginLeft: 6,
   },
   disabledText: {
     opacity: 0.8,

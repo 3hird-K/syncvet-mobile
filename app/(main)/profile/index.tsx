@@ -679,9 +679,9 @@ export default function ProfileScreen() {
                 <Button
                   title="Save Changes"
                   variant="primary"
+                  leftIcon={<Ionicons name="checkmark-circle-outline" size={16} color={colors.white} />}
                   onPress={handleSaveProfile}
                   loading={savingProfile}
-                  showPaw
                   fullWidth
                 />
               </View>
