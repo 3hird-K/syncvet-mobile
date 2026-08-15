@@ -1,9 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
-import { useSignInWithGoogle } from '@clerk/expo/google';
 import { useSSO } from '@clerk/expo';
 
 import { haptic } from '@lib/haptics';
@@ -30,13 +28,11 @@ export interface UseGoogleAuthReturn {
 
 /**
  * Production-ready Google Authentication hook for SyncVet.
- * Uses Clerk's native Google Sign-In with Credential Manager on iOS/Android,
- * with graceful fallback to browser SSO on web or unsupported environments.
+ * Uses standard Clerk OAuth SSO flow for reliable 1-step Google authentication.
  */
 export function useGoogleAuth(): UseGoogleAuthReturn {
   useWarmUpBrowser();
   const router = useRouter();
-  const { startGoogleAuthenticationFlow } = useSignInWithGoogle();
   const { startSSOFlow } = useSSO();
 
   const [connecting, setConnecting] = useState(false);
@@ -128,6 +124,11 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       } else {
         router.replace('/(register)/owner');
       }
+
+      setTimeout(() => {
+        useAuthStore.getState().setAuthLoading(false);
+        setConnecting(false);
+      }, 800);
     },
     [router],
   );
@@ -136,6 +137,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
     try {
       haptic.medium();
       setConnecting(true);
+      useAuthStore.getState().setAuthLoading(true);
       setError(undefined);
 
       // Dismiss any lingering browser sessions
@@ -143,38 +145,6 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         await WebBrowser.dismissAuthSession();
       } catch {}
 
-      // 1. Attempt Native Google Authentication flow first on iOS and Android
-      if (Platform.OS === 'android' || Platform.OS === 'ios') {
-        try {
-          const result = await startGoogleAuthenticationFlow();
-          const nativeSessionId =
-            result?.createdSessionId ||
-            result?.signIn?.createdSessionId ||
-            result?.signUp?.createdSessionId;
-
-          if (nativeSessionId && result?.setActive) {
-            await result.setActive({ session: nativeSessionId });
-            haptic.success();
-            await handlePostAuthRouting(result.signUp, result.signIn);
-            return true;
-          }
-
-          console.log('Native Google flow did not return session, proceeding to SSO flow');
-        } catch (nativeErr: any) {
-          if (
-            nativeErr?.code === 'SIGN_IN_CANCELLED' ||
-            nativeErr?.code === '-5' ||
-            nativeErr?.message?.toLowerCase().includes('cancel') ||
-            nativeErr?.message?.toLowerCase().includes('dismiss')
-          ) {
-            setConnecting(false);
-            return false;
-          }
-          console.log('Native Google flow fallback to browser SSO:', nativeErr?.message);
-        }
-      }
-
-      // 2. Fallback to browser SSO flow (for Web or non-prebuilt runtime)
       const redirectUrl = AuthSession.makeRedirectUri({
         scheme: 'syncvet',
         path: 'sso-callback',
@@ -202,10 +172,12 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       // If user dismissed browser without signing in
       setConnecting(false);
+      useAuthStore.getState().setAuthLoading(false);
       return false;
     } catch (err: any) {
       console.log('Google Authentication error:', err);
       setConnecting(false);
+      useAuthStore.getState().setAuthLoading(false);
 
       const rawMsg =
         err?.errors?.[0]?.longMessage ||
@@ -227,7 +199,6 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       return false;
     }
   }, [
-    startGoogleAuthenticationFlow,
     startSSOFlow,
     handlePostAuthRouting,
   ]);

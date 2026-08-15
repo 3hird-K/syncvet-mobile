@@ -12,8 +12,10 @@ type AuthStatus = 'idle' | 'restoring' | 'authenticated' | 'unauthenticated';
 
 interface AuthState {
   status: AuthStatus;
+  authLoading: boolean;
   user: AuthUser | null;
   token: string | null;
+  setAuthLoading: (loading: boolean) => void;
   restoreSession: () => Promise<void>;
   googleSignIn: (profile: GoogleProfile) => Promise<void>;
   signIn: (params: SignInParams) => Promise<void>;
@@ -25,8 +27,11 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   status: 'idle',
+  authLoading: false,
   user: null,
   token: null,
+
+  setAuthLoading: (loading: boolean) => set({ authLoading: loading }),
 
   restoreSession: async () => {
     set({ status: 'restoring' });

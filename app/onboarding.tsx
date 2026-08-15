@@ -49,6 +49,7 @@ export default function OnboardingScreen() {
   const initialIndex = slide === '3' || slide === 'last' ? 3 : 0;
   const [current, setCurrent] = useState(initialIndex);
   const setCompleted = useOnboardingStore((state) => state.setCompleted);
+  const authLoading = useAuthStore((state) => state.authLoading);
 
   const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
   const { user: clerkUser } = useUser();
@@ -250,7 +251,7 @@ export default function OnboardingScreen() {
 
       {/* Full-Screen Modern Walking Paw Footprints Loader while checking & routing user */}
       <PawLoadingOverlay
-        visible={connectingGoogle || checkingAuth || (Boolean(isSignedIn) && !googleError)}
+        visible={authLoading || connectingGoogle || checkingAuth}
       />
     </SafeAreaView>
   );

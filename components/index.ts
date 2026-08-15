@@ -1,6 +1,5 @@
 export { Button } from './ui/Button';
 export { Input } from './ui/Input';
-export { PasswordInput } from './ui/PasswordInput';
 export { Logo, LogoMark } from './ui/Logo';
 export { Avatar } from './ui/Avatar';
 export { PhotoIllustration } from './ui/PhotoIllustration';
