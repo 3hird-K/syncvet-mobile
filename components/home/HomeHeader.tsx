@@ -56,45 +56,24 @@ export function HomeHeader({
         </Text>
       </View>
 
-      {/* 3. Right: Search & Notification Action Buttons */}
-      <View style={styles.actionsRow}>
-        {/* Search button */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Search Services"
-          onPress={() => {
-            haptic.light();
-            router.push('/services' as never);
-          }}
-          style={({ pressed }) => [
-            styles.iconBtn,
-            shadows.sm,
-            pressed && styles.iconBtnPressed,
-          ]}
-          hitSlop={6}
-        >
-          <Ionicons name="search-outline" size={18} color={colors.textPrimary} />
-        </Pressable>
-
-        {/* Notifications / Visits bell button */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="View Notifications & Visits"
-          onPress={() => {
-            haptic.light();
-            router.push('/appointments' as never);
-          }}
-          style={({ pressed }) => [
-            styles.iconBtn,
-            shadows.sm,
-            pressed && styles.iconBtnPressed,
-          ]}
-          hitSlop={6}
-        >
-          <Ionicons name="notifications-outline" size={18} color={colors.textPrimary} />
-          {hasUpcomingAppointments && <View style={styles.notifDot} />}
-        </Pressable>
-      </View>
+      {/* 3. Right: Notification Action Button */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="View Notifications & Visits"
+        onPress={() => {
+          haptic.light();
+          router.push('/appointments' as never);
+        }}
+        style={({ pressed }) => [
+          styles.iconBtn,
+          shadows.sm,
+          pressed && styles.iconBtnPressed,
+        ]}
+        hitSlop={6}
+      >
+        <Ionicons name="notifications-outline" size={18} color={colors.textPrimary} />
+        {hasUpcomingAppointments && <View style={styles.notifDot} />}
+      </Pressable>
     </Animated.View>
   );
 }

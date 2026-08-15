@@ -34,9 +34,9 @@ export function AppointmentSwitch({
   useEffect(() => {
     if (thumbWidth > 0) {
       thumbOffset.value = withSpring(isUpcoming ? 0 : thumbWidth, {
-        damping: 16,
-        stiffness: 220,
-        mass: 0.7,
+        damping: 18,
+        stiffness: 240,
+        mass: 0.6,
       });
     }
   }, [isUpcoming, thumbWidth, thumbOffset]);
@@ -64,7 +64,7 @@ export function AppointmentSwitch({
         onLayout={handleLayout}
         accessibilityRole="tablist"
       >
-        {/* Animated Sliding Pill Thumb */}
+        {/* Animated Sliding White Capsule Thumb */}
         {thumbWidth > 0 && (
           <Animated.View
             style={[
@@ -84,18 +84,11 @@ export function AppointmentSwitch({
           style={styles.tabItem}
         >
           <View style={styles.tabContent}>
-            <View
-              style={[
-                styles.iconBubble,
-                isUpcoming && styles.iconBubbleActiveUpcoming,
-              ]}
-            >
-              <Ionicons
-                name={isUpcoming ? 'calendar' : 'calendar-outline'}
-                size={16}
-                color={isUpcoming ? colors.primary : colors.textSecondary}
-              />
-            </View>
+            <Ionicons
+              name={isUpcoming ? 'calendar' : 'calendar-outline'}
+              size={16}
+              color={isUpcoming ? colors.primaryDark : colors.textMuted}
+            />
 
             <Text
               style={[
@@ -108,16 +101,14 @@ export function AppointmentSwitch({
 
             <View
               style={[
-                styles.badge,
-                isUpcoming ? styles.badgeActiveUpcoming : styles.badgeInactive,
+                styles.countPill,
+                isUpcoming ? styles.countPillActive : styles.countPillInactive,
               ]}
             >
               <Text
                 style={[
-                  styles.badgeText,
-                  isUpcoming
-                    ? styles.badgeTextActiveUpcoming
-                    : styles.badgeTextInactive,
+                  styles.countText,
+                  isUpcoming ? styles.countTextActive : styles.countTextInactive,
                 ]}
               >
                 {upcomingCount}
@@ -126,7 +117,7 @@ export function AppointmentSwitch({
           </View>
         </Pressable>
 
-        {/* 2. PAST HISTORY TAB */}
+        {/* 2. HISTORY TAB */}
         <Pressable
           accessibilityRole="tab"
           accessibilityState={{ selected: !isUpcoming }}
@@ -134,18 +125,11 @@ export function AppointmentSwitch({
           style={styles.tabItem}
         >
           <View style={styles.tabContent}>
-            <View
-              style={[
-                styles.iconBubble,
-                !isUpcoming && styles.iconBubbleActivePast,
-              ]}
-            >
-              <Ionicons
-                name={!isUpcoming ? 'time' : 'time-outline'}
-                size={16}
-                color={!isUpcoming ? colors.primaryDark : colors.textSecondary}
-              />
-            </View>
+            <Ionicons
+              name={!isUpcoming ? 'time' : 'time-outline'}
+              size={16}
+              color={!isUpcoming ? colors.primaryDark : colors.textMuted}
+            />
 
             <Text
               style={[
@@ -158,16 +142,14 @@ export function AppointmentSwitch({
 
             <View
               style={[
-                styles.badge,
-                !isUpcoming ? styles.badgeActivePast : styles.badgeInactive,
+                styles.countPill,
+                !isUpcoming ? styles.countPillActive : styles.countPillInactive,
               ]}
             >
               <Text
                 style={[
-                  styles.badgeText,
-                  !isUpcoming
-                    ? styles.badgeTextActivePast
-                    : styles.badgeTextInactive,
+                  styles.countText,
+                  !isUpcoming ? styles.countTextActive : styles.countTextInactive,
                 ]}
               >
                 {pastCount}
@@ -190,7 +172,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(7, 30, 38, 0.05)',
     borderRadius: radius.pill,
     padding: 4,
-    height: 52,
+    height: 46,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
     position: 'relative',
@@ -203,7 +185,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.16)',
+    borderColor: 'rgba(10, 110, 100, 0.10)',
   },
   tabItem: {
     flex: 1,
@@ -216,35 +198,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-  },
-  iconBubble: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  iconBubbleActiveUpcoming: {
-    backgroundColor: 'rgba(0, 168, 150, 0.12)',
-  },
-  iconBubbleActivePast: {
-    backgroundColor: 'rgba(7, 30, 38, 0.08)',
+    gap: 6,
   },
   tabLabel: {
     ...typography.captionBold,
     fontSize: 13,
+    fontFamily: typography.font.bold,
   },
   tabLabelActive: {
     color: colors.textPrimary,
-    fontWeight: '800',
   },
   tabLabelInactive: {
-    color: colors.textSecondary,
-    fontWeight: '600',
+    color: colors.textMuted,
   },
-  badge: {
+  countPill: {
     minWidth: 20,
     height: 20,
     paddingHorizontal: 6,
@@ -252,27 +219,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeActiveUpcoming: {
-    backgroundColor: colors.primary,
+  countPillActive: {
+    backgroundColor: 'rgba(10, 110, 100, 0.12)',
   },
-  badgeActivePast: {
-    backgroundColor: colors.textSecondary,
+  countPillInactive: {
+    backgroundColor: 'rgba(7, 30, 38, 0.06)',
   },
-  badgeInactive: {
-    backgroundColor: 'rgba(7, 30, 38, 0.08)',
-  },
-  badgeText: {
+  countText: {
     ...typography.captionBold,
     fontSize: 10.5,
-    fontWeight: '800',
+    fontFamily: typography.font.bold,
   },
-  badgeTextActiveUpcoming: {
-    color: colors.white,
+  countTextActive: {
+    color: colors.primaryDark,
   },
-  badgeTextActivePast: {
-    color: colors.white,
-  },
-  badgeTextInactive: {
-    color: colors.textSecondary,
+  countTextInactive: {
+    color: colors.textMuted,
   },
 });

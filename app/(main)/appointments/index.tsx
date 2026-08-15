@@ -28,13 +28,13 @@ import { useUser } from '@clerk/expo';
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
+import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { AppointmentSwitch, AppointmentTab } from '@components/ui/AppointmentSwitch';
 import { AppointmentCard } from '@components/ui/AppointmentCard';
 import { AppointmentDetailModal } from '@components/ui/AppointmentDetailModal';
-import { EmptyState } from '@components/ui/EmptyState';
 import { AppointmentsScreenSkeleton } from '@components/ui/Skeleton';
 import type { Appointment } from '@services/data';
 
@@ -76,12 +76,9 @@ export default function AppointmentsScreen() {
   const { width } = useWindowDimensions();
   const { user: clerkUser } = useUser();
   const { loading, loaded } = useResidentData();
-  const localAppointments = useDataStore((state) => state.appointments);
-  const localPets = useDataStore((state) => state.pets);
 
   const [activeTab, setActiveTab] = useState<AppointmentTab>('upcoming');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -199,12 +196,12 @@ export default function AppointmentsScreen() {
               />
             }
           >
-            {/* Context subtitle bar */}
+            {/* Context status bar */}
             <View style={styles.tabContextRow}>
               <Ionicons
                 name={isUpcoming ? 'shield-checkmark-outline' : 'archive-outline'}
                 size={13}
-                color={isUpcoming ? colors.primary : colors.textSecondary}
+                color={isUpcoming ? colors.primaryDark : colors.textMuted}
               />
               <Text style={styles.tabContextText}>
                 {isUpcoming
@@ -213,22 +210,45 @@ export default function AppointmentsScreen() {
               </Text>
             </View>
 
-            {/* List or Empty State */}
+            {/* List or Refined Homepage-Style Empty State Card */}
             {list.length === 0 ? (
-              <EmptyState
-                icon={isUpcoming ? 'calendar-outline' : 'time-outline'}
-                title={isUpcoming ? 'No upcoming appointments' : 'No past appointments'}
-                message={
-                  isUpcoming
+              <View style={[styles.emptyCard, shadows.sm]}>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons
+                    name={isUpcoming ? 'calendar-outline' : 'time-outline'}
+                    size={26}
+                    color={colors.primaryDark}
+                  />
+                </View>
+
+                <Text style={styles.emptyTitle}>
+                  {isUpcoming ? 'No upcoming appointments' : 'No past appointments'}
+                </Text>
+
+                <Text style={styles.emptySub}>
+                  {isUpcoming
                     ? 'Schedule a veterinary checkup or vaccine visit for your pet.'
-                    : 'Completed or cancelled visits will appear here.'
-                }
-                actionLabel={isUpcoming ? 'Book a Service' : undefined}
-                onAction={() => {
-                  haptic.light();
-                  router.push('/services' as never);
-                }}
-              />
+                    : 'Completed or cancelled visits will appear here.'}
+                </Text>
+
+                {isUpcoming && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Schedule a visit"
+                    onPress={() => {
+                      haptic.light();
+                      router.push('/appointments/new' as never);
+                    }}
+                    style={({ pressed }) => [
+                      styles.scheduleBtn,
+                      pressed && styles.scheduleBtnPressed,
+                    ]}
+                  >
+                    <Ionicons name="calendar-outline" size={15} color={colors.white} />
+                    <Text style={styles.scheduleBtnText}>Schedule a Visit</Text>
+                  </Pressable>
+                )}
+              </View>
             ) : (
               <View style={styles.cardList}>
                 {list.map((appointment) => (
@@ -263,39 +283,34 @@ export default function AppointmentsScreen() {
   return (
     <AnimatedScreen animation="zoom">
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* 1. Senior Executive Municipal Header */}
+        {/* 1. Header - Title on Left & "+ Book Visit" Pill on Right */}
         <View style={styles.topHeader}>
-          {/* Eyebrow badge */}
-          {/* <View style={styles.eyebrowBadge}>
-            <Text style={styles.eyebrowText}>CITY VETERINARY OFFICE · CDO</Text>
-          </View> */}
-
-          {/* Title & Book Visit Button Row */}
-          <View style={styles.headerTitleRow}>
-            <View style={styles.titleCol}>
-              <Text style={styles.heroTitle}>Appointments</Text>
-              <Text style={styles.heroSubtitle}>
-                Official clinic visit reservations & veterinary schedule
-              </Text>
-            </View>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Book new visit"
-              onPress={() => {
-                haptic.light();
-                router.push('/appointments/new' as never);
-              }}
-              hitSlop={6}
-              style={({ pressed }) => [styles.bookHeaderBtn, pressed && styles.bookHeaderBtnPressed]}
-            >
-              <Ionicons name="add" size={18} color={colors.white} />
-              <Text style={styles.bookHeaderBtnText}>Book Visit</Text>
-            </Pressable>
+          <View style={styles.titleCol}>
+            <Text style={styles.heroTitle}>Appointments</Text>
+            <Text style={styles.heroSubtitle}>
+              Official clinic visit reservations & veterinary schedule
+            </Text>
           </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Book new visit"
+            onPress={() => {
+              haptic.light();
+              router.push('/appointments/new' as never);
+            }}
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.bookHeaderBtn,
+              pressed && styles.bookHeaderBtnPressed,
+            ]}
+          >
+            <Ionicons name="add" size={16} color={colors.white} />
+            <Text style={styles.bookHeaderBtnText}>Book Visit</Text>
+          </Pressable>
         </View>
 
-        {/* 2. Dual-Pill Capsule Switch with Spring Physics & Icons */}
+        {/* 2. Dual-Pill Capsule Switch with Smooth Physics */}
         <View style={styles.switchWrapper}>
           <AppointmentSwitch
             activeTab={activeTab}
@@ -305,7 +320,7 @@ export default function AppointmentsScreen() {
           />
         </View>
 
-        {/* 3. Horizontal Swipable Slide Pages (Upcoming <-> History) */}
+        {/* 3. Horizontal Swipeable Slide Pages (Upcoming <-> History) */}
         <AnimatedFlatList
           ref={listRef}
           data={TAB_PAGES}
@@ -338,72 +353,55 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-    marginBottom: spacing.sm,
-    gap: 6,
-  },
-  eyebrowBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0, 168, 150, 0.08)',
-    paddingHorizontal: 9,
-    paddingVertical: 3.5,
-    borderRadius: radius.pill,
-  },
-  eyebrowText: {
-    ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 10,
-    letterSpacing: 0.6,
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm,
+    marginBottom: spacing.md,
+    gap: 12,
   },
   titleCol: {
     flex: 1,
     gap: 2,
   },
   heroTitle: {
-    ...typography.heading1,
+    ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+    fontSize: 22,
+    fontFamily: typography.font.bold,
+    letterSpacing: -0.4,
   },
   heroSubtitle: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 12.5,
+    ...typography.small,
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '500',
     lineHeight: 16,
   },
   bookHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8.5,
+    backgroundColor: colors.primaryDark,
+    paddingHorizontal: 12,
+    paddingVertical: 7.5,
     borderRadius: radius.pill,
     ...shadows.sm,
   },
   bookHeaderBtnPressed: {
-    backgroundColor: colors.primaryDark,
-    transform: [{ scale: 0.98 }],
+    opacity: 0.88,
+    transform: [{ scale: 0.97 }],
   },
   bookHeaderBtnText: {
     ...typography.captionBold,
     color: colors.white,
     fontSize: 12.5,
+    fontFamily: typography.font.bold,
   },
   switchWrapper: {
     paddingHorizontal: spacing.lg,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   flatList: {
     flex: 1,
@@ -414,7 +412,7 @@ const styles = StyleSheet.create({
   tabScrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
   tabContextRow: {
     flexDirection: 'row',
@@ -424,9 +422,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   tabContextText: {
-    ...typography.caption,
-    color: colors.textSecondary,
+    ...typography.small,
+    color: colors.textMuted,
     fontSize: 12,
+  },
+  // Empty State
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(10, 110, 100, 0.10)',
+    gap: 6,
+  },
+  emptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(10, 110, 100, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    ...typography.heading3,
+    fontSize: 16,
+    fontFamily: typography.font.bold,
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  emptySub: {
+    ...typography.small,
+    fontSize: 12.5,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 17,
+    maxWidth: 280,
+    marginBottom: 6,
+  },
+  scheduleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primaryDark,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: radius.pill,
+    alignSelf: 'stretch',
+  },
+  scheduleBtnPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
+  },
+  scheduleBtnText: {
+    ...typography.captionBold,
+    fontSize: 13,
+    fontFamily: typography.font.bold,
+    color: colors.white,
   },
   cardList: {
     gap: spacing.md,
