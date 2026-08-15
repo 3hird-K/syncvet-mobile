@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { colors, spacing, typography } from '@theme';
 import { haptic } from '@lib/haptics';
@@ -35,6 +36,7 @@ export function SectionHeader({
           style={({ pressed }) => [styles.actionBtn, pressed && styles.actionPressed]}
         >
           <Text style={styles.actionText}>{actionLabel}</Text>
+          <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
         </Pressable>
       ) : null}
     </View>
@@ -65,6 +67,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingVertical: 3,
     paddingHorizontal: 2,
   },

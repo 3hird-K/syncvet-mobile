@@ -327,7 +327,7 @@ export default function ProfileScreen() {
   return (
     <AnimatedScreen animation="zoom">
       <Screen scroll onRefresh={handleRefresh}>
-        {/* Compact Screen Header with Edit and Logout */}
+        {/* Top Header with Title and Modern Action Pills */}
         <View style={styles.topHeader}>
           <Text style={styles.screenHeading}>Profile</Text>
           <View style={styles.headerButtonsRow}>
@@ -338,8 +338,8 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Edit Profile"
             >
-              <Ionicons name="pencil" size={13} color={colors.primary} />
-              <Text style={styles.headerEditText}>Edit</Text>
+              <Ionicons name="pencil" size={13} color={colors.primaryDark} />
+              <Text style={styles.headerEditText}>Edit Profile</Text>
             </Pressable>
 
             <Pressable
@@ -355,7 +355,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Clean Hero Identity Card */}
+        {/* Modern Resident Identity Card */}
         <View style={[styles.heroCard, shadows.sm]}>
           <View style={styles.heroTopRow}>
             {/* Avatar on Left with Camera Badge */}
@@ -366,7 +366,7 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Change profile photo"
             >
-              <Avatar name={fullName} size={54} photoUrl={photoUrl} />
+              <Avatar name={fullName} size={56} photoUrl={photoUrl} />
               <View style={styles.cameraBadge}>
                 <Ionicons name="camera" size={11} color={colors.white} />
               </View>
@@ -374,15 +374,19 @@ export default function ProfileScreen() {
 
             {/* Resident Info on Right */}
             <View style={styles.heroTextWrap}>
-              <Text style={styles.heroName} numberOfLines={1}>
-                {fullName}
-              </Text>
+              <View style={styles.nameBadgeRow}>
+                <Text style={styles.heroName} numberOfLines={1}>
+                  {fullName}
+                </Text>
+              </View>
+
               <Text style={styles.heroEmail} numberOfLines={1}>
                 {email}
               </Text>
+
               {mobileNumber ? (
                 <View style={styles.heroPhoneRow}>
-                  <Ionicons name="call-outline" size={11} color={colors.textSecondary} />
+                  <Ionicons name="call-outline" size={11.5} color={colors.textSecondary} />
                   <Text style={styles.heroPhoneText}>{mobileNumber}</Text>
                 </View>
               ) : null}
@@ -398,7 +402,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Compact Stats Row */}
+        {/* 3-Column Modern Stats Row */}
         <View style={styles.statsRow}>
           <Pressable
             style={[styles.statBox, shadows.sm]}
@@ -408,10 +412,10 @@ export default function ProfileScreen() {
             }}
           >
             <View style={[styles.statIconWrap, { backgroundColor: 'rgba(0, 168, 150, 0.12)' }]}>
-              <Ionicons name="paw" size={14} color={colors.primary} />
+              <Ionicons name="paw" size={15} color={colors.primary} />
             </View>
             <Text style={styles.statNumber}>{stats.pets}</Text>
-            <Text style={styles.statLabel}>Pets</Text>
+            <Text style={styles.statLabel}>Registered</Text>
           </Pressable>
 
           <Pressable
@@ -422,7 +426,7 @@ export default function ProfileScreen() {
             }}
           >
             <View style={[styles.statIconWrap, { backgroundColor: 'rgba(14, 116, 144, 0.12)' }]}>
-              <Ionicons name="calendar" size={14} color={colors.info} />
+              <Ionicons name="calendar" size={15} color={colors.info} />
             </View>
             <Text style={styles.statNumber}>{stats.upcoming}</Text>
             <Text style={styles.statLabel}>Upcoming</Text>
@@ -436,27 +440,42 @@ export default function ProfileScreen() {
             }}
           >
             <View style={[styles.statIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
-              <Ionicons name="checkmark-done" size={14} color={colors.success} />
+              <Ionicons name="checkmark-done" size={15} color={colors.success} />
             </View>
             <Text style={styles.statNumber}>{stats.completed}</Text>
-            <Text style={styles.statLabel}>Visits</Text>
+            <Text style={styles.statLabel}>Completed</Text>
           </Pressable>
         </View>
 
-        {/* Registered Pets - Modern Horizontal List (Image Left, Texts Right) */}
+        {/* Registered Pets - Modern Cards */}
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>My Registered Pets</Text>
+            <View style={styles.sectionTitleLeft}>
+              <Ionicons name="paw" size={16} color={colors.primary} />
+              <Text style={styles.sectionTitle}>My Registered Pets</Text>
+            </View>
             <Pressable
               onPress={() => {
                 haptic.light();
-                router.push('/pets/add' as never);
+                if (hasMorePets) {
+                  setPetsExpanded((prev) => !prev);
+                } else {
+                  router.push('/pets' as never);
+                }
               }}
               style={styles.addPetHeaderBtn}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={petsExpanded ? 'Show fewer pets' : 'Show all pets'}
             >
-              <Ionicons name="add" size={14} color={colors.primary} />
-              <Text style={styles.addPetHeaderText}>Add Pet</Text>
+              <Text style={styles.addPetHeaderText}>
+                {hasMorePets && petsExpanded ? 'Show Fewer Pets' : 'Show All Pets'}
+              </Text>
+              <Ionicons
+                name={hasMorePets && petsExpanded ? 'chevron-up' : 'chevron-forward'}
+                size={13}
+                color={colors.primaryDark}
+              />
             </Pressable>
           </View>
 
@@ -475,7 +494,7 @@ export default function ProfileScreen() {
                 <Text style={styles.emptyPetTitle}>Register Your First Pet</Text>
                 <Text style={styles.emptyPetSub}>Get a digital City Vet health passport</Text>
               </View>
-              <Ionicons name="add-circle" size={20} color={colors.primary} />
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
             </Pressable>
           ) : (
             <View style={styles.petsVerticalList}>
@@ -499,7 +518,7 @@ export default function ProfileScreen() {
                       avatarId={pet.avatarId}
                       species={pet.species as any}
                       photoUrl={pet.photoUrl}
-                      size={40}
+                      size={44}
                     />
 
                     {/* Texts and Status on the Right */}
@@ -533,46 +552,18 @@ export default function ProfileScreen() {
                   </Pressable>
                 );
               })}
-
-              {/* Expand / Reduce Pets Button */}
-              {hasMorePets && (
-                <Pressable
-                  onPress={() => {
-                    haptic.light();
-                    setPetsExpanded((prev) => !prev);
-                  }}
-                  style={styles.expandPetsBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    petsExpanded
-                      ? 'Show fewer pets'
-                      : `Show all ${metadataPets.length} pets`
-                  }
-                >
-                  <Text style={styles.expandPetsBtnText}>
-                    {petsExpanded
-                      ? 'Show Fewer Pets'
-                      : `Show All (${metadataPets.length}) Pets`}
-                  </Text>
-                  <Ionicons
-                    name={petsExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={14}
-                    color={colors.primary}
-                  />
-                </Pressable>
-              )}
             </View>
           )}
         </View>
 
-        {/* City Veterinary Office Contact Hub (Ultra-Compact) */}
+        {/* City Veterinary Office Station Strip */}
         <View style={[styles.cvoCleanCard, shadows.sm]}>
           <View style={styles.cvoLeftRow}>
             <View style={styles.cvoBadgeIcon}>
               <Ionicons name="business" size={16} color={colors.white} />
             </View>
             <View style={styles.cvoTextWrap}>
-              <Text style={styles.cvoTitle}>City Veterinary Office</Text>
+              <Text style={styles.cvoTitle}>City Veterinary Office · CDO</Text>
               <Text style={styles.cvoSub}>Mon – Fri · 8:00 AM – 5:00 PM</Text>
             </View>
           </View>
@@ -581,7 +572,7 @@ export default function ProfileScreen() {
             onPress={handleCallCVO}
             style={({ pressed }) => [styles.cvoCallBtn, pressed && styles.cvoCallBtnPressed]}
           >
-            <Ionicons name="call" size={13} color={colors.primary} />
+            <Ionicons name="call" size={13} color={colors.white} />
             <Text style={styles.cvoCallBtnText}>Call CVO</Text>
           </Pressable>
         </View>
@@ -699,43 +690,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: spacing.sm,
     paddingTop: 0,
   },
   screenHeading: {
     ...typography.heading2,
     color: colors.textPrimary,
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: typography.font.bold,
   },
   headerButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   headerEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(0, 168, 150, 0.08)',
-    paddingHorizontal: 9,
-    paddingVertical: 4.5,
+    gap: 4,
+    backgroundColor: 'rgba(10, 110, 100, 0.08)',
+    paddingHorizontal: 11,
+    paddingVertical: 5.5,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.16)',
+    borderColor: 'rgba(10, 110, 100, 0.16)',
   },
   headerEditText: {
     ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 11.5,
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontFamily: typography.font.bold,
   },
   headerLogoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    paddingHorizontal: 9,
-    paddingVertical: 4.5,
+    paddingHorizontal: 10,
+    paddingVertical: 5.5,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.18)',
@@ -743,16 +735,17 @@ const styles = StyleSheet.create({
   headerLogoutText: {
     ...typography.captionBold,
     color: colors.error,
-    fontSize: 11.5,
+    fontSize: 12,
+    fontFamily: typography.font.bold,
   },
   heroCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: 10,
-    marginBottom: 6,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 6,
+    gap: spacing.sm,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -767,10 +760,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -1,
     right: -1,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -778,14 +771,19 @@ const styles = StyleSheet.create({
   },
   heroTextWrap: {
     flex: 1,
-    gap: 1,
+    gap: 2,
     paddingLeft: 2,
+  },
+  nameBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   heroName: {
     ...typography.title,
     color: colors.textPrimary,
     fontSize: 16,
-    fontWeight: '700',
+    fontFamily: typography.font.bold,
   },
   heroEmail: {
     ...typography.caption,
@@ -801,97 +799,104 @@ const styles = StyleSheet.create({
   heroPhoneText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 11.5,
   },
   heroAddressBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     backgroundColor: 'rgba(7, 30, 38, 0.03)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.md,
   },
   heroAddressText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 11.5,
     flex: 1,
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
+    gap: 8,
+    marginBottom: spacing.sm,
   },
   statBox: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingVertical: 5,
+    borderRadius: radius.lg,
+    paddingVertical: 9,
+    paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 1,
+    gap: 2,
   },
   statIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statNumber: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15.5,
+    fontFamily: typography.font.bold,
   },
   statLabel: {
     ...typography.caption,
     color: colors.textMuted,
-    fontSize: 9.5,
+    fontSize: 10.5,
   },
   sectionBlock: {
-    marginBottom: 5,
+    marginBottom: spacing.xs,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
     paddingHorizontal: 2,
+  },
+  sectionTitleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   sectionTitle: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 13.5,
-    fontWeight: '700',
+    fontSize: 15,
+    fontFamily: typography.font.bold,
   },
   addPetHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
     paddingVertical: 2,
   },
   addPetHeaderText: {
     ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 11.5,
+    color: colors.primaryDark,
+    fontSize: 12.5,
+    fontFamily: typography.font.bold,
   },
   emptyPetCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    borderRadius: radius.xl,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
     gap: spacing.sm,
   },
   emptyPetIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(0, 168, 150, 0.10)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -903,117 +908,101 @@ const styles = StyleSheet.create({
   emptyPetTitle: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 13.5,
+    fontFamily: typography.font.bold,
   },
   emptyPetSub: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 10.5,
+    fontSize: 11,
   },
   petsVerticalList: {
-    gap: 5,
+    gap: 8,
   },
   petListCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    borderRadius: radius.xl,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 10,
+    gap: 12,
   },
   petRightInfo: {
     flex: 1,
-    gap: 1,
+    gap: 2,
   },
   petNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   petNameText: {
     ...typography.title,
     color: colors.textPrimary,
-    fontSize: 13.5,
-    fontWeight: '700',
+    fontSize: 14.5,
+    fontFamily: typography.font.bold,
   },
   vaccineTagSuccess: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
     backgroundColor: 'rgba(16, 185, 129, 0.10)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: radius.pill,
   },
   vaccineTagSuccessText: {
     ...typography.captionBold,
     color: colors.success,
-    fontSize: 8,
+    fontSize: 9.5,
+    fontFamily: typography.font.bold,
   },
   vaccineTagWarning: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: radius.pill,
   },
   vaccineTagWarningText: {
     ...typography.captionBold,
     color: colors.warning,
-    fontSize: 8,
+    fontSize: 9.5,
+    fontFamily: typography.font.bold,
   },
   petBreedText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 11,
-  },
-  expandPetsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(0, 168, 150, 0.06)',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.14)',
-    marginTop: 1,
-  },
-  expandPetsBtnText: {
-    ...typography.captionBold,
-    color: colors.primaryDark,
     fontSize: 11.5,
-    fontWeight: '700',
   },
   cvoCleanCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F3FAF8',
-    borderRadius: radius.md,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: '#F0FAF8',
+    borderRadius: radius.xl,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.15)',
-    marginTop: 2,
+    borderColor: 'rgba(10, 110, 100, 0.14)',
+    marginTop: spacing.xs,
   },
   cvoLeftRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 10,
     flex: 1,
   },
   cvoBadgeIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
-    backgroundColor: colors.primary,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1023,32 +1012,31 @@ const styles = StyleSheet.create({
   cvoTitle: {
     ...typography.title,
     color: colors.primaryDark,
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontFamily: typography.font.bold,
   },
   cvoSub: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 9.5,
+    fontSize: 10.5,
   },
   cvoCallBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 8,
-    paddingVertical: 4.5,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.25)',
+    gap: 4,
+    backgroundColor: colors.primaryDark,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
   },
   cvoCallBtnPressed: {
-    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    opacity: 0.88,
   },
   cvoCallBtnText: {
     ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 10.5,
+    color: colors.white,
+    fontSize: 11.5,
+    fontFamily: typography.font.bold,
   },
   footerSpacing: {
     height: 4,
