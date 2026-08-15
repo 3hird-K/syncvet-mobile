@@ -38,11 +38,12 @@ interface FootprintConfig {
   delay: number;
 }
 
+// Harmonious, gracefully curved walking paw path
 const FOOTPRINTS: FootprintConfig[] = [
-  { id: 1, x: -28, y: 72, rotation: -16, size: 24, delay: 0 },
-  { id: 2, x: 28, y: 36, rotation: 16, size: 27, delay: 350 },
-  { id: 3, x: -26, y: -4, rotation: -16, size: 30, delay: 700 },
-  { id: 4, x: 26, y: -44, rotation: 16, size: 33, delay: 1050 },
+  { id: 1, x: -24, y: 70, rotation: -14, size: 22, delay: 0 },
+  { id: 2, x: 24, y: 36, rotation: 14, size: 25, delay: 350 },
+  { id: 3, x: -20, y: 0, rotation: -12, size: 28, delay: 700 },
+  { id: 4, x: 20, y: -36, rotation: 12, size: 30, delay: 1050 },
 ];
 
 function AnimatedPawStep({
@@ -52,7 +53,7 @@ function AnimatedPawStep({
   config: FootprintConfig;
   reducedMotion: boolean | null;
 }) {
-  const opacity = useSharedValue(reducedMotion ? 0.8 : 0);
+  const opacity = useSharedValue(reducedMotion ? 0.75 : 0);
   const scale = useSharedValue(reducedMotion ? 1 : 0.6);
 
   useEffect(() => {
@@ -60,8 +61,8 @@ function AnimatedPawStep({
 
     opacity.value = withRepeat(
       withSequence(
-        withDelay(config.delay, withTiming(0.85, { duration: 380, easing: Easing.ease })),
-        withTiming(0.18, { duration: 600, easing: Easing.ease }),
+        withDelay(config.delay, withTiming(0.8, { duration: 360, easing: Easing.out(Easing.quad) })),
+        withTiming(0.2, { duration: 550, easing: Easing.inOut(Easing.quad) }),
         withDelay(Math.max(0, 1400 - config.delay), withTiming(0, { duration: 250 })),
       ),
       -1,
@@ -70,8 +71,8 @@ function AnimatedPawStep({
 
     scale.value = withRepeat(
       withSequence(
-        withDelay(config.delay, withTiming(1.08, { duration: 380, easing: Easing.ease })),
-        withTiming(0.92, { duration: 600, easing: Easing.ease }),
+        withDelay(config.delay, withTiming(1.05, { duration: 360, easing: Easing.out(Easing.quad) })),
+        withTiming(0.92, { duration: 550, easing: Easing.inOut(Easing.quad) }),
         withDelay(Math.max(0, 1400 - config.delay), withTiming(0.6, { duration: 250 })),
       ),
       -1,
@@ -91,41 +92,54 @@ function AnimatedPawStep({
 
   return (
     <Animated.View style={[styles.footprintWrap, animatedStyle]}>
-      <Ionicons name="paw" size={config.size} color={colors.primary} />
+      <Ionicons name="paw" size={config.size} color="rgba(10, 110, 100, 0.65)" />
     </Animated.View>
   );
 }
 
 /** Standard Footprints Loading Animation with Walking Steps & Pulse Ripple */
-export function PawFootprintLoader({ showProgress = true }: { showProgress?: boolean }) {
+export function PawFootprintLoader({
+  showProgress = true,
+  label = 'Loading, please wait...',
+}: {
+  showProgress?: boolean;
+  label?: string;
+}) {
   const reducedMotion = useReducedMotion();
 
   const heroPulse = useSharedValue(1);
   const ring1Scale = useSharedValue(1);
   const ring1Opacity = useSharedValue(0.6);
   const ring2Scale = useSharedValue(1);
-  const ring2Opacity = useSharedValue(0.4);
+  const ring2Opacity = useSharedValue(0.35);
+  const ring3Scale = useSharedValue(1);
+  const ring3Opacity = useSharedValue(0.2);
   const lineProgress = useSharedValue(0);
 
   useEffect(() => {
     if (!reducedMotion) {
-      lineProgress.value = withTiming(1, {
-        duration: 2300,
-        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      });
+      lineProgress.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 2400, easing: Easing.inOut(Easing.cubic) }),
+          withTiming(0, { duration: 0 }),
+        ),
+        -1,
+        false,
+      );
 
       heroPulse.value = withRepeat(
         withSequence(
-          withTiming(1.12, { duration: 900, easing: Easing.ease }),
-          withTiming(1.0, { duration: 900, easing: Easing.ease }),
+          withTiming(1.08, { duration: 850, easing: Easing.inOut(Easing.quad) }),
+          withTiming(1.0, { duration: 850, easing: Easing.inOut(Easing.quad) }),
         ),
         -1,
         true,
       );
 
+      // Ring 1: Primary ripple
       ring1Scale.value = withRepeat(
         withSequence(
-          withTiming(1.45, { duration: 1300, easing: Easing.ease }),
+          withTiming(1.4, { duration: 1400, easing: Easing.out(Easing.cubic) }),
           withTiming(1.0, { duration: 0 }),
         ),
         -1,
@@ -133,16 +147,17 @@ export function PawFootprintLoader({ showProgress = true }: { showProgress?: boo
       );
       ring1Opacity.value = withRepeat(
         withSequence(
-          withTiming(0, { duration: 1300, easing: Easing.ease }),
-          withTiming(0.65, { duration: 0 }),
+          withTiming(0, { duration: 1400, easing: Easing.out(Easing.cubic) }),
+          withTiming(0.6, { duration: 0 }),
         ),
         -1,
         false,
       );
 
+      // Ring 2: Secondary delayed ripple
       ring2Scale.value = withRepeat(
         withSequence(
-          withDelay(450, withTiming(1.65, { duration: 1400, easing: Easing.ease })),
+          withDelay(400, withTiming(1.65, { duration: 1500, easing: Easing.out(Easing.cubic) })),
           withTiming(1.0, { duration: 0 }),
         ),
         -1,
@@ -150,8 +165,26 @@ export function PawFootprintLoader({ showProgress = true }: { showProgress?: boo
       );
       ring2Opacity.value = withRepeat(
         withSequence(
-          withDelay(450, withTiming(0, { duration: 1400, easing: Easing.ease })),
-          withTiming(0.45, { duration: 0 }),
+          withDelay(400, withTiming(0, { duration: 1500, easing: Easing.out(Easing.cubic) })),
+          withTiming(0.4, { duration: 0 }),
+        ),
+        -1,
+        false,
+      );
+
+      // Ring 3: Soft tertiary ripple
+      ring3Scale.value = withRepeat(
+        withSequence(
+          withDelay(800, withTiming(1.9, { duration: 1600, easing: Easing.out(Easing.cubic) })),
+          withTiming(1.0, { duration: 0 }),
+        ),
+        -1,
+        false,
+      );
+      ring3Opacity.value = withRepeat(
+        withSequence(
+          withDelay(800, withTiming(0, { duration: 1600, easing: Easing.out(Easing.cubic) })),
+          withTiming(0.25, { duration: 0 }),
         ),
         -1,
         false,
@@ -159,7 +192,7 @@ export function PawFootprintLoader({ showProgress = true }: { showProgress?: boo
     } else {
       lineProgress.value = 1;
     }
-  }, [heroPulse, ring1Scale, ring1Opacity, ring2Scale, ring2Opacity, lineProgress, reducedMotion]);
+  }, [heroPulse, ring1Scale, ring1Opacity, ring2Scale, ring2Opacity, ring3Scale, ring3Opacity, lineProgress, reducedMotion]);
 
   const heroStyle = useAnimatedStyle(() => ({
     transform: [{ scale: heroPulse.value }],
@@ -175,12 +208,18 @@ export function PawFootprintLoader({ showProgress = true }: { showProgress?: boo
     opacity: ring2Opacity.value,
   }));
 
+  const ring3Style = useAnimatedStyle(() => ({
+    transform: [{ scale: ring3Scale.value }],
+    opacity: ring3Opacity.value,
+  }));
+
   const progressLineStyle = useAnimatedStyle(() => ({
     width: `${lineProgress.value * 100}%`,
   }));
 
   return (
     <View style={styles.centerContainer}>
+      {/* 1. Footprint Trail */}
       <View style={styles.footprintTrailContainer}>
         {FOOTPRINTS.map((config) => (
           <AnimatedPawStep
@@ -191,15 +230,28 @@ export function PawFootprintLoader({ showProgress = true }: { showProgress?: boo
         ))}
       </View>
 
+      {/* 2. Hero Center Badge with Multi-Layer Soft Ripple Rings */}
       <View style={styles.heroBadgeAnchor}>
+        <Animated.View style={[styles.rippleRing, styles.rippleRingTertiary, ring3Style]} />
         <Animated.View style={[styles.rippleRing, styles.rippleRingOuter, ring2Style]} />
         <Animated.View style={[styles.rippleRing, styles.rippleRingInner, ring1Style]} />
 
-        <Animated.View style={[styles.heroPawBadge, heroStyle, shadows.lg]}>
-          <Ionicons name="paw" size={46} color={colors.white} />
+        {/* Central Glassmorphic Badge */}
+        <Animated.View style={[styles.heroPawBadge, heroStyle, shadows.md]}>
+          <View style={styles.heroPawBadgeInner}>
+            <Ionicons name="paw" size={40} color={colors.white} />
+          </View>
         </Animated.View>
       </View>
 
+      {/* 3. Modern Loading Status Label */}
+      {label ? (
+        <View style={styles.statusWrap}>
+          <Text style={styles.statusLabel}>{label}</Text>
+        </View>
+      ) : null}
+
+      {/* 4. Slim Floating Progress Track */}
       {showProgress ? (
         <View style={styles.progressTrack}>
           <Animated.View style={[styles.progressBar, progressLineStyle]} />
@@ -209,29 +261,24 @@ export function PawFootprintLoader({ showProgress = true }: { showProgress?: boo
   );
 }
 
-/** Full-Screen Standard Paw Loading Overlay / Modal */
+/** Full-Screen Standard Paw Loading Overlay (In-Tree with seamless mint backdrop) */
 export function PawLoadingOverlay({
   visible,
   showProgress = true,
+  label,
 }: {
   visible: boolean;
   showProgress?: boolean;
+  label?: string;
 }) {
   if (!visible) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      navigationBarTranslucent
-    >
-      <View style={styles.overlayRoot}>
-        <AnimatedBubbleBackground variant="default" />
-        <PawFootprintLoader showProgress={showProgress} />
-      </View>
-    </Modal>
+    <View style={styles.overlayRoot} pointerEvents="auto">
+      {/* Harmonious Clean Ambient Mint Background */}
+      <AnimatedBubbleBackground variant="splash" />
+      <PawFootprintLoader showProgress={showProgress} label={label} />
+    </View>
   );
 }
 
@@ -434,7 +481,7 @@ export function PawLoading({
   if (mode === 'footprints') {
     return (
       <View style={[styles.container, fullScreen && styles.fullScreen]}>
-        <PawFootprintLoader showProgress={false} />
+        <PawFootprintLoader showProgress={false} label={label} />
       </View>
     );
   }
@@ -476,13 +523,15 @@ const styles = StyleSheet.create({
   },
   fullScreen: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#E6F5F2',
   },
   overlayRoot: {
-    flex: 1,
-    backgroundColor: colors.background,
+    ...StyleSheet.absoluteFill,
+    backgroundColor: '#E6F5F2',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 99999,
+    elevation: 99999,
   },
   centerContainer: {
     flex: 1,
@@ -495,8 +544,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 220,
-    height: 320,
+    width: 200,
+    height: 280,
+    zIndex: 1,
   },
   footprintWrap: {
     position: 'absolute',
@@ -504,49 +554,83 @@ const styles = StyleSheet.create({
   heroBadgeAnchor: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 140,
-    height: 140,
+    width: 150,
+    height: 150,
     position: 'relative',
+    zIndex: 2,
   },
   rippleRing: {
     position: 'absolute',
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: '#0A6E64',
   },
   rippleRingInner: {
-    width: 110,
-    height: 110,
+    width: 106,
+    height: 106,
     backgroundColor: 'rgba(0, 168, 150, 0.08)',
   },
   rippleRingOuter: {
-    width: 136,
-    height: 136,
+    width: 134,
+    height: 134,
     backgroundColor: 'rgba(0, 168, 150, 0.04)',
   },
+  rippleRingTertiary: {
+    width: 160,
+    height: 160,
+    backgroundColor: 'rgba(0, 168, 150, 0.02)',
+  },
   heroPawBadge: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: colors.primary,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: '#0A6E64',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3.5,
-    borderColor: colors.surface,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#05332E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  heroPawBadgeInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 39,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusWrap: {
+    marginTop: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(10, 110, 100, 0.08)',
+    zIndex: 3,
+  },
+  statusLabel: {
+    ...typography.captionBold,
+    color: colors.primaryDark,
+    fontSize: 12.5,
+    fontFamily: typography.font.bold,
+    textAlign: 'center',
+    letterSpacing: 0.4,
   },
   progressTrack: {
     position: 'absolute',
-    bottom: 50,
-    width: 110,
-    height: 4,
+    bottom: 54,
+    width: 120,
+    height: 4.5,
     borderRadius: radius.pill,
-    backgroundColor: 'rgba(7, 30, 38, 0.07)',
+    backgroundColor: 'rgba(10, 110, 100, 0.12)',
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
     borderRadius: radius.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: '#0A6E64',
   },
   walkingRow: {
     flexDirection: 'row',

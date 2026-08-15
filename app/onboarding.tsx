@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import { useAuth, useUser } from '@clerk/expo';
 import { useGoogleAuth } from '@hooks/useGoogleAuth';
 import Animated, {
   useAnimatedScrollHandler,
@@ -49,6 +50,10 @@ export default function OnboardingScreen() {
   const [current, setCurrent] = useState(initialIndex);
   const setCompleted = useOnboardingStore((state) => state.setCompleted);
 
+  const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
+  const { user: clerkUser } = useUser();
+  const [checkingAuth, setCheckingAuth] = useState(false);
+
   const {
     handleGoogleSignIn,
     connecting: connectingGoogle,
@@ -61,17 +66,43 @@ export default function OnboardingScreen() {
     }
   }, [googleError]);
 
-  const status = useAuthStore((state) => state.status);
-
+  // Seamlessly check existing authentication on initial mount (cold start)
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (clerkLoaded && isSignedIn && clerkUser && !connectingGoogle) {
+      setCheckingAuth(true);
       try {
         void WebBrowser.dismissAuthSession();
         void WebBrowser.coolDownAsync();
       } catch {}
-      router.replace('/(main)');
+
+      const metadata = (clerkUser.unsafeMetadata || {}) as Record<string, any>;
+      const mobileNumber = (metadata?.mobileNumber as string) || '';
+      const address = (metadata?.address as string) || '';
+      const profileCompleted = Boolean(metadata?.profileCompleted);
+      const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+      const hasCompletedProfile = Boolean(
+        profileCompleted &&
+        mobileNumber &&
+        address &&
+        clerkPets.length > 0
+      );
+
+      const timer = setTimeout(() => {
+        try {
+          void WebBrowser.dismissAuthSession();
+          void WebBrowser.coolDownAsync();
+        } catch {}
+
+        if (hasCompletedProfile) {
+          router.replace('/(main)');
+        } else {
+          router.replace('/(register)/owner');
+        }
+      }, 900);
+
+      return () => clearTimeout(timer);
     }
-  }, [status, router]);
+  }, [clerkLoaded, isSignedIn, clerkUser, connectingGoogle, router]);
 
   // Jump to specific slide if requested (e.g. after logout)
   useEffect(() => {
@@ -218,7 +249,9 @@ export default function OnboardingScreen() {
       />
 
       {/* Full-Screen Modern Walking Paw Footprints Loader while checking & routing user */}
-      <PawLoadingOverlay visible={connectingGoogle} />
+      <PawLoadingOverlay
+        visible={connectingGoogle || checkingAuth || (Boolean(isSignedIn) && !googleError)}
+      />
     </SafeAreaView>
   );
 }

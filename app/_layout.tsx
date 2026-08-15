@@ -87,7 +87,7 @@ export default function RootLayout() {
                 screenOptions={{
                   headerShown: false,
                   animation: 'fade',
-                  contentStyle: { backgroundColor: colors.background },
+                  contentStyle: { backgroundColor: colors.primaryLight },
                 }}
               />
             ) : null}

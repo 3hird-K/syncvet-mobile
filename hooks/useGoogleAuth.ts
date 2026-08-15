@@ -10,6 +10,17 @@ import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 
+WebBrowser.maybeCompleteAuthSession();
+
+function useWarmUpBrowser() {
+  React.useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+}
+
 export interface UseGoogleAuthReturn {
   handleGoogleSignIn: () => Promise<boolean>;
   connecting: boolean;
@@ -23,6 +34,7 @@ export interface UseGoogleAuthReturn {
  * with graceful fallback to browser SSO on web or unsupported environments.
  */
 export function useGoogleAuth(): UseGoogleAuthReturn {
+  useWarmUpBrowser();
   const router = useRouter();
   const { startGoogleAuthenticationFlow } = useSignInWithGoogle();
   const { startSSOFlow } = useSSO();
@@ -36,6 +48,11 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       signInFlow: any,
       clerkUser?: any,
     ) => {
+      try {
+        void WebBrowser.dismissAuthSession();
+        void WebBrowser.coolDownAsync();
+      } catch {}
+
       useOnboardingStore.getState().setCompleted();
 
       const clerkEmail =
@@ -102,6 +119,10 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         await useAuthStore.getState().markRegistrationComplete();
       }
 
+      // Provide a deliberate, smooth loading experience with PawLoading
+      // so the user experiences the sleek PawFootprintLoader smoothly before landing
+      await new Promise((res) => setTimeout(res, 1200));
+
       if (hasCompletedProfile) {
         router.replace('/(main)');
       } else {
@@ -139,7 +160,6 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
           setConnecting(false);
           return false;
         } catch (nativeErr: any) {
-          // If native error was user cancellation, exit quietly
           if (
             nativeErr?.code === 'SIGN_IN_CANCELLED' ||
             nativeErr?.code === '-5' ||
@@ -149,9 +169,6 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
             setConnecting(false);
             return false;
           }
-
-          // If native module is not available in current environment (e.g. standard Expo Go before development build),
-          // seamlessly fallback to browser SSO flow
           console.log('Native Google flow fallback to browser SSO:', nativeErr?.message);
         }
       }
@@ -182,7 +199,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         return true;
       }
 
-      // If user dismissed browser
+      // If user dismissed browser without signing in
       setConnecting(false);
       return false;
     } catch (err: any) {
@@ -194,7 +211,6 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         err?.message ||
         'Could not sign in with Google. Please try again.';
 
-      // Do not surface standard cancellation messages as errors
       const isCancellation =
         rawMsg.toLowerCase().includes('cancel') ||
         rawMsg.toLowerCase().includes('dismiss') ||
@@ -208,12 +224,6 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       }
 
       return false;
-    } finally {
-      setConnecting(false);
-      try {
-        await WebBrowser.dismissAuthSession();
-        await WebBrowser.coolDownAsync();
-      } catch {}
     }
   }, [
     startGoogleAuthenticationFlow,

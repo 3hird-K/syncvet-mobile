@@ -1,13 +1,13 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth, useUser } from '@clerk/expo';
 
-import { colors } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import { PawLoadingOverlay } from '@components/ui/PawLoading';
+import { PawFootprintLoader } from '@components/ui/PawLoading';
+import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -15,6 +15,7 @@ export default function SSOCallbackScreen() {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useAuth();
   const { user: clerkUser } = useUser();
+  const routed = useRef(false);
 
   useEffect(() => {
     try {
@@ -25,15 +26,17 @@ export default function SSOCallbackScreen() {
   }, []);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || routed.current) return;
 
     if (isSignedIn && clerkUser) {
+      routed.current = true;
       useOnboardingStore.getState().setCompleted();
-      const metadata = clerkUser.unsafeMetadata || {};
-      const mobileNumber = (metadata.mobileNumber as string) || '';
-      const address = (metadata.address as string) || '';
-      const profileCompleted = Boolean(metadata.profileCompleted);
-      const clerkPets = Array.isArray(metadata.pets) ? (metadata.pets as any[]) : [];
+
+      const metadata = (clerkUser.unsafeMetadata || {}) as Record<string, any>;
+      const mobileNumber = (metadata?.mobileNumber as string) || '';
+      const address = (metadata?.address as string) || '';
+      const profileCompleted = Boolean(metadata?.profileCompleted);
+      const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
       const hasCompletedProfile = Boolean(
         profileCompleted &&
         mobileNumber &&
@@ -52,6 +55,7 @@ export default function SSOCallbackScreen() {
         if (profileCompleted) {
           await useAuthStore.getState().markRegistrationComplete();
         }
+        await new Promise((res) => setTimeout(res, 1000));
         if (hasCompletedProfile) {
           router.replace('/(main)');
         } else {
@@ -61,14 +65,15 @@ export default function SSOCallbackScreen() {
         router.replace('/(main)');
       });
     } else if (!isSignedIn) {
+      routed.current = true;
       router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     }
   }, [isLoaded, isSignedIn, clerkUser, router]);
 
   return (
     <View style={styles.container}>
-      <PawLoadingOverlay visible />
-      <ActivityIndicator size="large" color={colors.primary} />
+      <AnimatedBubbleBackground variant="splash" />
+      <PawFootprintLoader showProgress label="Loading, please wait..." />
     </View>
   );
 }
@@ -76,7 +81,7 @@ export default function SSOCallbackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#E6F5F2',
     alignItems: 'center',
     justifyContent: 'center',
   },

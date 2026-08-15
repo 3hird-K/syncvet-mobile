@@ -15,7 +15,7 @@ export default function MainLayout() {
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.replace('/(auth)');
+      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     }
   }, [status, router]);
 
