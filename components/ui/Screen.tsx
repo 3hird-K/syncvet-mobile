@@ -22,6 +22,7 @@ interface ScreenProps extends PropsWithChildren {
   refreshControl?: ReactElement;
   onRefresh?: () => void | Promise<void>;
   refreshing?: boolean;
+  subtleBackground?: boolean;
 }
 
 /**
@@ -38,6 +39,7 @@ export function Screen({
   refreshControl,
   onRefresh,
   refreshing,
+  subtleBackground = false,
 }: ScreenProps) {
   const padding = padded ? spacing.xl : 0;
   const [internalRefreshing, setInternalRefreshing] = useState(false);
@@ -66,7 +68,7 @@ export function Screen({
 
   const content = (
     <>
-      <BackgroundDecoration />
+      <BackgroundDecoration subtle={subtleBackground} />
       {scroll ? (
         <ScrollView
           contentContainerStyle={[

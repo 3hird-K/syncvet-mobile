@@ -75,7 +75,7 @@ export function PetEditInfoModal({
   onSave,
 }: PetEditInfoModalProps) {
   const [name, setName] = useState(pet.name);
-  const [species, setSpecies] = useState<Species>(pet.species || 'dog');
+  const species: Species = (pet.species?.toLowerCase() === 'cat' ? 'cat' : 'dog') as Species;
   const [breed, setBreed] = useState(pet.breed || '');
   const [gender, setGender] = useState<PetGender>(pet.gender || 'male');
   const [age, setAge] = useState(
@@ -97,12 +97,6 @@ export function PetEditInfoModal({
 
   const isDog = species === 'dog';
   const breedPresets = isDog ? DOG_BREEDS : CAT_BREEDS;
-
-  const handleSpeciesChange = (newSpecies: Species) => {
-    haptic.light();
-    setSpecies(newSpecies);
-    setBreed('');
-  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -234,44 +228,22 @@ export function PetEditInfoModal({
                   returnKeyType="next"
                 />
 
-                <View style={styles.fieldSection}>
-                  <Text style={styles.fieldLabel}>Species *</Text>
-                  <View style={styles.speciesToggleRow}>
-                    <Pressable
-                      onPress={() => handleSpeciesChange('dog')}
+                <View style={styles.readOnlySpeciesRow}>
+                  <Text style={styles.readOnlySpeciesLabel}>Species (Permanent)</Text>
+                  <View
+                    style={[
+                      styles.speciesBadge,
+                      isDog ? styles.speciesBadgeDog : styles.speciesBadgeCat,
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.speciesBtn,
-                        isDog && styles.speciesBtnActiveDog,
+                        styles.speciesBadgeText,
+                        isDog ? styles.speciesBadgeTextDog : styles.speciesBadgeTextCat,
                       ]}
                     >
-                      <Text style={styles.speciesBtnEmoji}>🐶</Text>
-                      <Text
-                        style={[
-                          styles.speciesBtnText,
-                          isDog && styles.speciesBtnTextActiveDog,
-                        ]}
-                      >
-                        Canine (Dog)
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => handleSpeciesChange('cat')}
-                      style={[
-                        styles.speciesBtn,
-                        !isDog && styles.speciesBtnActiveCat,
-                      ]}
-                    >
-                      <Text style={styles.speciesBtnEmoji}>🐱</Text>
-                      <Text
-                        style={[
-                          styles.speciesBtnText,
-                          !isDog && styles.speciesBtnTextActiveCat,
-                        ]}
-                      >
-                        Feline (Cat)
-                      </Text>
-                    </Pressable>
+                      {isDog ? '🐶 Canine (Dog)' : '🐱 Feline (Cat)'}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -692,45 +664,45 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 12.5,
   },
-  speciesToggleRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  speciesBtn: {
-    flex: 1,
+  readOnlySpeciesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 11,
-    borderRadius: radius.lg,
-    backgroundColor: 'rgba(7, 30, 38, 0.03)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(7, 30, 38, 0.06)',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(7, 30, 38, 0.05)',
+    marginTop: 2,
   },
-  speciesBtnActiveDog: {
-    backgroundColor: 'rgba(0, 168, 150, 0.10)',
-    borderColor: colors.primary,
-  },
-  speciesBtnActiveCat: {
-    backgroundColor: 'rgba(219, 39, 119, 0.10)',
-    borderColor: '#DB2777',
-  },
-  speciesBtnEmoji: {
-    fontSize: 18,
-  },
-  speciesBtnText: {
+  readOnlySpeciesLabel: {
     ...typography.captionBold,
     color: colors.textSecondary,
-    fontSize: 12.5,
+    fontSize: 12,
   },
-  speciesBtnTextActiveDog: {
+  speciesBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  speciesBadgeDog: {
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    borderColor: 'rgba(0, 168, 150, 0.25)',
+  },
+  speciesBadgeCat: {
+    backgroundColor: 'rgba(219, 39, 119, 0.08)',
+    borderColor: 'rgba(219, 39, 119, 0.25)',
+  },
+  speciesBadgeText: {
+    ...typography.captionBold,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  speciesBadgeTextDog: {
     color: colors.primary,
-    fontWeight: '700',
   },
-  speciesBtnTextActiveCat: {
+  speciesBadgeTextCat: {
     color: '#DB2777',
-    fontWeight: '700',
   },
   presetsHeader: {
     ...typography.small,

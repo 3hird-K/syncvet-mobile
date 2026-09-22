@@ -1,14 +1,16 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useUser } from '@clerk/expo';
 
 import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
+import { useNotificationStore } from '@store/useNotificationStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { HomeScreenSkeleton } from '@components/ui/Skeleton';
+import { PetQrScannerModal } from '@components/ui/PetQrScannerModal';
 import {
   HomeHeader,
   HomePetsSection,
@@ -18,12 +20,36 @@ import {
   HomeHealthInsight,
   HomeClinicStrip,
 } from '@components/home';
+import { colors, radius, spacing } from '@theme';
 import type { Pet } from '@services/data';
 
 export default function HomeScreen() {
   const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
-  const { pets: storePets, appointments: storeAppointments, loading, loaded, syncNow } = useResidentData();
+  const {
+    pets: storePets,
+    appointments: storeAppointments,
+    transactions,
+    loading,
+    loaded,
+    syncNow,
+  } = useResidentData();
+
+  const ownerId = clerkUser?.id || user?.id || '';
+  const [scannerVisible, setScannerVisible] = React.useState(false);
+  const loadReadIds = useNotificationStore((state) => state.loadReadIds);
+  const getUnreadCount = useNotificationStore((state) => state.getUnreadCount);
+  const readIds = useNotificationStore((state) => state.readIds);
+
+  useEffect(() => {
+    if (ownerId) {
+      loadReadIds(ownerId);
+    }
+  }, [ownerId, loadReadIds]);
+
+  const unreadNotificationCount = useMemo(() => {
+    return getUnreadCount(transactions || []);
+  }, [getUnreadCount, transactions, readIds]);
 
   const displayName =
     clerkUser?.fullName ||
@@ -32,42 +58,15 @@ export default function HomeScreen() {
     'Resident';
   const displayPhoto = clerkUser?.imageUrl || user?.photoUrl;
 
-  // Local-first source of truth with offline pending creation support
-  const allPets: Pet[] = useMemo(() => {
-    if (storePets && storePets.length > 0) {
-      return storePets;
-    }
-    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-
-    return metaPets.map((p, idx) => ({
-      id: p.id || `clerk-pet-${idx}`,
-      ownerId: clerkUser?.id || '',
-      name: p.name || 'My Pet',
-      species: p.species || 'dog',
-      breed: p.breed || '',
-      gender: p.gender || 'male',
-      birthYear: p.birthYear,
-      isVaccinated: Boolean(p.isVaccinated),
-      isSpayedNeutered: Boolean(p.isSpayedNeutered),
-      weightCategory: p.weightCategory || 'medium',
-      notes: p.notes,
-      avatarId: p.avatarId,
-      photoUrl: p.photoUrl,
-      createdAt: p.createdAt || new Date().toISOString(),
-    }));
-  }, [storePets, clerkUser?.unsafeMetadata, clerkUser?.id]);
+  // Pure Supabase source of truth
+  const allPets: Pet[] = storePets || [];
 
   const upcomingAppointments = useMemo(() => {
     const today = todayISO();
     const validPetIds = new Set(allPets.map((p) => p.id));
     const validPetNames = new Set(allPets.map((p) => p.name?.toLowerCase().trim()));
 
-    const apptPool = storeAppointments && storeAppointments.length > 0
-      ? storeAppointments
-      : ((clerkUser?.unsafeMetadata?.appointments || []) as any[]);
-
-    return (apptPool as any[])
+    return (storeAppointments || [])
       .filter((a) => {
         if (!a) return false;
         const matchesId = a.petId ? validPetIds.has(a.petId) : false;
@@ -79,7 +78,7 @@ export default function HomeScreen() {
         );
       })
       .sort((a, b) => (a.date === b.date ? a.timeSlot.localeCompare(b.timeSlot) : a.date.localeCompare(b.date)));
-  }, [allPets, storeAppointments, clerkUser?.unsafeMetadata]);
+  }, [allPets, storeAppointments]);
 
   const nextAppointment = upcomingAppointments[0];
 
@@ -103,12 +102,14 @@ export default function HomeScreen() {
   return (
     <AnimatedScreen animation="zoom">
       <Screen scroll onRefresh={handleRefresh}>
-        {/* 1. Senior Executive Municipal Top Header */}
+        {/* 1. Senior Executive Municipal Top Header with Scan Button */}
         <HomeHeader
           displayName={displayName}
           displayPhoto={displayPhoto}
           petsCount={allPets.length}
           hasUpcomingAppointments={upcomingAppointments.length > 0}
+          notificationCount={unreadNotificationCount}
+          onScanPress={() => setScannerVisible(true)}
         />
 
         {/* 2. Pet Overview & Passport Carousel */}
@@ -132,6 +133,14 @@ export default function HomeScreen() {
         {/* 7. City Veterinary Office Operating Schedule & Direct Helpline */}
         <HomeClinicStrip />
       </Screen>
+
+      {/* Pet Tag Scanner Camera Modal */}
+      <PetQrScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+      />
     </AnimatedScreen>
   );
 }
+
+const styles = StyleSheet.create({});

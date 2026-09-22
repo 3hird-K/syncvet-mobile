@@ -45,7 +45,6 @@ import { ChoiceChips } from '@components/ui/ChoiceChips';
 import { PetAvatarPickerModal } from '@components/ui/PetAvatarPickerModal';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { toast } from '@components/ui/Sonner';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<SubPartIndex>);
@@ -124,8 +123,10 @@ function SlideWrapper({ index, scrollX, width, children }: SlideWrapperProps) {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         bounces={false}
+        automaticallyAdjustKeyboardInsets={true}
       >
         <Animated.View style={[styles.slideInner, animatedStyle]}>
           {children}
@@ -141,7 +142,7 @@ export default function AddPetScreen() {
   const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
   const addPet = useDataStore((state) => state.addPet);
-  const ownerId = user?.id || clerkUser?.id || '';
+  const ownerId = clerkUser?.id || user?.id || '';
   const [submitting, setSubmitting] = useState(false);
   const [networkError, setNetworkError] = useState<string | undefined>();
 
@@ -333,7 +334,7 @@ export default function AddPetScreen() {
   };
 
   const handleSaveComplete = useCallback(async () => {
-    const ownerId = user?.id || 'owner-local';
+    const ownerId = clerkUser?.id || user?.id || '';
 
     if (!validateAll()) {
       haptic.warning();
@@ -985,7 +986,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: 110,
+    paddingBottom: 280,
   },
   slideInner: {
     gap: 12,

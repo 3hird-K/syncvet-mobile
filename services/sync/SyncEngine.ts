@@ -1,11 +1,13 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { networkService } from '@services/network';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
+import { supabase } from '@lib/supabase';
+import { getDataService } from '@services/data';
 import { syncQueue } from './SyncQueue';
 import { ConflictResolver } from './ConflictResolver';
 import type { SyncEngineState, SyncOperation, SyncResult } from './types';
 import type { ActivityItem, Appointment, BookingInput, Pet, PetInput } from '@services/data/types';
+import { queryClient, queryKeys } from '@lib/queryClient';
 
 function lastSyncKey(ownerId: string): string {
   return `syncvet.last_sync.${ownerId}`;
@@ -144,23 +146,18 @@ export class SyncEngine {
     };
 
     try {
-      // Step 1: Process local queued mutations
+      // Step 1: Ensure user profile is registered and aligned in Supabase
+      if (userToUse) {
+        await this.syncUserProfileToSupabase(userToUse);
+      }
+
+      // Step 2: Process local queued mutations against Supabase
       const queueResult = await this.processMutationQueue(ownerId, userToUse);
       result.processedCount += queueResult.processedCount;
       result.failedCount += queueResult.failedCount;
       result.errors.push(...queueResult.errors);
 
-      // Step 2: Sync remote changes if Clerk user is present
-      if (userToUse?.reload) {
-        try {
-          await Promise.race([
-            userToUse.reload(),
-            new Promise((resolve) => setTimeout(resolve, 2000)),
-          ]);
-        } catch {}
-      }
-
-      // Step 3: Record sync completion timestamp
+      // Step 4: Record sync completion timestamp
       const nowISO = new Date().toISOString();
       await AsyncStorage.setItem(lastSyncKey(ownerId), nowISO);
       const pending = await syncQueue.getPendingCount(ownerId);
@@ -170,6 +167,11 @@ export class SyncEngine {
         lastSyncedAt: nowISO,
         pendingCount: pending,
       });
+
+      // Keep TanStack Query cache strictly aligned with synced server state
+      queryClient.invalidateQueries({ queryKey: queryKeys.pets(ownerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions(ownerId) });
 
       result.success = result.failedCount === 0;
     } catch (err: any) {
@@ -186,6 +188,37 @@ export class SyncEngine {
     }
 
     return result;
+  }
+
+  /**
+   * Ensures user profile exists in Supabase public.users table
+   */
+  private async syncUserProfileToSupabase(clerkUser: any): Promise<void> {
+    if (!clerkUser) return;
+    try {
+      const email = clerkUser.primaryEmailAddress?.emailAddress || '';
+      const fullName =
+        clerkUser.fullName ||
+        `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() ||
+        null;
+      const avatarUrl = clerkUser.imageUrl || null;
+
+      // Update existing user profile in public.users.
+      // Do NOT upsert here to avoid resurrecting deleted accounts.
+      await supabase
+        .from('users')
+        .update({
+          email: email || `${clerkUser.id}@resident.syncvet.app`,
+          full_name: fullName || 'Resident',
+          first_name: clerkUser.firstName || null,
+          last_name: clerkUser.lastName || null,
+          avatar_url: avatarUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', clerkUser.id);
+    } catch (err) {
+      console.warn('Sync profile to Supabase note:', err);
+    }
   }
 
   /**
@@ -225,79 +258,59 @@ export class SyncEngine {
   }
 
   private async executeOperation(op: SyncOperation, clerkUser?: any): Promise<void> {
-    if (!clerkUser) return;
+    const dataService = getDataService();
 
-    const metadata = (clerkUser.unsafeMetadata || {}) as Record<string, any>;
-    const currentPets = (Array.isArray(metadata.pets) ? metadata.pets : []) as any[];
-    const currentAppts = (Array.isArray(metadata.appointments) ? metadata.appointments : []) as any[];
-
+    // 1. Execute mutation against Supabase
     switch (op.operation) {
       case 'CREATE_PET': {
         const newPet = op.payload as Pet;
-        const exists = currentPets.some((p) => (p.id || p.name) === (newPet.id || newPet.name));
-        if (!exists) {
-          await updateClerkUnsafeMetadata(clerkUser, {
-            pets: [...currentPets, newPet],
-          });
-        }
+        await dataService.addPet(op.ownerId, newPet);
         break;
       }
 
       case 'UPDATE_PET': {
         const updatedPet = op.payload as Pet;
-        const updatedList = currentPets.map((p, idx) => {
-          if ((p.id || `clerk-pet-${idx}`) === updatedPet.id) {
-            return { ...p, ...updatedPet };
-          }
-          return p;
-        });
-        await updateClerkUnsafeMetadata(clerkUser, {
-          pets: updatedList,
-        });
+        await dataService.updatePet(updatedPet);
         break;
       }
 
       case 'DELETE_PET': {
         const petIdToDelete = op.entityId;
-        const filteredPets = currentPets.filter(
-          (p, idx) => (p.id || `clerk-pet-${idx}`) !== petIdToDelete,
-        );
-        const filteredAppts = currentAppts.filter((a) => a.petId !== petIdToDelete);
-        await updateClerkUnsafeMetadata(clerkUser, {
-          pets: filteredPets,
-          appointments: filteredAppts,
-        });
+        await dataService.deletePet(op.ownerId, petIdToDelete);
         break;
       }
 
       case 'BOOK_APPOINTMENT': {
         const newAppt = op.payload as Appointment;
-        const exists = currentAppts.some((a) => a.id === newAppt.id);
-        if (!exists) {
-          await updateClerkUnsafeMetadata(clerkUser, {
-            appointments: [...currentAppts, newAppt],
-          });
-        }
+        await dataService.bookAppointment(op.ownerId, {
+          petId: newAppt.petId,
+          petName: newAppt.petName,
+          serviceId: newAppt.serviceId,
+          date: newAppt.date,
+          timeSlot: newAppt.timeSlot,
+          location: newAppt.location,
+          notes: newAppt.notes,
+        });
         break;
       }
 
       case 'CANCEL_APPOINTMENT': {
         const apptId = op.entityId;
-        const updatedAppts = currentAppts.map((a) =>
-          a.id === apptId ? { ...a, status: 'cancelled' } : a,
-        );
-        await updateClerkUnsafeMetadata(clerkUser, {
-          appointments: updatedAppts,
-        });
+        await dataService.cancelAppointment(op.ownerId, apptId);
         break;
       }
 
       case 'UPDATE_PROFILE': {
         const profile = op.payload as { mobileNumber?: string; address?: string; fullName?: string };
-        await updateClerkUnsafeMetadata(clerkUser, {
-          ...(profile.mobileNumber ? { mobileNumber: profile.mobileNumber } : {}),
-          ...(profile.address ? { address: profile.address } : {}),
-        });
+        await supabase
+          .from('users')
+          .update({
+            ...(profile.mobileNumber ? { phone_number: profile.mobileNumber } : {}),
+            ...(profile.address ? { address: profile.address } : {}),
+            ...(profile.fullName ? { full_name: profile.fullName } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', op.ownerId);
         break;
       }
     }

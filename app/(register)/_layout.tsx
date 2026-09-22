@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 
-import { useUser } from '@clerk/expo';
+import { useAuth, useUser } from '@clerk/expo';
 import { colors } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
 
@@ -13,29 +13,30 @@ export default function RegisterLayout() {
   const router = useRouter();
   const segments = useSegments();
   const status = useAuthStore((state) => state.status);
+  const { isLoaded: clerkLoaded, isSignedIn } = useAuth();
   const { user: clerkUser } = useUser();
   const currentUser = useAuthStore((state) => state.user);
-  const metadata = clerkUser?.unsafeMetadata;
-  const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
   const hasCompletedProfile = Boolean(
-    (currentUser?.profileCompleted || metadata?.profileCompleted) &&
-    (currentUser?.mobileNumber || metadata?.mobileNumber) &&
-    (currentUser?.address || metadata?.address) &&
-    (clerkPets.length > 0 || (currentUser?.profileCompleted))
+    currentUser?.profileCompleted &&
+    currentUser?.mobileNumber &&
+    currentUser?.address
   );
 
   const segmentPath = segments.join('/');
   const onSuccess = segmentPath.includes('success');
 
+  const isAuth = (status === 'authenticated' && !!currentUser) || (clerkLoaded && isSignedIn);
+
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    // Only redirect away to onboarding if both Clerk and local auth confirm the user is not signed in
+    if (clerkLoaded && !isAuth) {
       router.replace({ pathname: '/onboarding', params: { slide: '3' } });
       return;
     }
-    if (status === 'authenticated' && hasCompletedProfile && !onSuccess) {
+    if (isAuth && hasCompletedProfile && !onSuccess) {
       router.replace('/(main)');
     }
-  }, [status, hasCompletedProfile, router, onSuccess]);
+  }, [clerkLoaded, isAuth, hasCompletedProfile, router, onSuccess]);
 
   return (
     <Stack

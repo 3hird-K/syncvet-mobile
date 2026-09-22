@@ -37,7 +37,14 @@
       "expo-secure-store",
       "expo-web-browser",
       "@clerk/expo",
-      "@clerk/expo-google-signin"
+      "@clerk/expo-google-signin",
+      "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SyncVet to access your camera to scan pet tag QR codes."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

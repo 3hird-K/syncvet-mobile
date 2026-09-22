@@ -2,17 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { DataService } from './DataService';
 import type {
-  ActivityItem,
   Appointment,
   BookingInput,
   Pet,
   PetInput,
+  ServiceTransaction,
 } from './types';
 
 interface OwnerData {
   pets: Pet[];
   appointments: Appointment[];
-  activity: ActivityItem[];
+  transactions: ServiceTransaction[];
 }
 
 function ownerKey(ownerId: string): string {
@@ -24,7 +24,7 @@ function uid(prefix: string): string {
 }
 
 function emptyOwnerData(): OwnerData {
-  return { pets: [], appointments: [], activity: [] };
+  return { pets: [], appointments: [], transactions: [] };
 }
 
 /**
@@ -49,14 +49,18 @@ export class MockDataService implements DataService {
       _pendingSync: true,
     };
     data.pets = [pet, ...data.pets.filter((p) => p.id !== pet.id)];
-    data.activity.unshift({
-      id: uid('act'),
+    const txId = uid('txn');
+    data.transactions.unshift({
+      id: txId,
+      transactionNo: `TXN-${Date.now().toString().slice(-6)}-REG`,
       ownerId,
       type: 'registration',
-      title: `${pet.name} registered`,
+      title: `${pet.name} Registered`,
       detail: `${titleCase(pet.species)} · ${pet.breed}`,
+      status: 'completed',
+      referenceId: pet.id,
       date: now,
-      updatedAt: now,
+      createdAt: now,
     });
     await this.save(ownerId, data);
     return pet;
@@ -106,14 +110,17 @@ export class MockDataService implements DataService {
       _pendingSync: true,
     };
     data.appointments.push(appointment);
-    data.activity.unshift({
-      id: uid('act'),
+    data.transactions.unshift({
+      id: uid('txn'),
+      transactionNo: `TXN-${Date.now().toString().slice(-6)}-APT`,
       ownerId,
       type: 'booking',
-      title: 'Appointment request submitted',
+      title: 'Appointment Filed',
       detail: `${appointment.petName} · ${serviceLabel(appointment.serviceId)}`,
+      status: 'pending',
+      referenceId: appointment.id,
       date: now,
-      updatedAt: now,
+      createdAt: now,
     });
     await this.save(ownerId, data);
     return appointment;
@@ -126,38 +133,60 @@ export class MockDataService implements DataService {
     if (appointment && appointment.status !== 'completed') {
       appointment.status = 'cancelled';
       appointment.updatedAt = now;
-      data.activity.unshift({
-        id: uid('act'),
+      data.transactions.unshift({
+        id: uid('txn'),
+        transactionNo: `TXN-${Date.now().toString().slice(-6)}-CAN`,
         ownerId,
-        type: 'booking',
-        title: 'Appointment cancelled',
+        type: 'cancellation',
+        title: 'Appointment Cancelled',
         detail: `${appointment.petName} · ${serviceLabel(appointment.serviceId)}`,
+        status: 'cancelled',
+        referenceId: appointmentId,
         date: now,
-        updatedAt: now,
+        createdAt: now,
       });
     }
     await this.save(ownerId, data);
   }
 
-  async getActivity(ownerId: string): Promise<ActivityItem[]> {
+  async getTransactions(ownerId: string): Promise<ServiceTransaction[]> {
     const data = await this.load(ownerId);
-    return [...data.activity].sort((a, b) => b.date.localeCompare(a.date));
+    return [...(data.transactions || [])].sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  async logTransaction(
+    ownerId: string,
+    input: Omit<ServiceTransaction, 'id' | 'ownerId' | 'date' | 'createdAt' | 'transactionNo'> & {
+      transactionNo?: string;
+    },
+  ): Promise<ServiceTransaction> {
+    const data = await this.load(ownerId);
+    const now = new Date().toISOString();
+    const tx: ServiceTransaction = {
+      ...input,
+      id: uid('txn'),
+      transactionNo: input.transactionNo || `TXN-${Date.now().toString().slice(-6)}-GEN`,
+      ownerId,
+      status: input.status || 'completed',
+      date: now,
+      createdAt: now,
+    };
+    data.transactions = data.transactions || [];
+    data.transactions.unshift(tx);
+    await this.save(ownerId, data);
+    return tx;
+  }
+
+  // Backward compatibility
+  async getActivity(ownerId: string): Promise<ServiceTransaction[]> {
+    return this.getTransactions(ownerId);
   }
 
   async logActivity(
     ownerId: string,
-    input: Omit<ActivityItem, 'id' | 'ownerId' | 'date'>,
+    input: Omit<ServiceTransaction, 'id' | 'ownerId' | 'date' | 'createdAt' | 'transactionNo'>,
   ): Promise<void> {
-    const data = await this.load(ownerId);
-    const now = new Date().toISOString();
-    data.activity.unshift({
-      ...input,
-      id: uid('act'),
-      ownerId,
-      date: now,
-      updatedAt: now,
-    });
-    await this.save(ownerId, data);
+    await this.logTransaction(ownerId, input);
   }
 
   public async load(ownerId: string): Promise<OwnerData> {

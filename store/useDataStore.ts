@@ -5,17 +5,19 @@ import { getDataService } from '@services/data';
 import { syncEngine, syncQueue } from '@services/sync';
 import { reminderEngine } from '@services/notifications';
 import type {
-  ActivityItem,
   Appointment,
   BookingInput,
   Pet,
   PetInput,
+  ServiceTransaction,
 } from '@services/data';
+import { queryClient, queryKeys } from '@lib/queryClient';
 
 interface DataState {
   pets: Pet[];
   appointments: Appointment[];
-  activity: ActivityItem[];
+  transactions: ServiceTransaction[];
+  activity: ServiceTransaction[]; // alias for backward compatibility
   loading: boolean;
   loaded: boolean;
   isSyncing: boolean;
@@ -46,6 +48,7 @@ export const useDataStore = create<DataState>((set, get) => {
   return {
     pets: [],
     appointments: [],
+    transactions: [],
     activity: [],
     loading: false,
     loaded: false,
@@ -54,13 +57,16 @@ export const useDataStore = create<DataState>((set, get) => {
     pendingCount: 0,
 
     reset: () => {
+      queryClient.clear();
       set({
         pets: [],
         appointments: [],
+        transactions: [],
         activity: [],
         loading: false,
         loaded: false,
         pendingCount: 0,
+        error: undefined,
       });
     },
 
@@ -70,75 +76,44 @@ export const useDataStore = create<DataState>((set, get) => {
       try {
         let activePets: Pet[] = [];
         let activeAppts: Appointment[] = [];
-        let activeActivity: ActivityItem[] = [];
+        let activeTransactions: ServiceTransaction[] = [];
 
-        // 1. Remote Clerk Metadata
-        const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-        const rawPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-        const rawAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
+        // 1. Fetch live data from Supabase via DataService
+        let supabasePets: Pet[] = [];
+        let supabaseAppts: Appointment[] = [];
+        let supabaseTransactions: ServiceTransaction[] = [];
 
-        // 2. Local Persistent Cache
+        try {
+          const dataService = getDataService();
+          [supabasePets, supabaseAppts, supabaseTransactions] = await Promise.all([
+            dataService.getPets(ownerId),
+            dataService.getAppointments(ownerId),
+            dataService.getTransactions(ownerId),
+          ]);
+        } catch (dbErr) {
+          console.warn('Supabase initial fetch note:', dbErr);
+        }
+
+        // 2. Local Persistent Cache (for instant offline startup)
         const rawCache = await AsyncStorage.getItem(`syncvet.data.${ownerId}`);
         let cachedPets: Pet[] = [];
         let cachedAppts: Appointment[] = [];
-        let cachedAct: ActivityItem[] = [];
+        let cachedTx: ServiceTransaction[] = [];
         if (rawCache) {
           try {
             const parsed = JSON.parse(rawCache);
             cachedPets = parsed.pets || [];
             cachedAppts = parsed.appointments || [];
-            cachedAct = parsed.activity || [];
+            cachedTx = parsed.transactions || parsed.activity || [];
           } catch {}
         }
 
         // 3. Pending Offline Queue Items
         const pendingOps = await syncQueue.getPending(ownerId);
 
-        if (clerkUser && rawPets.length > 0) {
-          activePets = rawPets.map((p: any, idx: number) => ({
-            id: p.id || `pet-${idx}`,
-            ownerId,
-            name: p.name || 'My Pet',
-            species: p.species || 'dog',
-            breed: p.breed || '',
-            gender: p.gender || 'male',
-            birthYear: p.birthYear,
-            isVaccinated: Boolean(p.isVaccinated),
-            isSpayedNeutered: Boolean(p.isSpayedNeutered),
-            weightCategory: p.weightCategory,
-            notes: p.notes,
-            avatarId: p.avatarId,
-            photoUrl: p.photoUrl,
-            vaccinationDoses: p.vaccinationDoses,
-            lastVaccinationDate: p.lastVaccinationDate,
-            nextVaccinationDate: p.nextVaccinationDate,
-            createdAt: p.createdAt || new Date().toISOString(),
-            updatedAt: p.updatedAt || new Date().toISOString(),
-          }));
-        } else if (cachedPets.length > 0) {
-          activePets = cachedPets;
-        }
-
-        if (clerkUser && rawAppts.length > 0) {
-          activeAppts = rawAppts.map((a: any, idx: number) => ({
-            id: a.id || `apt-${idx}`,
-            ownerId,
-            petId: a.petId || '',
-            petName: a.petName || '',
-            serviceId: a.serviceId || 'consultation',
-            status: a.status || 'pending',
-            date: a.date,
-            timeSlot: a.timeSlot,
-            location: a.location || 'City Veterinary Office',
-            notes: a.notes,
-            createdAt: a.createdAt || new Date().toISOString(),
-            updatedAt: a.updatedAt || new Date().toISOString(),
-          }));
-        } else if (cachedAppts.length > 0) {
-          activeAppts = cachedAppts;
-        }
-
-        activeActivity = cachedAct;
+        activePets = supabasePets.length > 0 ? supabasePets : cachedPets;
+        activeAppts = supabaseAppts.length > 0 ? supabaseAppts : cachedAppts;
+        activeTransactions = supabaseTransactions.length > 0 ? supabaseTransactions : cachedTx;
 
         // 4. Reconcile any pending local mutations so offline created/updated pets & appointments appear immediately
         for (const op of pendingOps) {
@@ -175,14 +150,16 @@ export const useDataStore = create<DataState>((set, get) => {
           JSON.stringify({
             pets: activePets,
             appointments: activeAppts,
-            activity: activeActivity,
+            transactions: activeTransactions,
+            activity: activeTransactions,
           }),
         );
 
         set({
           pets: activePets,
           appointments: activeAppts,
-          activity: activeActivity,
+          transactions: activeTransactions,
+          activity: activeTransactions,
           loading: false,
           loaded: true,
           pendingCount: pendingOps.length,
@@ -236,6 +213,13 @@ export const useDataStore = create<DataState>((set, get) => {
       const pendingCount = await syncQueue.getPendingCount(ownerId);
       set({ pendingCount });
 
+      // Keep TanStack cache immediately updated
+      queryClient.setQueryData<Pet[]>(queryKeys.pets(ownerId), (old = []) => {
+        if (old.some((p) => p.id === pet.id)) return old;
+        return [pet, ...old];
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pets(ownerId) });
+
       // Trigger background sync if online
       syncEngine.sync(ownerId, clerkUser).catch(() => {});
 
@@ -262,6 +246,12 @@ export const useDataStore = create<DataState>((set, get) => {
       const pendingCount = await syncQueue.getPendingCount(pet.ownerId);
       set({ pendingCount });
 
+      // Keep TanStack cache immediately updated
+      queryClient.setQueryData<Pet[]>(queryKeys.pets(pet.ownerId), (old = []) => {
+        return old.map((p) => (p.id === updatedPet.id ? updatedPet : p));
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pets(pet.ownerId) });
+
       syncEngine.sync(pet.ownerId, clerkUser).catch(() => {});
     },
 
@@ -284,6 +274,16 @@ export const useDataStore = create<DataState>((set, get) => {
       await syncQueue.enqueue(ownerId, 'pet', petId, 'DELETE_PET', { id: petId });
       const pendingCount = await syncQueue.getPendingCount(ownerId);
       set({ pendingCount });
+
+      // Keep TanStack cache immediately updated
+      queryClient.setQueryData<Pet[]>(queryKeys.pets(ownerId), (old = []) => {
+        return old.filter((p) => p.id !== petId);
+      });
+      queryClient.setQueryData<Appointment[]>(queryKeys.appointments(ownerId), (old = []) => {
+        return old.filter((a) => a.petId !== petId);
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pets(ownerId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
 
       syncEngine.sync(ownerId, clerkUser).catch(() => {});
     },
@@ -318,6 +318,13 @@ export const useDataStore = create<DataState>((set, get) => {
       const pendingCount = await syncQueue.getPendingCount(ownerId);
       set({ pendingCount });
 
+      // Immediately sync into TanStack Query cache so appointments view updates instantly
+      queryClient.setQueryData<Appointment[]>(queryKeys.appointments(ownerId), (old = []) => {
+        if (old.some((a) => a.id === appointment.id)) return old;
+        return [appointment, ...old];
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
+
       syncEngine.sync(ownerId, clerkUser).catch(() => {});
       return appointment;
     },
@@ -343,53 +350,19 @@ export const useDataStore = create<DataState>((set, get) => {
       const pendingCount = await syncQueue.getPendingCount(ownerId);
       set({ pendingCount });
 
+      // Immediately sync into TanStack Query cache
+      queryClient.setQueryData<Appointment[]>(queryKeys.appointments(ownerId), (old = []) => {
+        return old.map((a) => (a.id === appointmentId ? { ...a, status: 'cancelled' } : a));
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
+
       syncEngine.sync(ownerId, clerkUser).catch(() => {});
     },
 
     syncNow: async (ownerId, clerkUser) => {
       if (!ownerId) return;
       await syncEngine.sync(ownerId, clerkUser);
-      if (clerkUser) {
-        await clerkUser.reload?.().catch(() => {});
-        const metadata = (clerkUser.unsafeMetadata || {}) as Record<string, any>;
-        const rawPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-        const rawAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
-        const pendingOps = await syncQueue.getPending(ownerId);
-
-        let activePets = rawPets;
-        let activeAppts = rawAppts;
-
-        for (const op of pendingOps) {
-          if (op.operation === 'CREATE_PET' && op.payload) {
-            const pet = { ...op.payload, _pendingSync: true };
-            if (!activePets.some((p) => p.id === pet.id)) {
-              activePets.unshift(pet);
-            }
-          } else if (op.operation === 'UPDATE_PET' && op.payload) {
-            const updated = { ...op.payload, _pendingSync: true };
-            activePets = activePets.map((p) => (p.id === updated.id ? updated : p));
-          } else if (op.operation === 'DELETE_PET') {
-            activePets = activePets.filter((p) => p.id !== op.entityId);
-            activeAppts = activeAppts.filter((a) => a.petId !== op.entityId);
-          } else if (op.operation === 'BOOK_APPOINTMENT' && op.payload) {
-            const appt = { ...op.payload, _pendingSync: true };
-            if (!activeAppts.some((a) => a.id === appt.id)) {
-              activeAppts.push(appt);
-            }
-          } else if (op.operation === 'CANCEL_APPOINTMENT') {
-            activeAppts = activeAppts.map((a) =>
-              a.id === op.entityId ? { ...a, status: 'cancelled', _pendingSync: true } : a,
-            );
-          }
-        }
-
-        set({
-          pets: activePets,
-          appointments: activeAppts,
-        });
-
-        reminderEngine.reconcile(activePets, activeAppts, undefined, ownerId).catch(() => {});
-      }
+      await get().loadAll(ownerId, clerkUser);
     },
   };
 });

@@ -7,7 +7,6 @@ import { getService } from '@lib/services';
 import { formatWeekdayDate } from '@lib/format';
 import { useDataStore } from '@store/useDataStore';
 import type { Appointment } from '@services/data';
-import { useUser } from '@clerk/expo';
 import { PopoutPetAvatar } from './PopoutPetAvatar';
 import { StatusBadge } from './StatusBadge';
 
@@ -22,17 +21,12 @@ export function AppointmentCard({
   onPress,
   showFooterAction = true,
 }: AppointmentCardProps) {
-  const { user: clerkUser } = useUser();
   const service = getService(appointment.serviceId);
   const formattedDate = formatWeekdayDate(appointment.date);
 
-  // Look up pet from Clerk metadata and data store for real avatar and species
+  // Look up pet from data store for real avatar and species
   const localPets = useDataStore((state) => state.pets);
-  const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-  const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-  const petPool = clerkUser ? metaPets : localPets;
-
-  const pet = petPool.find(
+  const pet = localPets.find(
     (p: any) =>
       p.id === appointment.petId ||
       p.name?.toLowerCase().trim() === appointment.petName?.toLowerCase().trim(),

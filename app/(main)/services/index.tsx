@@ -36,30 +36,13 @@ export default function ServicesScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ pet?: string }>();
   const { user: clerkUser } = useUser();
-  const { loading, loaded } = useResidentData();
+  const { loading, loaded, syncNow } = useResidentData();
   const ownerId = useAuthStore((state) => state.user?.id) || 'cdo-resident-user';
   const localPets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
 
   // Load user's real registered pets with offline support
-  const userPets = useMemo(() => {
-    if (localPets && localPets.length > 0) {
-      return localPets;
-    }
-    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-    return metaPets.map((p: any, idx: number) => ({
-      id: p.id || `clerk-pet-${idx}`,
-      ownerId,
-      name: p.name || 'My Pet',
-      species: p.species || 'dog',
-      breed: p.breed || '',
-      avatarId: p.avatarId,
-      photoUrl: p.photoUrl,
-      isVaccinated: Boolean(p.isVaccinated),
-      isSpayedNeutered: Boolean(p.isSpayedNeutered),
-    }));
-  }, [localPets, clerkUser?.unsafeMetadata, ownerId]);
+  const userPets = localPets || [];
 
   const [selectedPetId, setSelectedPetId] = useState<string | undefined>(
     params.pet || (userPets.length > 0 ? userPets[0].id : undefined),
@@ -73,9 +56,7 @@ export default function ServicesScreen() {
   // Active appointments for the selected pet (status is not cancelled or completed)
   const activePetAppointments = useMemo(() => {
     if (!selectedPetId && !selectedPet?.name) return [];
-    const pool = appointments && appointments.length > 0
-      ? appointments
-      : (((clerkUser?.unsafeMetadata as any)?.appointments || []) as any[]);
+    const pool = appointments || [];
 
     return pool.filter((a) => {
       if (!a) return false;
@@ -87,7 +68,7 @@ export default function ServicesScreen() {
         : false;
       return matchesId || matchesName;
     });
-  }, [appointments, clerkUser?.unsafeMetadata, selectedPetId, selectedPet?.name]);
+  }, [appointments, selectedPetId, selectedPet?.name]);
 
   // Map of serviceId -> active appointment for the selected pet
   const activeServiceAppointmentsMap = useMemo(() => {
@@ -318,14 +299,11 @@ export default function ServicesScreen() {
   const handleRefresh = useCallback(async () => {
     haptic.light();
     try {
-      await clerkUser?.reload();
-      if (clerkUser?.id) {
-        await useDataStore.getState().loadAll(clerkUser.id);
-      }
+      await syncNow();
     } catch (e) {
       console.log('Services refresh error:', e);
     }
-  }, [clerkUser]);
+  }, [syncNow]);
 
   if (loading && !loaded && userPets.length === 0) {
     return (

@@ -14,6 +14,8 @@ interface HomeHeaderProps {
   displayPhoto?: string | null;
   petsCount: number;
   hasUpcomingAppointments: boolean;
+  notificationCount?: number;
+  onScanPress?: () => void;
 }
 
 export function HomeHeader({
@@ -21,6 +23,8 @@ export function HomeHeader({
   displayPhoto,
   petsCount,
   hasUpcomingAppointments,
+  notificationCount = 0,
+  onScanPress,
 }: HomeHeaderProps) {
   const router = useRouter();
   const firstName = getFirstName(displayName) || 'Resident';
@@ -56,24 +60,53 @@ export function HomeHeader({
         </Text>
       </View>
 
-      {/* 3. Right: Notification Action Button */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="View Notifications & Visits"
-        onPress={() => {
-          haptic.light();
-          router.push('/appointments' as never);
-        }}
-        style={({ pressed }) => [
-          styles.iconBtn,
-          shadows.sm,
-          pressed && styles.iconBtnPressed,
-        ]}
-        hitSlop={6}
-      >
-        <Ionicons name="notifications-outline" size={18} color={colors.textPrimary} />
-        {hasUpcomingAppointments && <View style={styles.notifDot} />}
-      </Pressable>
+      {/* 3. Right: Action Buttons (Scan + Notifications) */}
+      <View style={styles.rightActionsRow}>
+        {onScanPress ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scan Pet Tag"
+            onPress={() => {
+              haptic.light();
+              onScanPress();
+            }}
+            style={({ pressed }) => [
+              styles.iconBtn,
+              shadows.sm,
+              pressed && styles.iconBtnPressed,
+            ]}
+            hitSlop={6}
+          >
+            <Ionicons name="scan-outline" size={19} color={colors.primaryDark} />
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="View Notifications & Service Transactions"
+          onPress={() => {
+            haptic.light();
+            router.push('/notifications' as never);
+          }}
+          style={({ pressed }) => [
+            styles.iconBtn,
+            shadows.sm,
+            pressed && styles.iconBtnPressed,
+          ]}
+          hitSlop={6}
+        >
+          <Ionicons name="notifications-outline" size={19} color={colors.textPrimary} />
+          {notificationCount > 0 ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {notificationCount > 99 ? '99+' : notificationCount}
+              </Text>
+            </View>
+          ) : hasUpcomingAppointments ? (
+            <View style={styles.notifDot} />
+          ) : null}
+        </Pressable>
+      </View>
     </Animated.View>
   );
 }
@@ -107,7 +140,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
-  actionsRow: {
+  rightActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -134,5 +167,25 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.primaryDark,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
   },
 });

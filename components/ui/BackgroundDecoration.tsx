@@ -33,8 +33,10 @@ export function BackgroundDecoration({ subtle = false }: BackgroundDecorationPro
           fill={colors.primaryLight}
           opacity="0.5"
         />
-        {/* small accent blob */}
-        <Circle cx="40" cy="180" r="46" fill={colors.accentLight} opacity="0.7" />
+        {/* small accent blob (omitted in subtle mode) */}
+        {!subtle && (
+          <Circle cx="40" cy="180" r="46" fill={colors.accentLight} opacity="0.35" />
+        )}
 
         {/* decorative paw prints */}
         <PawPrint x={318} y={300} scale={0.5} opacity={0.1} />

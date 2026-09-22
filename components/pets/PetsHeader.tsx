@@ -9,9 +9,10 @@ import { haptic } from '@lib/haptics';
 
 interface PetsHeaderProps {
   petsCount: number;
+  onScanPress?: () => void;
 }
 
-export function PetsHeader({ petsCount }: PetsHeaderProps) {
+export function PetsHeader({ petsCount, onScanPress }: PetsHeaderProps) {
   const router = useRouter();
 
   return (
@@ -25,19 +26,36 @@ export function PetsHeader({ petsCount }: PetsHeaderProps) {
         </Text>
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Register a new pet"
-        onPress={() => {
-          haptic.light();
-          router.push('/pets/add' as never);
-        }}
-        style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
-        hitSlop={6}
-      >
-        <Ionicons name="add" size={16} color={colors.white} />
-        <Text style={styles.addBtnText}>Register Pet</Text>
-      </Pressable>
+      <View style={styles.actionsRow}>
+        {onScanPress ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scan Pet Tag"
+            onPress={() => {
+              haptic.light();
+              onScanPress();
+            }}
+            style={({ pressed }) => [styles.scanBtn, pressed && styles.scanBtnPressed]}
+            hitSlop={6}
+          >
+            <Ionicons name="scan-outline" size={17} color={colors.primaryDark} />
+          </Pressable>
+        ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Register a new pet"
+          onPress={() => {
+            haptic.light();
+            router.push('/pets/add' as never);
+          }}
+          style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
+          hitSlop={6}
+        >
+          <Ionicons name="add" size={16} color={colors.white} />
+          <Text style={styles.addBtnText}>Register Pet</Text>
+        </Pressable>
+      </View>
     </Animated.View>
   );
 }
@@ -66,8 +84,26 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.textMuted,
     fontSize: 12,
-    fontWeight: '500',
     lineHeight: 16,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scanBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(0, 168, 150, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 168, 150, 0.20)',
+  },
+  scanBtnPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.96 }],
   },
   addBtn: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -21,6 +22,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 
+import { useRouter } from 'expo-router';
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
@@ -67,6 +69,14 @@ const TAB_CONFIGS: Record<string, TabRouteConfig> = {
     inactiveIcon: 'person-outline',
     activeIcon: 'person',
   },
+};
+
+const TAB_ROOT_PATHS: Record<string, string> = {
+  index: '/',
+  services: '/services',
+  pets: '/pets',
+  appointments: '/appointments',
+  profile: '/profile',
 };
 
 export type MeltingBallTabBarProps = BottomTabBarProps;
@@ -253,6 +263,7 @@ export function MeltingBallTabBar({
   navigation,
   insets,
 }: MeltingBallTabBarProps) {
+  const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
 
@@ -264,6 +275,43 @@ export function MeltingBallTabBar({
 
   // Badge X position is the single source of truth for horizontal motion
   const badgeX = useSharedValue(state.index * tabWidth);
+
+  // Automatically hide tab bar when keyboard is visible
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false),
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Recursively find current focused route name across nested stacks
+  const getNestedRouteName = (route: any): string => {
+    if (route?.state?.routes && typeof route?.state?.index === 'number') {
+      const child = route.state.routes[route.state.index];
+      return getNestedRouteName(child);
+    }
+    return route?.name ?? '';
+  };
+
+  const activeRoute = state.routes[state.index];
+  const activeDescriptor = descriptors[activeRoute?.key];
+  const tabBarStyle = activeDescriptor?.options?.tabBarStyle as any;
+  const isExplicitlyHidden = tabBarStyle?.display === 'none';
+
+  const currentChildName = getNestedRouteName(activeRoute);
+  // Full-screen wizards and sub-creation flows should not show the bottom dock
+  const isFullScreenFlow = currentChildName === 'add' || currentChildName === 'new';
 
   // Synchronize badgeX on tab changes or screen resize
   useEffect(() => {
@@ -300,6 +348,10 @@ export function MeltingBallTabBar({
   });
 
   const bottomInset = Math.max(insets.bottom, 12);
+
+  if (isKeyboardVisible || isExplicitlyHidden || isFullScreenFlow) {
+    return null;
+  }
 
   return (
     <View
@@ -347,8 +399,16 @@ export function MeltingBallTabBar({
               canPreventDefault: true,
             });
 
-            if (!isFocused && !event.defaultPrevented) {
+            if (event.defaultPrevented) return;
+
+            if (!isFocused) {
               navigation.navigate(route.name, route.params);
+            } else {
+              // If already focused on this tab (e.g. inside a subscreen like /pets/[id]), return to root of this tab
+              const rootPath = TAB_ROOT_PATHS[route.name];
+              if (rootPath) {
+                router.navigate(rootPath as never);
+              }
             }
           };
 

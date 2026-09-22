@@ -5,17 +5,28 @@ import { colors, spacing, typography } from '@theme';
 import { ProgressIndicator } from './ProgressIndicator';
 
 interface StepHeaderProps {
-  step: number;
-  total: number;
   title: string;
   subtitle?: string;
+  step?: number;
+  total?: number;
+  showProgress?: boolean;
 }
 
-export function StepHeader({ step, total, title, subtitle }: StepHeaderProps) {
+export function StepHeader({
+  title,
+  subtitle,
+  step,
+  total,
+  showProgress = false,
+}: StepHeaderProps) {
   return (
     <View style={styles.container}>
-      <ProgressIndicator count={total} current={step - 1} />
-      <Text style={styles.stepLabel}>Step {step} of {total}</Text>
+      {showProgress && step !== undefined && total !== undefined ? (
+        <>
+          <ProgressIndicator count={total} current={step - 1} />
+          <Text style={styles.stepLabel}>Step {step} of {total}</Text>
+        </>
+      ) : null}
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>

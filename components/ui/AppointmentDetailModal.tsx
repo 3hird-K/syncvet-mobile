@@ -15,7 +15,6 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { getService, SERVICE_LOCATION } from '@lib/services';
 import { formatWeekdayDate, formatDateWithYear } from '@lib/format';
 import { haptic } from '@lib/haptics';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { useDataStore } from '@store/useDataStore';
 import { useAuthStore } from '@store/useAuthStore';
 import type { Appointment } from '@services/data';
@@ -63,24 +62,8 @@ export function AppointmentDetailModal({
     haptic.warning();
     setSubmitting(true);
     try {
-      // 1. Update Zustand store
+      // Update local store and sync mutation to Supabase
       await cancelAppointmentStore(ownerId, appointment.id);
-
-      // 2. Sync with Clerk user unsafeMetadata
-      if (clerkUser) {
-        const metadata = (clerkUser.unsafeMetadata || {}) as Record<string, any>;
-        const metaAppointments = Array.isArray(metadata.appointments)
-          ? metadata.appointments
-          : [];
-        const updatedAppointments = metaAppointments.map((a: any) =>
-          a.id === appointment.id
-            ? { ...a, status: 'cancelled', cancelReason: selectedReason }
-            : a,
-        );
-        await updateClerkUnsafeMetadata(clerkUser, {
-          appointments: updatedAppointments,
-        });
-      }
 
       haptic.success();
       toast.success('Appointment Cancelled', {

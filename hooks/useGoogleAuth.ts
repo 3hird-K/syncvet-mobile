@@ -7,6 +7,7 @@ import { useSSO } from '@clerk/expo';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
+import { supabase } from '@lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -84,36 +85,25 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         photoUrl,
       });
 
+      if (clerkUser) {
+        await useAuthStore.getState().syncUserFromClerk(clerkUser);
+      }
       const currentUser = useAuthStore.getState().user;
-      const metadata = (
-        signUpFlow?.unsafeMetadata ||
-        (signInFlow?.userData as any)?.unsafeMetadata ||
-        clerkUser?.unsafeMetadata ||
-        {}
-      ) as Record<string, any>;
-
-      const mobileNumber = (metadata?.mobileNumber as string) || '';
-      const address = (metadata?.address as string) || '';
-      const profileCompleted = Boolean(metadata?.profileCompleted);
-      const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
+      let petsCount = 0;
+      const ownerId = clerkUser?.id || currentUser?.id || '';
+      if (ownerId) {
+        try {
+          const { data } = await supabase.from('pets').select('id').eq('owner_id', ownerId);
+          petsCount = (data || []).length;
+        } catch {}
+      }
 
       const hasCompletedProfile = Boolean(
-        profileCompleted &&
-        mobileNumber &&
-        address &&
-        clerkPets.length > 0
+        currentUser?.profileCompleted &&
+        currentUser?.mobileNumber &&
+        currentUser?.address &&
+        petsCount > 0
       );
-
-      if (mobileNumber || address) {
-        await useAuthStore.getState().saveOwnerProfile(
-          mobileNumber || currentUser?.mobileNumber || '',
-          address || currentUser?.address || '',
-        );
-      }
-
-      if (profileCompleted) {
-        await useAuthStore.getState().markRegistrationComplete();
-      }
 
       // Provide a deliberate, smooth loading experience with PawLoading
       // so the user experiences the sleek PawFootprintLoader smoothly before landing

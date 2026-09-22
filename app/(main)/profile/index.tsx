@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -32,7 +33,7 @@ import { Avatar } from '@components/ui/Avatar';
 import { Input } from '@components/ui/Input';
 import { Button } from '@components/ui/Button';
 import { AddressPicker } from '@components/ui/AddressPicker';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
+import { supabase } from '@lib/supabase';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { useNotificationPreferences } from '@hooks/useNotificationPreferences';
 import { syncQueue, syncEngine } from '@services/sync';
@@ -75,11 +76,11 @@ export default function ProfileScreen() {
 
   // Extract Profile Data
   const fullName =
+    user?.fullName ||
     clerkUser?.fullName ||
     (clerkUser?.firstName
       ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim()
       : '') ||
-    user?.fullName ||
     'SyncVet Resident';
 
   const email =
@@ -90,22 +91,32 @@ export default function ProfileScreen() {
   const [customPhoto, setCustomPhoto] = useState<string | null>(null);
   const photoUrl = customPhoto || clerkUser?.imageUrl || user?.photoUrl;
 
-  const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-
   const mobileNumber =
-    (metadata.mobileNumber as string) ||
-    clerkUser?.primaryPhoneNumber?.phoneNumber ||
     user?.mobileNumber ||
+    clerkUser?.primaryPhoneNumber?.phoneNumber ||
     '';
 
-  const address =
-    (metadata.address as string) ||
-    user?.address ||
-    'Cagayan de Oro City';
+  const address = user?.address || 'Cagayan de Oro City';
+
+  // Helper to split full name or extract first/last name
+  const parseNames = useCallback((full: string, clerk?: any) => {
+    const clerkFirst = clerk?.firstName?.trim();
+    const clerkLast = clerk?.lastName?.trim();
+    if (clerkFirst) {
+      return { firstName: clerkFirst, lastName: clerkLast || '' };
+    }
+    const clean = full.replace('SyncVet Resident', '').trim();
+    const parts = clean.split(' ');
+    const fName = parts[0] || '';
+    const lName = parts.slice(1).join(' ') || '';
+    return { firstName: fName, lastName: lName };
+  }, []);
 
   // State for Edit Profile Modal
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editName, setEditName] = useState(fullName);
+  const initialNames = useMemo(() => parseNames(fullName, clerkUser), [parseNames, fullName, clerkUser]);
+  const [editFirstName, setEditFirstName] = useState(initialNames.firstName);
+  const [editLastName, setEditLastName] = useState(initialNames.lastName);
   const [editPhone, setEditPhone] = useState(mobileNumber);
 
   // Notification Preferences & OS Permissions
@@ -118,35 +129,36 @@ export default function ProfileScreen() {
   const [editAddress, setEditAddress] = useState(address);
   const [savingProfile, setSavingProfile] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [nameError, setNameError] = useState<string | undefined>();
+  const [firstNameError, setFirstNameError] = useState<string | undefined>();
+  const [lastNameError, setLastNameError] = useState<string | undefined>();
   const [phoneError, setPhoneError] = useState<string | undefined>();
   const [editError, setEditError] = useState<string | undefined>();
 
-  // Read pets (local-first with offline pending creation support)
-  const residentPets: MetadataPet[] = useMemo(() => {
-    if (storePets && storePets.length > 0) {
-      return storePets;
-    }
-    if (Array.isArray(metadata.pets)) {
-      return metadata.pets;
-    }
-    return [];
-  }, [storePets, metadata.pets]);
+  // Dismiss edit modal on Android back button
+  useEffect(() => {
+    if (!editModalVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!savingProfile) {
+        setEditModalVisible(false);
+      }
+      return true;
+    });
+    return () => sub.remove();
+  }, [editModalVisible, savingProfile]);
 
+  // Read pets (pure Supabase store data)
+  const residentPets = storePets || [];
 
   const stats = useMemo(() => {
     const today = todayISO();
-    const appts =
-      storeAppts && storeAppts.length > 0
-        ? storeAppts
-        : (Array.isArray(metadata.appointments) ? metadata.appointments : []);
+    const appts = storeAppts || [];
 
     const upcoming = (appts as any[]).filter(
       (a: any) => a.status !== 'cancelled' && a.status !== 'completed' && a.date >= today,
     ).length;
     const completed = (appts as any[]).filter((a: any) => a.status === 'completed').length;
     return { pets: residentPets.length, upcoming, completed };
-  }, [residentPets, storeAppts, metadata.appointments]);
+  }, [residentPets, storeAppts]);
 
   const handleChangeProfilePhoto = async () => {
     try {
@@ -182,9 +194,16 @@ export default function ProfileScreen() {
             }
           } catch (e) {
             console.log('Clerk setProfileImage note:', e);
-            await updateClerkUnsafeMetadata(clerkUser, {
-              photoUrl: uri,
-            });
+          }
+        }
+        if (user?.id) {
+          try {
+            await supabase
+              .from('users')
+              .update({ avatar_url: uri, updated_at: new Date().toISOString() })
+              .eq('id', user.id);
+          } catch (dbErr) {
+            console.warn('Supabase avatar update note:', dbErr);
           }
         }
         useAuthStore.setState((s) => ({
@@ -219,18 +238,27 @@ export default function ProfileScreen() {
     if (editError) setEditError(undefined);
   };
 
-  const handleNameChange = (text: string) => {
-    setEditName(text);
-    if (nameError) setNameError(undefined);
+  const handleFirstNameChange = (text: string) => {
+    setEditFirstName(text);
+    if (firstNameError) setFirstNameError(undefined);
+    if (editError) setEditError(undefined);
+  };
+
+  const handleLastNameChange = (text: string) => {
+    setEditLastName(text);
+    if (lastNameError) setLastNameError(undefined);
     if (editError) setEditError(undefined);
   };
 
   const openEditModal = () => {
     haptic.light();
-    setEditName(fullName);
+    const { firstName: fName, lastName: lName } = parseNames(fullName, clerkUser);
+    setEditFirstName(fName);
+    setEditLastName(lName);
     setEditPhone(mobileNumber);
     setEditAddress(address);
-    setNameError(undefined);
+    setFirstNameError(undefined);
+    setLastNameError(undefined);
     setPhoneError(undefined);
     setEditError(undefined);
     setEditModalVisible(true);
@@ -239,11 +267,18 @@ export default function ProfileScreen() {
   const handleSaveProfile = async () => {
     let isValid = true;
 
-    if (!editName.trim()) {
-      setNameError('Enter your full name.');
+    if (!editFirstName.trim()) {
+      setFirstNameError('Enter first name.');
       isValid = false;
     } else {
-      setNameError(undefined);
+      setFirstNameError(undefined);
+    }
+
+    if (!editLastName.trim()) {
+      setLastNameError('Enter last name.');
+      isValid = false;
+    } else {
+      setLastNameError(undefined);
     }
 
     if (!validatePhone(editPhone)) {
@@ -264,19 +299,33 @@ export default function ProfileScreen() {
     setEditError(undefined);
 
     try {
-      const nameParts = editName.trim().split(' ');
-      const firstName = nameParts[0] || editName.trim();
-      const lastName = nameParts.slice(1).join(' ') || '';
+      const firstName = editFirstName.trim();
+      const lastName = editLastName.trim();
+      const combinedFullName = `${firstName} ${lastName}`.trim();
 
       const ownerId = user?.id || clerkUser?.id || '';
 
-      await useAuthStore.getState().saveOwnerProfile(editPhone.trim(), editAddress.trim());
+      await useAuthStore.getState().saveOwnerProfile(
+        editPhone.trim(),
+        editAddress.trim(),
+        combinedFullName,
+        firstName,
+        lastName,
+      );
+
+      if (clerkUser) {
+        try {
+          await clerkUser.update({ firstName, lastName });
+        } catch (clerkErr) {
+          console.log('Clerk update note:', clerkErr);
+        }
+      }
 
       if (ownerId) {
         await syncQueue.enqueue(ownerId, 'profile', ownerId, 'UPDATE_PROFILE', {
           mobileNumber: editPhone.trim(),
           address: editAddress.trim(),
-          fullName: editName.trim(),
+          fullName: combinedFullName,
         });
         syncEngine.sync(ownerId, clerkUser).catch(() => {});
       }
@@ -586,9 +635,25 @@ export default function ProfileScreen() {
 
             <Switch
               value={notifPrefs.appointmentsEnabled}
-              onValueChange={(val) => {
+              onValueChange={async (val) => {
                 haptic.light();
-                updateNotifPref('appointmentsEnabled', val);
+                const ok = await updateNotifPref('appointmentsEnabled', val);
+                if (val && ok === false) {
+                  toast.info('Permission Required', {
+                    id: 'notif-pref-appointment',
+                    description: 'Please enable notifications in device settings to receive visit reminders.',
+                  });
+                } else if (val) {
+                  toast.success('Appointment Reminders Enabled', {
+                    id: 'notif-pref-appointment',
+                    description: 'You’ll receive alerts 1 day and 2 hours before scheduled visits.',
+                  });
+                } else {
+                  toast.info('Appointment Reminders Turned Off', {
+                    id: 'notif-pref-appointment',
+                    description: 'Upcoming visit reminders have been cleared.',
+                  });
+                }
               }}
               trackColor={{ false: '#CBD5E1', true: colors.primaryDark }}
               thumbColor={colors.white}
@@ -613,9 +678,25 @@ export default function ProfileScreen() {
 
             <Switch
               value={notifPrefs.vaccinesEnabled}
-              onValueChange={(val) => {
+              onValueChange={async (val) => {
                 haptic.light();
-                updateNotifPref('vaccinesEnabled', val);
+                const ok = await updateNotifPref('vaccinesEnabled', val);
+                if (val && ok === false) {
+                  toast.info('Permission Required', {
+                    id: 'notif-pref-vaccine',
+                    description: 'Please enable notifications in device settings to receive vaccine alerts.',
+                  });
+                } else if (val) {
+                  toast.success('Vaccine Alerts Enabled', {
+                    id: 'notif-pref-vaccine',
+                    description: 'You’ll receive alerts 7 days and 1 day before booster due dates.',
+                  });
+                } else {
+                  toast.info('Vaccine Alerts Turned Off', {
+                    id: 'notif-pref-vaccine',
+                    description: 'Upcoming vaccine due alerts have been cleared.',
+                  });
+                }
               }}
               trackColor={{ false: '#CBD5E1', true: colors.primaryDark }}
               thumbColor={colors.white}
@@ -671,14 +752,15 @@ export default function ProfileScreen() {
         </View>
       </Screen>
 
-      {/* Update Profile Modal */}
-      <Modal
-        visible={editModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <SafeAreaView style={styles.modalBackdrop}>
+      {/* Update Profile Modal (Rendered as overlay to avoid Android nested Modal conflict with AddressPicker) */}
+      {editModalVisible && (
+        <View style={styles.modalOverlayRoot}>
+          <Pressable
+            style={styles.modalBackdropPressable}
+            onPress={() => {
+              if (!savingProfile) setEditModalVisible(false);
+            }}
+          />
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.modalContainer}
@@ -705,21 +787,37 @@ export default function ProfileScreen() {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {/* Full Name */}
-                <View style={styles.modalField}>
-                  <Text style={styles.modalFieldLabel}>Full Name</Text>
-                  <Input
-                    value={editName}
-                    onChangeText={handleNameChange}
-                    onBlur={() => {
-                      if (!editName.trim()) setNameError('Enter your full name.');
-                      else setNameError(undefined);
-                    }}
-                    error={nameError}
-                    placeholder="Enter full name"
-                    leftIcon={<Ionicons name="person-outline" size={18} color={colors.primary} />}
-                    editable={!savingProfile}
-                  />
+                {/* First Name & Last Name */}
+                <View style={styles.nameRow}>
+                  <View style={styles.nameCol}>
+                    <Text style={styles.modalFieldLabel}>First Name</Text>
+                    <Input
+                      value={editFirstName}
+                      onChangeText={handleFirstNameChange}
+                      onBlur={() => {
+                        if (!editFirstName.trim()) setFirstNameError('Enter first name.');
+                        else setFirstNameError(undefined);
+                      }}
+                      error={firstNameError}
+                      placeholder="First name"
+                      leftIcon={<Ionicons name="person-outline" size={17} color={colors.primary} />}
+                      editable={!savingProfile}
+                    />
+                  </View>
+                  <View style={styles.nameCol}>
+                    <Text style={styles.modalFieldLabel}>Last Name</Text>
+                    <Input
+                      value={editLastName}
+                      onChangeText={handleLastNameChange}
+                      onBlur={() => {
+                        if (!editLastName.trim()) setLastNameError('Enter last name.');
+                        else setLastNameError(undefined);
+                      }}
+                      error={lastNameError}
+                      placeholder="Last name"
+                      editable={!savingProfile}
+                    />
+                  </View>
                 </View>
 
                 {/* Mobile Number */}
@@ -769,8 +867,8 @@ export default function ProfileScreen() {
               </View>
             </View>
           </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
+        </View>
+      )}
 
       {/* Standard Paw Loading Overlay on Logout */}
       <PawLoadingOverlay visible={loggingOut} />
@@ -1252,13 +1350,31 @@ const styles = StyleSheet.create({
   footerSpacing: {
     height: 4,
   },
+  modalOverlayRoot: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(7, 30, 38, 0.60)',
+    justifyContent: 'flex-end',
+    zIndex: 999,
+    elevation: 999,
+  },
+  modalBackdropPressable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(7, 30, 38, 0.60)',
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    flex: 1,
+    width: '100%',
     justifyContent: 'flex-end',
   },
   modalCard: {
@@ -1299,6 +1415,14 @@ const styles = StyleSheet.create({
   modalFormContent: {
     gap: spacing.md,
     paddingBottom: spacing.lg,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  nameCol: {
+    flex: 1,
+    gap: 4,
   },
   modalField: {
     gap: 4,

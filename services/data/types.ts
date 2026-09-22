@@ -57,21 +57,33 @@ export interface BookingInput {
   notes?: string;
 }
 
-export type ActivityType =
+export type TransactionType =
+  | 'registration'
   | 'booking'
   | 'confirmed'
   | 'completed'
-  | 'registration';
+  | 'cancellation';
 
-export interface ActivityItem {
+export type TransactionStatus = 'pending' | 'approved' | 'completed' | 'cancelled';
+
+export interface ServiceTransaction {
   id: string;
+  transactionNo: string;
   ownerId: string;
-  type: ActivityType;
+  type: TransactionType;
   title: string;
   detail?: string;
+  status: TransactionStatus;
+  referenceId?: string;
   /** ISO timestamp. */
   date: string;
+  createdAt: string;
   updatedAt?: string;
 }
+
+// Backward-compatible aliases
+export type ActivityType = TransactionType;
+export type ActivityItem = ServiceTransaction;
+export type TransactionItem = ServiceTransaction;
 
 export type PetInput = Omit<Pet, 'id' | 'createdAt' | 'ownerId' | 'updatedAt' | '_pendingSync'>;

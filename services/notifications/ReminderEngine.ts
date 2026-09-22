@@ -1,4 +1,5 @@
 import type { Pet, Appointment } from '@services/data';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { NotificationPreferences, ReminderPayload } from './types';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './types';
 import { notificationService } from './NotificationService';
@@ -134,11 +135,24 @@ export class ReminderEngine {
     // 2. Pet Vaccination Due Date Reminders
     if (preferences.vaccinesEnabled) {
       for (const pet of pets) {
-        if (!pet.nextVaccinationDate) continue;
+        let vaxDueDateStr = pet.nextVaccinationDate;
+        if (!vaxDueDateStr && pet.isVaccinated) {
+          const lastDate = pet.lastVaccinationDate || (pet.createdAt ? pet.createdAt.split('T')[0] : undefined);
+          if (lastDate) {
+            const parts = lastDate.split('-');
+            if (parts.length === 3) {
+              const yr = parseInt(parts[0], 10);
+              if (!isNaN(yr)) {
+                vaxDueDateStr = `${yr + 1}-${parts[1]}-${parts[2]}`;
+              }
+            }
+          }
+        }
+        if (!vaxDueDateStr) continue;
 
-        const vaxDate = parseDateAt9AM(pet.nextVaccinationDate);
+        const vaxDate = parseDateAt9AM(vaxDueDateStr);
         const vaxTimeMs = vaxDate.getTime();
-        const dateFormatted = formatWeekdayDate(pet.nextVaccinationDate);
+        const dateFormatted = formatWeekdayDate(vaxDueDateStr);
 
         // A. 7 Days Before Due Date
         if (preferences.vaccine7DaysBefore) {
@@ -212,11 +226,23 @@ export class ReminderEngine {
   public async reconcile(
     pets: Pet[],
     appointments: Appointment[],
-    preferences: NotificationPreferences = DEFAULT_NOTIFICATION_PREFERENCES,
+    preferences?: NotificationPreferences,
     ownerId = 'resident',
   ): Promise<{ scheduled: number; cancelled: number; kept: number }> {
     try {
-      const targetReminders = this.generateTargetReminders(pets, appointments, preferences, ownerId);
+      let resolvedPrefs = preferences;
+      if (!resolvedPrefs) {
+        try {
+          const raw = await AsyncStorage.getItem('syncvet.notification_preferences');
+          resolvedPrefs = raw
+            ? { ...DEFAULT_NOTIFICATION_PREFERENCES, ...JSON.parse(raw) }
+            : DEFAULT_NOTIFICATION_PREFERENCES;
+        } catch {
+          resolvedPrefs = DEFAULT_NOTIFICATION_PREFERENCES;
+        }
+      }
+
+      const targetReminders = this.generateTargetReminders(pets, appointments, resolvedPrefs, ownerId);
       const targetMap = new Map<string, ReminderPayload>();
       for (const r of targetReminders) {
         targetMap.set(r.id, r);

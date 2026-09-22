@@ -16,6 +16,7 @@ const ACTIVITY_META: Record<
   confirmed: { icon: 'checkmark-circle-outline', color: colors.primaryDark, bg: colors.primaryLight },
   completed: { icon: 'checkmark-done-outline', color: colors.successDark, bg: colors.successLight },
   registration: { icon: 'document-text-outline', color: colors.accentDark, bg: colors.accentLight },
+  cancellation: { icon: 'close-circle-outline', color: colors.error, bg: colors.errorLight },
 };
 
 function relativeTime(iso: string): string {

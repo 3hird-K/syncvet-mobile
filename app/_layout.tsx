@@ -24,10 +24,16 @@ import { Toaster } from '@components/ui/Sonner';
 import { NetworkToastListener } from '@components/ui/NetworkToastListener';
 import { notificationService, notificationRouter } from '@services/notifications';
 
-// Silence Clerk development keys notice in development
+import { SupabaseAuthBridge } from '../components/auth/SupabaseAuthBridge';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@lib/queryClient';
+
+// Silence Clerk dev keys notice and Supabase Realtime subscription logs in development
 LogBox.ignoreLogs([
   'Clerk: Clerk has been loaded with development keys',
   'Clerk has been loaded with development keys',
+  '[SupabaseRealtime]',
+  'Subscribed to live updates',
 ]);
 
 if (__DEV__) {
@@ -35,11 +41,23 @@ if (__DEV__) {
   console.warn = (...args: any[]) => {
     if (
       typeof args[0] === 'string' &&
-      args[0].includes('Clerk has been loaded with development keys')
+      (args[0].includes('Clerk has been loaded with development keys') ||
+        args[0].includes('Subscribed to live updates'))
     ) {
       return;
     }
     origWarn(...args);
+  };
+
+  const origLog = console.log;
+  console.log = (...args: any[]) => {
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('Subscribed to live updates')
+    ) {
+      return;
+    }
+    origLog(...args);
   };
 }
 
@@ -94,22 +112,25 @@ export default function RootLayout() {
       __experimental_resourceCache={resourceCache}
     >
       <ClerkLoaded>
-        <GestureHandlerRootView style={styles.root}>
-          <SafeAreaProvider>
-            <StatusBar style="dark" />
-            {fontsLoaded || fontError ? (
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  animation: 'fade',
-                  contentStyle: { backgroundColor: colors.primaryLight },
-                }}
-              />
-            ) : null}
-            <Toaster />
-            <NetworkToastListener />
-          </SafeAreaProvider>
-        </GestureHandlerRootView>
+        <QueryClientProvider client={queryClient}>
+          <SupabaseAuthBridge />
+          <GestureHandlerRootView style={styles.root}>
+            <SafeAreaProvider>
+              <StatusBar style="dark" />
+              {fontsLoaded || fontError ? (
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    animation: 'fade',
+                    contentStyle: { backgroundColor: colors.primaryLight },
+                  }}
+                />
+              ) : null}
+              <Toaster />
+              <NetworkToastListener />
+            </SafeAreaProvider>
+          </GestureHandlerRootView>
+        </QueryClientProvider>
       </ClerkLoaded>
     </ClerkProvider>
   );

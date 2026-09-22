@@ -38,9 +38,16 @@ export function AddressPicker({
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [streetDetail, setStreetDetail] = useState<string>('');
   const lastParsedValue = useRef<string>('');
+  const isInternalChangeRef = useRef(false);
 
   // Parse existing address value if already filled without infinite loops
   React.useEffect(() => {
+    if (isInternalChangeRef.current) {
+      isInternalChangeRef.current = false;
+      lastParsedValue.current = value;
+      return;
+    }
+
     if (value !== lastParsedValue.current) {
       lastParsedValue.current = value;
       if (!value) {
@@ -84,6 +91,7 @@ export function AddressPicker({
       const full = streetDetail.trim()
         ? `${streetDetail.trim()}, ${locStr}`
         : locStr;
+      isInternalChangeRef.current = true;
       onChange(full);
     },
     [streetDetail, onChange],
@@ -92,11 +100,12 @@ export function AddressPicker({
   const handleStreetChange = useCallback(
     (text: string) => {
       setStreetDetail(text);
-      const full = text.trim()
+      const full = text
         ? selectedLocation
-          ? `${text.trim()}, ${selectedLocation}`
-          : text.trim()
+          ? `${text}, ${selectedLocation}`
+          : text
         : selectedLocation;
+      isInternalChangeRef.current = true;
       onChange(full);
     },
     [selectedLocation, onChange],

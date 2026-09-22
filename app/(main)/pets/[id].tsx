@@ -29,62 +29,42 @@ import { PetAvatarPickerModal } from '@components/ui/PetAvatarPickerModal';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { PetDeleteConfirmModal } from '@components/ui/PetDeleteConfirmModal';
 import { PetEditInfoModal } from '@components/ui/PetEditInfoModal';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
+import { PetQrTagModal } from '@components/ui/PetQrTagModal';
 import { toast } from '@components/ui/Sonner';
+import { useDeletePetMutation } from '@hooks/queries';
 import type { Pet } from '@services/data';
 
 export default function PetProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user: clerkUser } = useUser();
-  const ownerId = useAuthStore((state) => state.user?.id);
+  const authUser = useAuthStore((state) => state.user);
+  const ownerId = authUser?.id;
   const pets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
   const deletePet = useDataStore((state) => state.deletePet);
+  const deletePetMutation = useDeletePetMutation();
 
   // Modal States
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [qrTagModalVisible, setQrTagModalVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Metadata pets
-  const metadataPets = useMemo(() => {
-    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const list = Array.isArray(metadata.pets) ? metadata.pets : [];
-    return list.map((p: any, idx: number) => ({
-      id: p.id || `clerk-pet-${idx}`,
-      ownerId: ownerId || '',
-      name: p.name || 'My Pet',
-      species: p.species || 'dog',
-      breed: p.breed || '',
-      gender: p.gender || '',
-      birthYear: p.birthYear,
-      isVaccinated: Boolean(p.isVaccinated),
-      isSpayedNeutered: Boolean(p.isSpayedNeutered),
-      weightCategory: p.weightCategory || 'Medium',
-      notes: p.notes,
-      avatarId: p.avatarId,
-      photoUrl: p.photoUrl,
-      createdAt: p.createdAt || new Date().toISOString(),
-    }));
-  }, [clerkUser?.unsafeMetadata, ownerId]);
-
   const pet = useMemo(
-    () => metadataPets.find((p) => p.id === id) || pets.find((p) => p.id === id),
-    [metadataPets, pets, id],
+    () => pets.find((p) => p.id === id),
+    [pets, id],
   );
 
   const [customAvatarId, setCustomAvatarId] = useState<string | undefined>(pet?.avatarId);
   const [customPhotoUrl, setCustomPhotoUrl] = useState<string | undefined>(pet?.photoUrl);
 
   const petAppointments = useMemo(() => {
-    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const metaAppts = Array.isArray(metadata.appointments) ? metadata.appointments : [];
-    return (metaAppts as any[])
+    return (appointments || [])
       .filter((a) => a.petId === id || (pet?.name && a.petName?.toLowerCase().trim() === pet.name.toLowerCase().trim()))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [clerkUser?.unsafeMetadata, id, pet?.name]);
+  }, [appointments, id, pet?.name]);
 
   const vaccineHistory = useMemo(
     () =>
@@ -183,7 +163,11 @@ export default function PetProfileScreen() {
     setDeleting(true);
     try {
       if (ownerId) {
-        await deletePet(ownerId, pet.id, clerkUser);
+        await deletePetMutation.mutateAsync({
+          ownerId,
+          petId: pet.id,
+          clerkUser,
+        });
       }
 
       setDeleteModalVisible(false);
@@ -227,35 +211,63 @@ export default function PetProfileScreen() {
 
   return (
     <AnimatedScreen animation="zoom">
-      <Screen scroll>
+      <Screen scroll subtleBackground>
         {/* Top Navigation Bar with Edit & Delete Actions */}
         <View style={styles.headerRow}>
           <BackButton to="/pets" />
+
           <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerTitle}>Pet Health Passport</Text>
-            <Text style={styles.headerSubtitle}>City Veterinary Office · CDO</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {pet.name}’s Passport
+            </Text>
           </View>
+
           <View style={styles.headerActions}>
+            {/* QR Tag Button */}
+            <Pressable
+              onPress={() => {
+                haptic.light();
+                setQrTagModalVisible(true);
+              }}
+              style={({ pressed }) => [
+                styles.qrHeaderBtn,
+                pressed && styles.headerBtnPressed,
+              ]}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Pet Digital QR Tag"
+            >
+              <Ionicons name="qr-code-outline" size={17} color={colors.primary} />
+            </Pressable>
+
+            {/* Edit Pet Button */}
             <Pressable
               onPress={() => {
                 haptic.light();
                 setEditModalVisible(true);
               }}
-              style={styles.editHeaderBtn}
-              hitSlop={8}
+              style={({ pressed }) => [
+                styles.editHeaderBtn,
+                pressed && styles.headerBtnPressed,
+              ]}
+              hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel="Edit Pet Info"
             >
               <Ionicons name="pencil" size={15} color={colors.primary} />
             </Pressable>
 
+            {/* Delete Pet Button */}
             <Pressable
               onPress={() => {
                 haptic.warning();
                 setDeleteModalVisible(true);
               }}
-              style={styles.deleteHeaderBtn}
-              hitSlop={8}
+              style={({ pressed }) => [
+                styles.deleteHeaderBtn,
+                pressed && styles.headerBtnPressed,
+              ]}
+              hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel="Remove Pet"
             >
@@ -265,15 +277,16 @@ export default function PetProfileScreen() {
         </View>
 
         {/* Hero Passport Identity Card */}
-        <View style={[styles.heroCard, shadows.sm]}>
-          {/* Centered Pop-Out 3D Pet Avatar */}
-          <View style={styles.avatarCenterWrap}>
+        {/* Horizontal Pet Profile Header (Avatar on left, Data & Specs on right) */}
+        <View style={styles.profileHeader}>
+          {/* Left: Pop-Out Pet Avatar */}
+          <View style={styles.avatarLeftWrap}>
             <PopoutPetAvatar
               avatarId={customAvatarId || pet.avatarId}
               species={pet.species}
               photoUrl={customPhotoUrl || pet.photoUrl}
-              size={92}
-              scale={1.35}
+              size={76}
+              scale={1.22}
               showCameraBadge
               onPress={() => {
                 haptic.light();
@@ -282,10 +295,11 @@ export default function PetProfileScreen() {
             />
           </View>
 
-          {/* Centered Pet Core Identity */}
-          <View style={styles.heroCenterInfo}>
-            <View style={styles.nameCenterRow}>
-              <Text style={styles.heroName} numberOfLines={1}>
+          {/* Right: Pet Identity & Specifications Description */}
+          <View style={styles.profileDataCol}>
+            {/* Pet Name & Species Badge */}
+            <View style={styles.profileNameRow}>
+              <Text style={styles.profileName} numberOfLines={1}>
                 {pet.name}
               </Text>
               <View
@@ -305,112 +319,106 @@ export default function PetProfileScreen() {
               </View>
             </View>
 
-            <Text style={styles.heroBreedText} numberOfLines={1}>
-              {pet.breed || (isDog ? 'Dog' : 'Cat')}
-              {pet.gender
-                ? ` · ${pet.gender === 'male' ? 'Male ♂' : 'Female ♀'}`
-                : ''}
+            {/* Breed & Age */}
+            <Text style={styles.profileMetaText} numberOfLines={1}>
+              {pet.breed || (isDog ? 'Dog' : 'Cat')} · {ageText} {pet.birthYear ? `(${pet.birthYear})` : ''}
             </Text>
 
-            <Text style={styles.heroAgeText}>
-              {ageText} {pet.birthYear ? `(Born ${pet.birthYear})` : ''}
-            </Text>
-          </View>
-
-          {/* Anti-Rabies Vaccination Status Banner */}
-          <View
-            style={[
-              styles.vaxStatusBanner,
-              vaxTimeline.isVaccinated
-                ? styles.vaxBannerProtected
-                : styles.vaxBannerDue,
-            ]}
-          >
-            <View style={styles.vaxBannerHeaderRow}>
-              <Text
-                style={[
-                  styles.vaxBannerTitle,
-                  vaxTimeline.isVaccinated
-                    ? styles.vaxBannerTitleGreen
-                    : styles.vaxBannerTitleAmber,
-                ]}
-              >
-                {vaxTimeline.isVaccinated
-                  ? `Anti-Rabies Protected · ${vaxTimeline.totalDoses} ${
-                      vaxTimeline.totalDoses === 1 ? 'Dose' : 'Doses'
-                    }`
-                  : 'Anti-Rabies Vaccine Due (0 Doses)'}
-              </Text>
-            </View>
-
-            {vaxTimeline.isVaccinated ? (
-              <View style={styles.vaxTimelineDatesRow}>
-                {vaxTimeline.lastDate ? (
-                  <View style={styles.vaxDateCol}>
-                    <Text style={styles.vaxDateLabel}>Last Administered</Text>
-                    <Text style={styles.vaxDateValue}>
-                      {formatDateWithYear(vaxTimeline.lastDate)}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {vaxTimeline.nextBooster ? (
-                  <View style={styles.vaxDateCol}>
-                    <Text style={styles.vaxDateLabel}>Next Booster Due</Text>
-                    <Text style={[styles.vaxDateValue, styles.vaxDateValueHighlight]}>
-                      {formatDateWithYear(vaxTimeline.nextBooster)}
-                    </Text>
-                  </View>
-                ) : null}
+            {/* Integrated Specifications Badges (Gender, Spay/Neuter, Weight Class) */}
+            <View style={styles.dataBadgesRow}>
+              {/* Gender */}
+              <View style={styles.dataBadge}>
+                <Ionicons
+                  name={pet.gender === 'male' ? 'male' : 'female'}
+                  size={10.5}
+                  color={pet.gender === 'male' ? '#2563EB' : '#DB2777'}
+                />
+                <Text style={styles.dataBadgeText}>
+                  {pet.gender === 'male' ? 'Male' : pet.gender === 'female' ? 'Female' : 'Unknown'}
+                </Text>
               </View>
-            ) : (
-              <Text style={styles.vaxBannerHelpText}>
-                No immunization on record. Please schedule your pet’s free municipal rabies shot.
-              </Text>
-            )}
+
+              {/* Spay / Neuter */}
+              <View style={styles.dataBadge}>
+                <Ionicons name="cut-outline" size={10.5} color={colors.primary} />
+                <Text style={styles.dataBadgeText}>
+                  {pet.isSpayedNeutered ? 'Fixed' : 'Intact'}
+                </Text>
+              </View>
+
+              {/* Weight Class */}
+              <View style={styles.dataBadge}>
+                <Ionicons name="scale-outline" size={10.5} color={colors.warning} />
+                <Text style={styles.dataBadgeText}>
+                  {pet.weightCategory
+                    ? pet.weightCategory.charAt(0).toUpperCase() + pet.weightCategory.slice(1)
+                    : 'Medium'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
 
-        {/* Medical Specifications Metric Grid */}
-        <View style={styles.specsRow}>
-          {/* Gender */}
-          <View style={[styles.specBox, shadows.sm]}>
-            <View style={[styles.specIconWrap, { backgroundColor: 'rgba(37, 99, 235, 0.08)' }]}>
-              <Ionicons
-                name={pet.gender === 'male' ? 'male' : 'female'}
-                size={13}
-                color={pet.gender === 'male' ? '#2563EB' : '#DB2777'}
-              />
-            </View>
-            <Text style={styles.specValue}>
-              {pet.gender === 'male' ? 'Male ♂' : pet.gender === 'female' ? 'Female ♀' : 'Not specified'}
+        {/* Anti-Rabies Vaccination Status Banner */}
+        <View
+          style={[
+            styles.vaxStatusBanner,
+            vaxTimeline.isVaccinated
+              ? styles.vaxBannerProtected
+              : styles.vaxBannerDue,
+          ]}
+        >
+          <View style={styles.vaxBannerHeaderRow}>
+            <Ionicons
+              name={vaxTimeline.isVaccinated ? 'shield-checkmark' : 'alert-circle-outline'}
+              size={14}
+              color={vaxTimeline.isVaccinated ? '#059669' : '#D97706'}
+            />
+            <Text
+              style={[
+                styles.vaxBannerTitle,
+                vaxTimeline.isVaccinated
+                  ? styles.vaxBannerTitleGreen
+                  : styles.vaxBannerTitleAmber,
+              ]}
+            >
+              {vaxTimeline.isVaccinated
+                ? `Anti-Rabies Protected · ${vaxTimeline.totalDoses} ${
+                    vaxTimeline.totalDoses === 1 ? 'Dose' : 'Doses'
+                  }`
+                : 'Anti-Rabies Vaccine Due'}
             </Text>
-            <Text style={styles.specLabel}>Gender</Text>
           </View>
 
-          {/* Spayed / Neutered */}
-          <View style={[styles.specBox, shadows.sm]}>
-            <View style={[styles.specIconWrap, { backgroundColor: 'rgba(0, 168, 150, 0.08)' }]}>
-              <Ionicons name="cut-outline" size={13} color={colors.primary} />
-            </View>
-            <Text style={styles.specValue}>
-              {pet.isSpayedNeutered ? 'Fixed / Kapon' : 'Intact'}
-            </Text>
-            <Text style={styles.specLabel}>Spay / Neuter</Text>
-          </View>
+          {vaxTimeline.isVaccinated ? (
+            <View style={styles.vaxTimelineDatesRow}>
+              {vaxTimeline.lastDate ? (
+                <View style={styles.vaxDateCol}>
+                  <Text style={styles.vaxDateLabel}>Last Administered</Text>
+                  <Text style={styles.vaxDateValue}>
+                    {formatDateWithYear(vaxTimeline.lastDate)}
+                  </Text>
+                </View>
+              ) : null}
 
-          {/* Size / Weight */}
-          <View style={[styles.specBox, shadows.sm]}>
-            <View style={[styles.specIconWrap, { backgroundColor: 'rgba(245, 158, 11, 0.08)' }]}>
-              <Ionicons name="scale-outline" size={13} color={colors.warning} />
+              {vaxTimeline.lastDate && vaxTimeline.nextBooster ? (
+                <View style={styles.vaxDateDivider} />
+              ) : null}
+
+              {vaxTimeline.nextBooster ? (
+                <View style={styles.vaxDateCol}>
+                  <Text style={styles.vaxDateLabel}>Next Booster Due</Text>
+                  <Text style={[styles.vaxDateValue, styles.vaxDateValueHighlight]}>
+                    {formatDateWithYear(vaxTimeline.nextBooster)}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.specValue}>
-              {pet.weightCategory
-                ? pet.weightCategory.charAt(0).toUpperCase() + pet.weightCategory.slice(1)
-                : 'Medium'}
+          ) : (
+            <Text style={styles.vaxBannerHelpText}>
+              No immunization on record. Please schedule your pet’s free municipal rabies shot.
             </Text>
-            <Text style={styles.specLabel}>Weight Class</Text>
-          </View>
+          )}
         </View>
 
         {/* Special Care Notes (if any) */}
@@ -446,13 +454,21 @@ export default function PetProfileScreen() {
                 <View style={styles.emptyCardIcon}>
                   <Ionicons name="shield-outline" size={22} color={colors.textMuted} />
                 </View>
-                <Text style={styles.emptyCardTitle}>No municipal vaccine logs yet</Text>
+                <Text style={styles.emptyCardTitle}>
+                  {vaxTimeline.isVaccinated
+                    ? 'No municipal clinic records yet'
+                    : 'No municipal vaccine logs yet'}
+                </Text>
                 <Text style={styles.emptyCardSubtitle}>
-                  Keep your pet safe by booking an official anti-rabies vaccination at the City Vet Office.
+                  {vaxTimeline.isVaccinated
+                    ? 'Official vaccination logs will appear here after your pet’s appointments at the City Veterinary Office.'
+                    : 'Keep your pet safe by booking an official anti-rabies vaccination at the City Vet Office.'}
                 </Text>
                 <Pressable onPress={handleBookVaccination} style={styles.scheduleBtnInline}>
                   <Ionicons name="add" size={14} color={colors.white} />
-                  <Text style={styles.scheduleBtnInlineText}>Book Vaccination</Text>
+                  <Text style={styles.scheduleBtnInlineText}>
+                    {vaxTimeline.isVaccinated ? 'Schedule Next Booster' : 'Book Vaccination'}
+                  </Text>
                 </Pressable>
               </View>
             ) : (
@@ -563,6 +579,19 @@ export default function PetProfileScreen() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteModalVisible(false)}
       />
+
+      {/* Official City Vet Pet QR Tag Modal */}
+      <PetQrTagModal
+        visible={qrTagModalVisible}
+        onClose={() => setQrTagModalVisible(false)}
+        pet={pet}
+        owner={{
+          id: authUser?.id || clerkUser?.id,
+          fullName: authUser?.fullName || clerkUser?.fullName || 'SyncVet Resident',
+          mobileNumber: authUser?.mobileNumber || clerkUser?.primaryPhoneNumber?.phoneNumber || '',
+          address: authUser?.address || 'Cagayan de Oro City',
+        }}
+      />
     </AnimatedScreen>
   );
 }
@@ -580,80 +609,80 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 1,
   },
   headerTitle: {
-    ...typography.heading2,
+    ...typography.heading3,
     color: colors.textPrimary,
-    fontSize: 16.5,
+    fontSize: 17,
     fontWeight: '700',
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 11,
     textAlign: 'center',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
+  },
+  qrHeaderBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 168, 150, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   editHeaderBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(0, 168, 150, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   deleteHeaderBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(239, 68, 68, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 8,
+  headerBtnPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.94 }],
   },
-  avatarCenterWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 2,
-    overflow: 'visible',
-  },
-  heroCenterInfo: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 1,
-    marginTop: 0,
-    marginBottom: 2,
-  },
-  nameCenterRow: {
+  profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.md,
+    paddingTop: 4,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  avatarLeftWrap: {
+    overflow: 'visible',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  profileDataCol: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 2.5,
+  },
+  profileNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
-  heroName: {
-    ...typography.heading3,
+  profileName: {
+    ...typography.heading2,
     color: colors.textPrimary,
-    fontSize: 18.5,
+    fontSize: 21,
     fontWeight: '800',
-    textAlign: 'center',
+    lineHeight: 25,
+    letterSpacing: -0.3,
   },
   speciesTag: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 1.5,
     borderRadius: radius.pill,
   },
@@ -666,6 +695,7 @@ const styles = StyleSheet.create({
   speciesTagText: {
     ...typography.captionBold,
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: '700',
   },
   speciesTagTextDog: {
@@ -674,61 +704,88 @@ const styles = StyleSheet.create({
   speciesTagTextCat: {
     color: '#DB2777',
   },
-  heroBreedText: {
+  profileMetaText: {
     ...typography.body,
     color: colors.textSecondary,
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 12.5,
+    lineHeight: 16,
+    fontWeight: '500',
   },
-  heroAgeText: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 11,
-    textAlign: 'center',
+  dataBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+    gap: 4,
+    marginTop: 2,
+  },
+  dataBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(7, 30, 38, 0.08)',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: radius.pill,
+  },
+  dataBadgeText: {
+    ...typography.captionBold,
+    color: colors.textPrimary,
+    fontSize: 9.5,
+    fontWeight: '600',
   },
   vaxStatusBanner: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    gap: 4,
+    marginBottom: spacing.md,
+    gap: 7,
   },
   vaxBannerProtected: {
-    backgroundColor: 'rgba(16, 185, 129, 0.06)',
-    borderColor: 'rgba(16, 185, 129, 0.20)',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
   },
   vaxBannerDue: {
-    backgroundColor: 'rgba(245, 158, 11, 0.07)',
-    borderColor: 'rgba(245, 158, 11, 0.22)',
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
   },
   vaxBannerHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
   },
   vaxBannerTitle: {
     ...typography.captionBold,
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
   },
   vaxBannerTitleGreen: {
-    color: colors.success,
+    color: '#059669',
   },
   vaxBannerTitleAmber: {
-    color: colors.warning,
+    color: '#D97706',
   },
   vaxTimelineDatesRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 4,
+    paddingTop: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(16, 185, 129, 0.16)',
-    gap: 8,
+    borderTopColor: 'rgba(5, 150, 105, 0.15)',
   },
   vaxDateCol: {
+    flex: 1,
     alignItems: 'center',
-    gap: 1,
+    gap: 1.5,
+  },
+  vaxDateDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: 'rgba(5, 150, 105, 0.18)',
   },
   vaxDateLabel: {
     ...typography.small,
@@ -738,54 +795,18 @@ const styles = StyleSheet.create({
   vaxDateValue: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '600',
   },
   vaxDateValueHighlight: {
-    color: colors.primary,
+    color: '#059669',
     fontWeight: '700',
   },
   vaxBannerHelpText: {
     ...typography.small,
     color: colors.textSecondary,
-    fontSize: 10.5,
-    textAlign: 'center',
-  },
-  specsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: spacing.xs,
-  },
-  specBox: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(7, 30, 38, 0.06)',
-    gap: 1,
-  },
-  specIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 0,
-  },
-  specValue: {
-    ...typography.captionBold,
-    color: colors.textPrimary,
     fontSize: 11,
-    fontWeight: '700',
     textAlign: 'center',
-  },
-  specLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontSize: 9.5,
   },
   notesCard: {
     backgroundColor: colors.surface,

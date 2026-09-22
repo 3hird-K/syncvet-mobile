@@ -57,9 +57,27 @@ export function useNotificationPreferences() {
     checkPermissions();
   }, [loadPreferences, checkPermissions]);
 
+  const requestPermission = useCallback(async (): Promise<boolean> => {
+    const granted = await notificationService.requestPermissions();
+    await checkPermissions();
+    if (granted) {
+      await reminderEngine.reconcile(pets, appointments, preferences, ownerId);
+    }
+    return granted;
+  }, [checkPermissions, pets, appointments, preferences, ownerId]);
+
   // Save updated preferences & trigger reconciliation
   const updatePreference = useCallback(
     async (key: keyof NotificationPreferences, value: boolean) => {
+      let isAllowed = permissionStatus === SafePermissionStatus.GRANTED;
+
+      if (value && !isAllowed) {
+        const granted = await requestPermission();
+        if (!granted) {
+          return false;
+        }
+      }
+
       const updated = {
         ...preferences,
         [key]: value,
@@ -69,18 +87,10 @@ export function useNotificationPreferences() {
 
       // Reconcile reminders with updated preferences
       await reminderEngine.reconcile(pets, appointments, updated, ownerId);
+      return true;
     },
-    [preferences, pets, appointments, ownerId],
+    [preferences, pets, appointments, ownerId, permissionStatus, requestPermission],
   );
-
-  const requestPermission = useCallback(async (): Promise<boolean> => {
-    const granted = await notificationService.requestPermissions();
-    await checkPermissions();
-    if (granted) {
-      await reminderEngine.reconcile(pets, appointments, preferences, ownerId);
-    }
-    return granted;
-  }, [checkPermissions, pets, appointments, preferences, ownerId]);
 
   const reconcileReminders = useCallback(async () => {
     return await reminderEngine.reconcile(pets, appointments, preferences, ownerId);

@@ -9,9 +9,10 @@ import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { PetsScreenSkeleton } from '@components/ui/Skeleton';
+import { PetQrTagModal } from '@components/ui/PetQrTagModal';
+import { PetQrScannerModal } from '@components/ui/PetQrScannerModal';
 import {
   PetsHeader,
-  PetsDashboard,
   PetsSearchFilter,
   PetPassportCard,
   PetsEmptyState,
@@ -26,33 +27,11 @@ export default function PetsScreen() {
 
   const [activeFilter, setActiveFilter] = useState<PetFilterCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedQrPet, setSelectedQrPet] = useState<Pet | null>(null);
+  const [scannerVisible, setScannerVisible] = useState(false);
 
-  // Local-first source of truth with offline pending creation support
-  const allPets: Pet[] = useMemo(() => {
-    if (storePets && storePets.length > 0) {
-      return storePets;
-    }
-    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-
-    return metaPets.map((p, idx) => ({
-      id: p.id || `clerk-pet-${idx}`,
-      ownerId: clerkUser?.id || '',
-      name: p.name || 'My Pet',
-      species: p.species || 'dog',
-      breed: p.breed || '',
-      gender: p.gender || 'male',
-      birthYear: p.birthYear,
-      isVaccinated: Boolean(p.isVaccinated),
-      isSpayedNeutered: Boolean(p.isSpayedNeutered),
-      weightCategory: p.weightCategory,
-      notes: p.notes,
-      avatarId: p.avatarId,
-      photoUrl: p.photoUrl,
-      createdAt: p.createdAt || new Date().toISOString(),
-      updatedAt: p.updatedAt || new Date().toISOString(),
-    }));
-  }, [storePets, clerkUser?.unsafeMetadata, clerkUser?.id]);
+  // Pure Supabase source of truth
+  const allPets: Pet[] = storePets || [];
 
   // Real-time search & filter
   const filteredPets = useMemo(() => {
@@ -100,18 +79,13 @@ export default function PetsScreen() {
   return (
     <AnimatedScreen animation="zoom">
       <Screen scroll onRefresh={handleRefresh} contentContainerStyle={styles.scrollContent}>
-        {/* 1. Header with Title & "+ Add Pet" Button */}
-        <PetsHeader petsCount={allPets.length} />
-
-        {/* 2. Municipal Anti-Rabies Compliance & Metrics Dashboard */}
-        <PetsDashboard
-          totalCount={allPets.length}
-          dogCount={dogCount}
-          catCount={catCount}
-          needsVaccineCount={needsVaccineCount}
+        {/* 1. Header with Title & "+ Add Pet" Button & "Scan Tag" Button */}
+        <PetsHeader
+          petsCount={allPets.length}
+          onScanPress={() => setScannerVisible(true)}
         />
 
-        {/* 3. Search Bar & Filter Chips */}
+        {/* 2. Search Bar & Filter Chips */}
         {allPets.length > 0 ? (
           <PetsSearchFilter
             searchQuery={searchQuery}
@@ -139,11 +113,35 @@ export default function PetsScreen() {
         ) : (
           <View style={styles.petsList}>
             {filteredPets.map((pet, idx) => (
-              <PetPassportCard key={pet.id} pet={pet} index={idx} />
+              <PetPassportCard
+                key={pet.id}
+                pet={pet}
+                index={idx}
+                onQrPress={(p) => setSelectedQrPet(p)}
+              />
             ))}
           </View>
         )}
       </Screen>
+
+      {/* Official Digital Pet Tag Modal */}
+      <PetQrTagModal
+        visible={Boolean(selectedQrPet)}
+        onClose={() => setSelectedQrPet(null)}
+        pet={selectedQrPet}
+        owner={{
+          id: user?.id || clerkUser?.id,
+          fullName: user?.fullName || clerkUser?.fullName || 'SyncVet Resident',
+          mobileNumber: user?.mobileNumber || clerkUser?.primaryPhoneNumber?.phoneNumber || '',
+          address: user?.address || 'Cagayan de Oro City',
+        }}
+      />
+
+      {/* Pet Tag Scanner Camera Modal */}
+      <PetQrScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+      />
     </AnimatedScreen>
   );
 }

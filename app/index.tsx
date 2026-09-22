@@ -18,7 +18,6 @@ import { useDataStore } from '@store/useDataStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { PhotoIllustration } from '@components/ui/PhotoIllustration';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 
 const SPLASH_DURATION = 1800;
 
@@ -44,10 +43,6 @@ export default function SplashScreen() {
   useEffect(() => {
     if (isSignedIn && clerkUser && !user && !clerkSynced.current) {
       clerkSynced.current = true;
-      const metadata = clerkUser.unsafeMetadata || {};
-      const mobileNumber = (metadata.mobileNumber as string) || '';
-      const address = (metadata.address as string) || '';
-      const profileCompleted = Boolean(metadata.profileCompleted);
 
       googleSignIn({
         email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
@@ -55,12 +50,7 @@ export default function SplashScreen() {
         photoUrl: clerkUser.imageUrl,
       })
         .then(async () => {
-          if (mobileNumber || address) {
-            await useAuthStore.getState().saveOwnerProfile(mobileNumber, address);
-          }
-          if (profileCompleted) {
-            await useAuthStore.getState().markRegistrationComplete();
-          }
+          await useAuthStore.getState().syncUserFromClerk(clerkUser);
         })
         .catch(() => {});
     }
@@ -106,15 +96,12 @@ export default function SplashScreen() {
     const isAuth = (status === 'authenticated' && !!currentUser) || Boolean(isSignedIn);
 
     if (isAuth) {
-      const metadata = clerkUser?.unsafeMetadata;
-      const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
       const cachedPets = useDataStore.getState().pets;
-
-      const hasPets = clerkPets.length > 0 || cachedPets.length > 0;
+      const hasPets = cachedPets.length > 0;
       const hasCompletedProfile = Boolean(
-        (currentUser?.profileCompleted || metadata?.profileCompleted) &&
-        (currentUser?.mobileNumber || metadata?.mobileNumber) &&
-        (currentUser?.address || metadata?.address) &&
+        currentUser?.profileCompleted &&
+        currentUser?.mobileNumber &&
+        currentUser?.address &&
         hasPets
       );
 

@@ -4,6 +4,7 @@ import type {
   BookingInput,
   Pet,
   PetInput,
+  ServiceTransaction,
 } from './types';
 
 /**
@@ -21,9 +22,18 @@ export interface DataService {
   bookAppointment(ownerId: string, input: BookingInput): Promise<Appointment>;
   cancelAppointment(ownerId: string, appointmentId: string): Promise<void>;
 
-  getActivity(ownerId: string): Promise<ActivityItem[]>;
+  getTransactions(ownerId: string): Promise<ServiceTransaction[]>;
+  logTransaction(
+    ownerId: string,
+    input: Omit<ServiceTransaction, 'id' | 'ownerId' | 'date' | 'createdAt' | 'transactionNo'> & {
+      transactionNo?: string;
+    },
+  ): Promise<ServiceTransaction>;
+
+  // Backward compatibility
+  getActivity(ownerId: string): Promise<ServiceTransaction[]>;
   logActivity(
     ownerId: string,
-    input: Omit<ActivityItem, 'id' | 'ownerId' | 'date'>,
+    input: Omit<ServiceTransaction, 'id' | 'ownerId' | 'date' | 'createdAt' | 'transactionNo'>,
   ): Promise<void>;
 }

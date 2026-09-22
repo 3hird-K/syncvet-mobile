@@ -21,6 +21,7 @@ export default function MainLayout() {
 
   return (
     <Tabs
+      backBehavior="none"
       tabBar={(props) => <MeltingBallTabBar {...props} />}
       screenOptions={{
         headerShown: false,

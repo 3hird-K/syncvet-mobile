@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { getAuthService, AuthError } from '@services/auth';
+import { supabase } from '@lib/supabase';
 import { useDataStore } from './useDataStore';
 import type {
   AuthUser,
@@ -22,7 +23,13 @@ interface AuthState {
   googleSignIn: (profile: GoogleProfile) => Promise<void>;
   signIn: (params: SignInParams) => Promise<void>;
   signUp: (params: SignUpParams) => Promise<void>;
-  saveOwnerProfile: (mobileNumber: string, address: string) => Promise<void>;
+  saveOwnerProfile: (
+    mobileNumber: string,
+    address: string,
+    fullName?: string,
+    firstName?: string,
+    lastName?: string
+  ) => Promise<void>;
   markRegistrationComplete: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -57,12 +64,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!clerkUser) return;
     const currentUser = get().user;
 
+    // Fetch live resident record from Supabase public.users
+    let dbUser: any = null;
+    let dbError: any = null;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', clerkUser.id)
+        .maybeSingle();
+      dbUser = data;
+      dbError = error;
+    } catch (err) {
+      dbError = err;
+    }
+
+    // If resident completed their registration previously, but row in public.users is gone:
+    // This signifies the account was deleted in Supabase. Sign out immediately!
+    if (!dbError && !dbUser && currentUser?.profileCompleted) {
+      console.warn('[useAuthStore] Resident profile was deleted from Supabase. Signing out.');
+      await get().signOut();
+      return;
+    }
+
     const email =
       clerkUser.primaryEmailAddress?.emailAddress ||
+      dbUser?.email ||
       currentUser?.email ||
       'resident@syncvet.app';
 
     const fullName =
+      dbUser?.full_name ||
       clerkUser.fullName ||
       (clerkUser.firstName
         ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim()
@@ -70,20 +102,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       currentUser?.fullName ||
       'Resident';
 
-    const photoUrl = clerkUser.imageUrl || currentUser?.photoUrl;
-    const metadata = (clerkUser.unsafeMetadata || {}) as Record<string, any>;
+    const photoUrl = clerkUser.imageUrl || dbUser?.avatar_url || currentUser?.photoUrl;
 
     const mobileNumber =
-      (metadata.mobileNumber as string) ||
+      dbUser?.phone_number ||
       clerkUser.primaryPhoneNumber?.phoneNumber ||
       currentUser?.mobileNumber ||
       '';
 
-    const address =
-      (metadata.address as string) || currentUser?.address || '';
+    const address = dbUser?.address || currentUser?.address || '';
 
     const profileCompleted = Boolean(
-      metadata.profileCompleted ?? currentUser?.profileCompleted,
+      dbUser?.profile_completed ?? currentUser?.profileCompleted,
     );
 
     const updatedUser: AuthUser = {
@@ -96,7 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       authProvider: (currentUser?.authProvider || 'google'),
       profileCompleted,
       role: 'resident',
-      createdAt: currentUser?.createdAt || new Date().toISOString(),
+      createdAt: dbUser?.created_at || currentUser?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
@@ -123,15 +153,50 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'authenticated', user: session.user, token: session.token });
   },
 
-  saveOwnerProfile: async (mobileNumber, address) => {
+  saveOwnerProfile: async (mobileNumber, address, fullName, firstNameArg, lastNameArg) => {
     const user = get().user;
     if (!user) {
       throw new AuthError('UNKNOWN', 'No active session.');
     }
+    const cleanMobile = mobileNumber.trim();
+    const cleanAddress = address.trim();
+
+    let cleanFirst = firstNameArg?.trim();
+    let cleanLast = lastNameArg?.trim();
+    let cleanName = fullName?.trim();
+
+    if (!cleanFirst && !cleanLast && cleanName) {
+      const parts = cleanName.split(' ');
+      cleanFirst = parts[0] || cleanName;
+      cleanLast = parts.slice(1).join(' ') || undefined;
+    } else if (cleanFirst) {
+      cleanName = cleanLast ? `${cleanFirst} ${cleanLast}` : cleanFirst;
+    } else if (!cleanName) {
+      cleanName = user.fullName;
+    }
+
+    // Persist directly to Supabase public.users
+    try {
+      await supabase
+        .from('users')
+        .update({
+          phone_number: cleanMobile,
+          address: cleanAddress,
+          full_name: cleanName,
+          first_name: cleanFirst || null,
+          last_name: cleanLast || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+    } catch (err: any) {
+      console.warn('Supabase saveOwnerProfile note:', err?.message);
+    }
+
     const updated: AuthUser = {
       ...user,
-      mobileNumber: mobileNumber.trim(),
-      address: address.trim(),
+      fullName: cleanName,
+      mobileNumber: cleanMobile,
+      address: cleanAddress,
       updatedAt: new Date().toISOString(),
     };
     await getAuthService().updateUser(updated);
@@ -141,6 +206,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   markRegistrationComplete: async () => {
     const user = get().user;
     if (!user || user.profileCompleted) return;
+
+    // Persist directly to Supabase public.users
+    try {
+      await supabase
+        .from('users')
+        .update({
+          profile_completed: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+    } catch (err: any) {
+      console.warn('Supabase markRegistrationComplete note:', err?.message);
+    }
+
     const updated: AuthUser = {
       ...user,
       profileCompleted: true,

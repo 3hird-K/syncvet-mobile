@@ -8,7 +8,8 @@ export default function ProfileLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'fade_from_bottom',
+        animation: 'fade',
+        gestureEnabled: false,
         contentStyle: { backgroundColor: colors.background },
       }}
     />

@@ -15,10 +15,9 @@ import { Button } from '@components/ui/Button';
 import { Input } from '@components/ui/Input';
 import { AddressPicker } from '@components/ui/AddressPicker';
 import { StepHeader } from '@components/ui/StepHeader';
-import { BackButton } from '@components/ui/BackButton';
+import { RegistrationNavBar } from '@components/ui/RegistrationNavBar';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { syncQueue, syncEngine } from '@services/sync';
 
 const CLINIC_OPTIONS = [
@@ -39,8 +38,8 @@ export default function OwnerRegistrationScreen() {
   const { fields, setValue, validateField, validateAll } = useForm(
     {
       fullName: clerkUser?.fullName || clerkUser?.firstName || user?.fullName || '',
-      mobileNumber: (clerkUser?.unsafeMetadata?.mobileNumber as string) || user?.mobileNumber || '',
-      address: (clerkUser?.unsafeMetadata?.address as string) || user?.address || '',
+      mobileNumber: user?.mobileNumber || '',
+      address: user?.address || '',
     },
     {
       fullName: [required('Enter your full name.')],
@@ -53,17 +52,11 @@ export default function OwnerRegistrationScreen() {
   useEffect(() => {
     if (user && !syncedUserRef.current) {
       syncedUserRef.current = true;
-      if (user.fullName && !fields.fullName.value) {
-        setValue('fullName', user.fullName);
-      }
-      if (user.mobileNumber && !fields.mobileNumber.value) {
-        setValue('mobileNumber', user.mobileNumber);
-      }
-      if (user.address && !fields.address.value) {
-        setValue('address', user.address);
-      }
+      if (user.fullName) setValue('fullName', user.fullName);
+      if (user.mobileNumber) setValue('mobileNumber', user.mobileNumber);
+      if (user.address) setValue('address', user.address);
     }
-  }, [user, fields.fullName.value, fields.mobileNumber.value, fields.address.value, setValue]);
+  }, [user, setValue]);
 
   const handleContinue = useCallback(async () => {
     if (!validateAll()) {
@@ -100,7 +93,10 @@ export default function OwnerRegistrationScreen() {
   }, [validateAll, saveOwnerProfile, fields.mobileNumber.value, fields.address.value, user?.id, clerkUser, router]);
 
   const reducedMotion = useReducedMotion();
-  const enterAnim = reducedMotion ? FadeIn.duration(120) : ZoomIn.duration(280);
+  const enterAnim = React.useMemo(
+    () => (reducedMotion ? FadeIn.duration(120) : FadeIn.duration(240)),
+    [reducedMotion],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -108,10 +104,12 @@ export default function OwnerRegistrationScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Sleek Top Header Navigation Bar */}
-        <View style={styles.topHeaderNav}>
-          <BackButton />
-        </View>
+        {/* Registration Top Navigation Bar */}
+        <RegistrationNavBar
+          step={1}
+          total={2}
+          showBack={false}
+        />
 
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -121,8 +119,6 @@ export default function OwnerRegistrationScreen() {
         >
           <View style={styles.formContent}>
             <StepHeader
-              step={1}
-              total={2}
               title="Tell us about yourself"
               subtitle="The City Veterinary Office uses these details to contact you about your pet’s care and appointments."
             />

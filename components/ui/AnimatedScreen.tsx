@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors } from '@theme';
+import { useIsFocused } from 'expo-router';
 
 export type ScreenAnimation = 'fade' | 'zoom' | 'slide-up' | 'slide-right';
 
@@ -33,9 +34,10 @@ export function AnimatedScreen({
   animated = true,
   style,
 }: AnimatedScreenProps) {
+  const isFocused = useIsFocused();
   const reducedMotion = useReducedMotion();
   const enabled = animated && !reducedMotion;
-  const progress = useSharedValue(enabled ? 0 : 1);
+  const progress = useSharedValue(1);
 
   useEffect(() => {
     if (enabled) {
@@ -45,7 +47,14 @@ export function AnimatedScreen({
         easing: Easing.bezier(0.16, 1, 0.3, 1),
       });
     }
-  }, [enabled, progress]);
+  }, []);
+
+  // Ensure progress is always restored to 1 when returning to this screen/tab
+  useEffect(() => {
+    if (isFocused && enabled && progress.value < 1) {
+      progress.value = 1;
+    }
+  }, [isFocused, enabled, progress]);
 
   const animatedStyle = useAnimatedStyle(() => {
     if (!enabled) {

@@ -55,7 +55,6 @@ import { Button } from '@components/ui/Button';
 import { BackButton } from '@components/ui/BackButton';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { toast } from '@components/ui/Sonner';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<BookingStepIndex>);
 
@@ -182,8 +181,10 @@ function SlideWrapper({ index, scrollX, width, children }: SlideWrapperProps) {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         bounces={false}
+        automaticallyAdjustKeyboardInsets={true}
       >
         <Animated.View style={[styles.slideInner, animatedStyle]}>
           {children}
@@ -203,7 +204,7 @@ export default function NewAppointmentScreen() {
   }>();
 
   const { user: clerkUser } = useUser();
-  const ownerId = useAuthStore((state) => state.user?.id) || 'cdo-resident-user';
+  const ownerId = clerkUser?.id || useAuthStore((state) => state.user?.id) || '';
   const localPets = useDataStore((state) => state.pets);
   const appointments = useDataStore((state) => state.appointments);
   const bookAppointment = useDataStore((state) => state.bookAppointment);
@@ -216,32 +217,7 @@ export default function NewAppointmentScreen() {
   });
 
   // Load resident's real registered pets (local-first with offline support)
-  const allPets = useMemo(() => {
-    if (localPets && localPets.length > 0) {
-      return localPets;
-    }
-    const metadata = (clerkUser?.unsafeMetadata || {}) as Record<string, any>;
-    const metaPets = Array.isArray(metadata.pets) ? metadata.pets : [];
-    return metaPets.map((p: any, idx: number) => ({
-      id: p.id || `clerk-pet-${idx}`,
-      ownerId: ownerId,
-      name: p.name || 'My Pet',
-      species: p.species || 'dog',
-      breed: p.breed || '',
-      gender: p.gender || '',
-      birthYear: p.birthYear,
-      isVaccinated: Boolean(p.isVaccinated),
-      isSpayedNeutered: Boolean(p.isSpayedNeutered),
-      weightCategory: p.weightCategory || 'Medium',
-      notes: p.notes,
-      avatarId: p.avatarId,
-      photoUrl: p.photoUrl,
-      vaccinationDoses: p.vaccinationDoses,
-      lastVaccinationDate: p.lastVaccinationDate,
-      nextVaccinationDate: p.nextVaccinationDate,
-      createdAt: p.createdAt || new Date().toISOString(),
-    }));
-  }, [localPets, clerkUser?.unsafeMetadata, ownerId]);
+  const allPets = localPets || [];
 
   // Initial form values derived from params
   const initialPetId = params.petId || (allPets.length > 0 ? allPets[0].id : undefined);
@@ -275,9 +251,7 @@ export default function NewAppointmentScreen() {
   // Active appointments for the selected pet (status is pending or confirmed, not cancelled or completed)
   const activePetAppointments = useMemo(() => {
     if (!selectedPetId && !selectedPet?.name) return [];
-    const pool = appointments && appointments.length > 0
-      ? appointments
-      : (((clerkUser?.unsafeMetadata as any)?.appointments || []) as any[]);
+    const pool = appointments || [];
 
     return pool.filter((a) => {
       if (!a) return false;
@@ -289,7 +263,7 @@ export default function NewAppointmentScreen() {
         : false;
       return matchesId || matchesName;
     });
-  }, [appointments, clerkUser?.unsafeMetadata, selectedPetId, selectedPet?.name]);
+  }, [appointments, selectedPetId, selectedPet?.name]);
 
   // Map of serviceId -> active appointment for the selected pet
   const activeServiceAppointmentsMap = useMemo(() => {
@@ -719,14 +693,14 @@ export default function NewAppointmentScreen() {
               </Pressable>
             </View>
 
-            {/* Swipe to continue prompt */}
+            {/* Continue to Service Selection */}
             <Pressable
               onPress={() => handleNextStep(1)}
               style={styles.swipePromptPill}
               accessibilityRole="button"
-              accessibilityLabel="Swipe or tap to proceed to Service Selection"
+              accessibilityLabel="Proceed to Service Selection"
             >
-              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <Text style={styles.swipePromptText}>Continue to Service Selection</Text>
               <View style={styles.swipePromptIconWrap}>
                 <Ionicons name="arrow-forward" size={13} color={colors.primary} />
               </View>
@@ -922,14 +896,14 @@ export default function NewAppointmentScreen() {
               />
             </View>
 
-            {/* Swipe to continue prompt */}
+            {/* Continue to Schedule Selection */}
             <Pressable
               onPress={() => handleNextStep(2)}
               style={styles.swipePromptPill}
               accessibilityRole="button"
-              accessibilityLabel="Swipe or tap to proceed to Schedule Selection"
+              accessibilityLabel="Proceed to Schedule Selection"
             >
-              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <Text style={styles.swipePromptText}>Continue to Schedule Selection</Text>
               <View style={styles.swipePromptIconWrap}>
                 <Ionicons name="arrow-forward" size={13} color={colors.primary} />
               </View>
@@ -952,6 +926,7 @@ export default function NewAppointmentScreen() {
             <Text style={styles.scheduleGroupLabel}>Select Date (Monday – Friday)</Text>
             <ScrollView
               horizontal
+              nestedScrollEnabled={true}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.datesScroll}
             >
@@ -1119,14 +1094,14 @@ export default function NewAppointmentScreen() {
               })}
             </View>
 
-            {/* Swipe to continue prompt */}
+            {/* Continue to Review Details */}
             <Pressable
               onPress={() => handleNextStep(3)}
               style={styles.swipePromptPill}
               accessibilityRole="button"
-              accessibilityLabel="Swipe or tap to proceed to Review Details"
+              accessibilityLabel="Proceed to Review Details"
             >
-              <Text style={styles.swipePromptText}>Swipe or tap to continue</Text>
+              <Text style={styles.swipePromptText}>Continue to Review & Confirm</Text>
               <View style={styles.swipePromptIconWrap}>
                 <Ionicons name="arrow-forward" size={13} color={colors.primary} />
               </View>
@@ -1396,6 +1371,7 @@ export default function NewAppointmentScreen() {
             keyExtractor={(item) => String(item)}
             horizontal
             pagingEnabled
+            scrollEnabled={false}
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
             onScroll={scrollHandler}
@@ -1484,7 +1460,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: 110,
+    paddingBottom: 220,
   },
   slideInner: {
     gap: spacing.md,

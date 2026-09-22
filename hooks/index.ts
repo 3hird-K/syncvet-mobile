@@ -7,3 +7,6 @@ export * from './useSyncQueue';
 export * from './useOfflineQuery';
 export * from './useOfflineMutation';
 export * from './useNotificationPreferences';
+export * from './useSupabaseRealtime';
+export * from './queries';
+

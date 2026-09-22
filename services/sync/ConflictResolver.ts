@@ -1,4 +1,4 @@
-import type { ActivityItem, Appointment, Pet } from '@services/data/types';
+import type { ActivityItem, Appointment, Pet, ServiceTransaction } from '@services/data/types';
 import type { AuthUser } from '@services/auth/types';
 
 export class ConflictResolver {
@@ -107,10 +107,10 @@ export class ConflictResolver {
   }
 
   /**
-   * Merges activity items, deduplicating and sorting newest first.
+   * Merges official service transactions, deduplicating and sorting newest first.
    */
-  public static mergeActivity(local: ActivityItem[], remote: ActivityItem[]): ActivityItem[] {
-    const map = new Map<string, ActivityItem>();
+  public static mergeTransactions(local: ServiceTransaction[], remote: ServiceTransaction[]): ServiceTransaction[] {
+    const map = new Map<string, ServiceTransaction>();
 
     for (const item of remote) {
       if (item && item.id) map.set(item.id, item);
@@ -122,4 +122,6 @@ export class ConflictResolver {
 
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
   }
+
+  public static mergeActivity = ConflictResolver.mergeTransactions;
 }

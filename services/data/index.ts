@@ -1,17 +1,19 @@
+import { SupabaseDataService } from './supabaseDataService';
 import { MockDataService } from './mockDataService';
 import type { DataService } from './DataService';
 
 export * from './types';
+export { SupabaseDataService } from './supabaseDataService';
 
 let instance: DataService | null = null;
 
 /**
  * Single source of truth for the active data backend.
- * Swap `MockDataService` for a real Supabase-backed implementation here.
+ * Uses real Supabase-backed implementation with offline fallback.
  */
 export function getDataService(): DataService {
   if (!instance) {
-    instance = new MockDataService();
+    instance = new SupabaseDataService();
   }
   return instance;
 }

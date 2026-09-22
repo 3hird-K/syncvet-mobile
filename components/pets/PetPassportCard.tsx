@@ -13,9 +13,10 @@ import type { Pet } from '@services/data';
 interface PetPassportCardProps {
   pet: Pet;
   index: number;
+  onQrPress?: (pet: Pet) => void;
 }
 
-export function PetPassportCard({ pet, index }: PetPassportCardProps) {
+export function PetPassportCard({ pet, index, onQrPress }: PetPassportCardProps) {
   const router = useRouter();
 
   const isDog = pet.species?.toLowerCase() === 'dog';
@@ -133,25 +134,46 @@ export function PetPassportCard({ pet, index }: PetPassportCardProps) {
 
         {/* Card Action Footer */}
         <View style={styles.cardFooter}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Book visit for ${pet.name}`}
-            onPress={(e) => {
-              e.stopPropagation();
-              haptic.light();
-              router.push({
-                pathname: '/appointments/new',
-                params: { petId: pet.id, petName: pet.name },
-              } as never);
-            }}
-            style={({ pressed }) => [
-              styles.bookBtn,
-              pressed && styles.bookBtnPressed,
-            ]}
-          >
-            <Ionicons name="calendar-outline" size={13} color={colors.primaryDark} />
-            <Text style={styles.bookBtnText}>Book Visit</Text>
-          </Pressable>
+          <View style={styles.cardFooterLeft}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Book visit for ${pet.name}`}
+              onPress={(e) => {
+                e.stopPropagation();
+                haptic.light();
+                router.push({
+                  pathname: '/appointments/new',
+                  params: { petId: pet.id, petName: pet.name },
+                } as never);
+              }}
+              style={({ pressed }) => [
+                styles.bookBtn,
+                pressed && styles.bookBtnPressed,
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={13} color={colors.primaryDark} />
+              <Text style={styles.bookBtnText}>Book Visit</Text>
+            </Pressable>
+
+            {onQrPress ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`View QR tag for ${pet.name}`}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  haptic.light();
+                  onQrPress(pet);
+                }}
+                style={({ pressed }) => [
+                  styles.qrBtn,
+                  pressed && styles.qrBtnPressed,
+                ]}
+              >
+                <Ionicons name="qr-code-outline" size={13} color={colors.primaryDark} />
+                <Text style={styles.qrBtnText}>QR Tag</Text>
+              </Pressable>
+            ) : null}
+          </View>
 
           <View style={styles.passportLink}>
             <Text style={styles.passportLinkText}>Digital Passport</Text>
@@ -324,6 +346,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(7, 30, 38, 0.05)',
   },
+  cardFooterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   bookBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -337,6 +364,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10, 110, 100, 0.16)',
   },
   bookBtnText: {
+    ...typography.captionBold,
+    fontSize: 11.5,
+    fontFamily: typography.font.bold,
+    color: colors.primaryDark,
+  },
+  qrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 168, 150, 0.08)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  qrBtnPressed: {
+    backgroundColor: 'rgba(0, 168, 150, 0.16)',
+  },
+  qrBtnText: {
     ...typography.captionBold,
     fontSize: 11.5,
     fontFamily: typography.font.bold,

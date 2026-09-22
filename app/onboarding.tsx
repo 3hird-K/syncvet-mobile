@@ -25,6 +25,7 @@ import { ONBOARDING_SLIDES } from '@lib/onboarding';
 import type { OnboardingSlideData } from '@lib/onboarding';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
+import { supabase } from '@lib/supabase';
 import { ProgressIndicator } from '@components/ui/ProgressIndicator';
 import { OnboardingSlide } from '@components/ui/OnboardingSlide';
 import { Button } from '@components/ui/Button';
@@ -76,19 +77,21 @@ export default function OnboardingScreen() {
         void WebBrowser.coolDownAsync();
       } catch {}
 
-      const metadata = (clerkUser.unsafeMetadata || {}) as Record<string, any>;
-      const mobileNumber = (metadata?.mobileNumber as string) || '';
-      const address = (metadata?.address as string) || '';
-      const profileCompleted = Boolean(metadata?.profileCompleted);
-      const clerkPets = Array.isArray(metadata?.pets) ? (metadata?.pets as any[]) : [];
-      const hasCompletedProfile = Boolean(
-        profileCompleted &&
-        mobileNumber &&
-        address &&
-        clerkPets.length > 0
-      );
+      useAuthStore.getState().syncUserFromClerk(clerkUser).then(async () => {
+        const currentUser = useAuthStore.getState().user;
+        let petsCount = 0;
+        try {
+          const { data } = await supabase.from('pets').select('id').eq('owner_id', clerkUser.id);
+          petsCount = (data || []).length;
+        } catch {}
 
-      const timer = setTimeout(() => {
+        const hasCompletedProfile = Boolean(
+          currentUser?.profileCompleted &&
+          currentUser?.mobileNumber &&
+          currentUser?.address &&
+          petsCount > 0
+        );
+
         try {
           void WebBrowser.dismissAuthSession();
           void WebBrowser.coolDownAsync();
@@ -99,9 +102,9 @@ export default function OnboardingScreen() {
         } else {
           router.replace('/(register)/owner');
         }
-      }, 900);
-
-      return () => clearTimeout(timer);
+      }).catch(() => {
+        router.replace('/(register)/owner');
+      });
     }
   }, [clerkLoaded, isSignedIn, clerkUser, connectingGoogle, router]);
 

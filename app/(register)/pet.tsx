@@ -30,7 +30,6 @@ import { required } from '@lib/validation';
 import { haptic } from '@lib/haptics';
 import { currentYear } from '@lib/format';
 import { getPetAvatarSource } from '@lib/petAvatars';
-import { updateClerkUnsafeMetadata } from '@lib/clerkMetadata';
 import { useForm } from '@hooks/useForm';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
@@ -38,7 +37,7 @@ import type { PetGender, Species } from '@services/data';
 import { Button } from '@components/ui/Button';
 import { Input } from '@components/ui/Input';
 import { StepHeader } from '@components/ui/StepHeader';
-import { BackButton } from '@components/ui/BackButton';
+import { RegistrationNavBar } from '@components/ui/RegistrationNavBar';
 import { Stepper } from '@components/ui/Stepper';
 import { ErrorMessage } from '@components/ui/ErrorMessage';
 import { VisualChoiceCards } from '@components/ui/VisualChoiceCards';
@@ -123,8 +122,11 @@ function SlideWrapper({ index, scrollX, width, children }: SlideWrapperProps) {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         bounces={false}
+        automaticallyAdjustKeyboardInsets={true}
+        nestedScrollEnabled={true}
       >
         <Animated.View style={[styles.slideInner, animatedStyle]}>
           {children}
@@ -152,6 +154,7 @@ export default function PetRegistrationScreen() {
 
   // Sub-step wizard state (1 to 4)
   const [subPart, setSubPart] = useState<SubPartIndex>(1);
+  const [isQuickPicksActive, setIsQuickPicksActive] = useState(false);
 
   // Part 1 & 2 state
   const [species, setSpecies] = useState<Species>('dog');
@@ -291,7 +294,7 @@ export default function PetRegistrationScreen() {
   );
 
   const handleSaveComplete = useCallback(async () => {
-    const ownerId = user?.id;
+    const ownerId = clerkUser?.id || user?.id;
     if (!ownerId) return;
 
     if (!validateAll()) {
@@ -491,17 +494,34 @@ export default function PetRegistrationScreen() {
                 />
 
                 {/* Popular Breed Chips */}
-                <View style={styles.presetsRow}>
+                <View
+                  style={styles.presetsRow}
+                  onTouchStart={() => setIsQuickPicksActive(true)}
+                  onTouchEnd={() => {
+                    setTimeout(() => setIsQuickPicksActive(false), 200);
+                  }}
+                  onTouchCancel={() => setIsQuickPicksActive(false)}
+                >
                   <Text style={styles.presetHint}>Quick picks:</Text>
                   <ScrollView
                     horizontal
+                    nestedScrollEnabled={true}
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.presetsScroll}
+                    keyboardShouldPersistTaps="handled"
+                    onScrollBeginDrag={() => setIsQuickPicksActive(true)}
+                    onScrollEndDrag={() => {
+                      setTimeout(() => setIsQuickPicksActive(false), 200);
+                    }}
+                    onMomentumScrollEnd={() => setIsQuickPicksActive(false)}
                   >
-                    {breedPresets.slice(0, 6).map((preset) => (
+                    {breedPresets.map((preset) => (
                       <Pressable
                         key={preset}
-                        onPress={() => handleBreedPreset(preset)}
+                        onPress={() => {
+                          handleBreedPreset(preset);
+                          setIsQuickPicksActive(false);
+                        }}
                         style={({ pressed }) => [
                           styles.presetChip,
                           fields.breed.value === preset && styles.presetChipActive,
@@ -792,16 +812,17 @@ export default function PetRegistrationScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Top Navigation Header */}
-        <View style={styles.topHeaderNav}>
-          <BackButton onPress={subPart > 1 ? handlePrevious : undefined} />
-        </View>
+        {/* Top Registration Navigation Bar */}
+        <RegistrationNavBar
+          step={2}
+          total={2}
+          showBack={true}
+          onBack={subPart > 1 ? handlePrevious : undefined}
+        />
 
         {/* Dynamic Step Header */}
         <View style={styles.headerWrapper}>
           <StepHeader
-            step={2}
-            total={2}
             title="Tell us about your pet"
             subtitle={PART_SUBTITLES[subPart]}
           />
@@ -823,7 +844,7 @@ export default function PetRegistrationScreen() {
           keyExtractor={(item) => String(item)}
           horizontal
           pagingEnabled
-          scrollEnabled={isCurrentPartValid}
+          scrollEnabled={isCurrentPartValid && !isQuickPicksActive}
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={scrollHandler}
@@ -875,7 +896,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingBottom: 36,
+    paddingBottom: 160,
     justifyContent: 'space-between',
   },
   slideInner: {
