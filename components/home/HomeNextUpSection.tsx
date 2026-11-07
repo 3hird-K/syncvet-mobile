@@ -76,6 +76,8 @@ export function HomeNextUpSection({
 
 const styles = StyleSheet.create({
   section: {
+    width: '97%',
+    alignSelf: 'center',
     marginBottom: spacing.lg,
   },
   preventiveCard: {

@@ -14,10 +14,9 @@ import { PetQrScannerModal } from '@components/ui/PetQrScannerModal';
 import {
   HomeHeader,
   HomePetsSection,
+  HomeCareActionCards,
+  HomeAnnouncementsSection,
   HomeNextUpSection,
-  HomeQuickActions,
-  HomeServicesSection,
-  HomeHealthInsight,
   HomeClinicStrip,
 } from '@components/home';
 import { colors, radius, spacing } from '@theme';
@@ -101,7 +100,12 @@ export default function HomeScreen() {
 
   return (
     <AnimatedScreen animation="zoom">
-      <Screen scroll onRefresh={handleRefresh}>
+      <Screen
+        scroll
+        padded={false}
+        onRefresh={handleRefresh}
+        contentContainerStyle={styles.screenContent}
+      >
         {/* 1. Senior Executive Municipal Top Header with Scan Button */}
         <HomeHeader
           displayName={displayName}
@@ -112,25 +116,24 @@ export default function HomeScreen() {
           onScanPress={() => setScannerVisible(true)}
         />
 
-        {/* 2. Pet Overview & Passport Carousel */}
-        <HomePetsSection pets={allPets} />
+        {/* 2. Official CVO Pet Registry Section (Facebook Stories style) */}
+        <HomePetsSection pets={allPets} userPhotoUrl={displayPhoto} />
 
-        {/* 3. Next Up (Upcoming Visit / Smart Preventive Care) */}
-        <HomeNextUpSection
-          nextAppointment={nextAppointment}
-          totalAppointmentsCount={upcomingAppointments.length}
-        />
+        {/* 3. Municipal Care Action Cards (Clinical Care & Procedure) */}
+        <HomeCareActionCards />
 
-        {/* 4. High-Frequency Fast Quick Actions Hub */}
-        <HomeQuickActions />
+        {/* 4. Upcoming Active Appointment (if scheduled) */}
+        {nextAppointment ? (
+          <HomeNextUpSection
+            nextAppointment={nextAppointment}
+            totalAppointmentsCount={upcomingAppointments.length}
+          />
+        ) : null}
 
-        {/* 5. City Veterinary Services Directory Preview */}
-        <HomeServicesSection />
+        {/* 5. Live Community Announcements Feed from Supabase */}
+        <HomeAnnouncementsSection />
 
-        {/* 6. Trustworthy Curated Veterinary Care Insight */}
-        <HomeHealthInsight />
-
-        {/* 7. City Veterinary Office Operating Schedule & Direct Helpline */}
+        {/* 6. City Veterinary Office Operating Schedule & Direct Helpline */}
         <HomeClinicStrip />
       </Screen>
 
@@ -143,4 +146,9 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  screenContent: {
+    paddingTop: 8,
+    paddingBottom: 40,
+  },
+});

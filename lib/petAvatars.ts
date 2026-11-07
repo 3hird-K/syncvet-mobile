@@ -202,7 +202,22 @@ export function getPetAvatarSource(
   photoUrl?: string | null,
   petName?: string,
 ): ImageSourcePropType {
-  // 1. If photo_url is provided from database / custom upload, prioritize it!
+  // 1. Special name & breed presets (e.g. Cadmus -> British Shorthair portrait)
+  const nameKey = (petName || '').toLowerCase().trim();
+  if (nameKey === 'cadmus') {
+    return require('@assets/cat-profiles/image-removebg-preview (3).png');
+  }
+  if (nameKey === 'gehlee') {
+    return require('@assets/cat-profiles/image-removebg-preview (10).png');
+  }
+  if (nameKey === 'angela') {
+    return require('@assets/cat-profiles/image-removebg-preview (1).png');
+  }
+  if (nameKey === 'oreo') {
+    return require('@assets/dog-profiles/image-removebg-preview (1) copy.png');
+  }
+
+  // 2. If photo_url is provided from database / custom upload, prioritize it!
   if (photoUrl && typeof photoUrl === 'string') {
     const cleanUrl = photoUrl.trim();
     if (
@@ -217,21 +232,6 @@ export function getPetAvatarSource(
     ) {
       return { uri: cleanUrl };
     }
-  }
-
-  // 2. Special name presets
-  const nameKey = (petName || '').toLowerCase().trim();
-  if (nameKey === 'gehlee') {
-    return require('@assets/no-backgrounds/catsss-removebg-preview.png');
-  }
-  if (nameKey === 'cadmus') {
-    return require('@assets/cat-profiles/image-removebg-preview (3).png');
-  }
-  if (nameKey === 'angela') {
-    return require('@assets/cat-profiles/image-removebg-preview (1).png');
-  }
-  if (nameKey === 'oreo') {
-    return require('@assets/dog-profiles/image-removebg-preview (1) copy.png');
   }
 
   // 3. Avatar ID match

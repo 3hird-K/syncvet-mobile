@@ -1,5 +1,7 @@
 export { HomeHeader } from './HomeHeader';
 export { HomePetsSection } from './HomePetsSection';
+export { HomeCareActionCards } from './HomeCareActionCards';
+export { HomeAnnouncementsSection } from './HomeAnnouncementsSection';
 export { HomeNextUpSection } from './HomeNextUpSection';
 export { HomeQuickActions } from './HomeQuickActions';
 export { HomeServicesSection } from './HomeServicesSection';

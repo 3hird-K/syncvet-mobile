@@ -39,6 +39,8 @@ export function HomeClinicStrip() {
 
 const styles = StyleSheet.create({
   container: {
+    width: '97%',
+    alignSelf: 'center',
     marginBottom: spacing.xs,
   },
   stripCard: {

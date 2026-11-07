@@ -113,6 +113,8 @@ export function HomeHeader({
 
 const styles = StyleSheet.create({
   container: {
+    width: '97%',
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
