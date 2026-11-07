@@ -17,7 +17,6 @@ import {
   HomeCareActionCards,
   HomeAnnouncementsSection,
   HomeNextUpSection,
-  HomeClinicStrip,
 } from '@components/home';
 import { colors, radius, spacing } from '@theme';
 import type { Pet } from '@services/data';
@@ -132,9 +131,6 @@ export default function HomeScreen() {
 
         {/* 5. Live Community Announcements Feed from Supabase */}
         <HomeAnnouncementsSection />
-
-        {/* 6. City Veterinary Office Operating Schedule & Direct Helpline */}
-        <HomeClinicStrip />
       </Screen>
 
       {/* Pet Tag Scanner Camera Modal */}

@@ -199,8 +199,8 @@ const styles = StyleSheet.create({
   container: {
     width: '97%',
     alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 6,
+    marginTop: 4,
+    marginBottom: 4,
   },
   row: {
     flexDirection: 'row',

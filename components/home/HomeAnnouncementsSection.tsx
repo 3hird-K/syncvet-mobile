@@ -1,19 +1,23 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useQuery } from '@tanstack/react-query';
 
 import { colors, typography } from '@theme';
 import { supabase } from '@lib/supabase';
 import { haptic } from '@lib/haptics';
+import { Skeleton, SkeletonCircle } from '@components/ui/Skeleton';
 
 export interface AnnouncementItem {
   id: string;
@@ -30,6 +34,14 @@ export interface AnnouncementItem {
   image_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MaximizedImageInfo {
+  url: string;
+  title?: string;
+  authorName?: string;
+  authorRole?: string;
+  created_at?: string;
 }
 
 const CATEGORIES = [
@@ -57,12 +69,17 @@ function formatRelativeTime(dateString: string): string {
 
 export function HomeAnnouncementsSection() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [maximizedImage, setMaximizedImage] = useState<MaximizedImageInfo | null>(null);
 
-  const fetchAnnouncements = useCallback(async () => {
-    try {
-      setLoading(true);
+  // TanStack Query for caching, revalidation, and background sync
+  const {
+    data: announcements = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: async (): Promise<AnnouncementItem[]> => {
       const { data, error } = await supabase
         .from('announcements')
         .select('*')
@@ -71,26 +88,18 @@ export function HomeAnnouncementsSection() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.warn('Error fetching announcements:', error.message);
-        return;
+        throw new Error(error.message);
       }
 
       // Filter out internal system configuration records (e.g. quota config)
-      const visible = (data || []).filter(
+      return (data || []).filter(
         (a) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
       );
-
-      setAnnouncements(visible);
-    } catch (err) {
-      console.warn('Announcements fetch exception:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAnnouncements();
-  }, [fetchAnnouncements]);
+    },
+    staleTime: 1000 * 60 * 3, // 3 minutes stale time
+    gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
+    refetchOnReconnect: true,
+  });
 
   const filteredAnnouncements = useMemo(() => {
     if (selectedCategory === 'All') return announcements;
@@ -100,6 +109,23 @@ export function HomeAnnouncementsSection() {
         (selectedCategory === 'Public Health' && a.category?.toLowerCase() === 'general'),
     );
   }, [selectedCategory, announcements]);
+
+  const handleOpenImage = (item: AnnouncementItem) => {
+    if (!item.image_url) return;
+    haptic.light();
+    setMaximizedImage({
+      url: item.image_url,
+      title: item.title,
+      authorName: item.author_name,
+      authorRole: item.author_role,
+      created_at: item.created_at,
+    });
+  };
+
+  const handleCloseImage = () => {
+    haptic.light();
+    setMaximizedImage(null);
+  };
 
   return (
     <Animated.View entering={FadeInDown.delay(120).duration(280)} style={styles.section}>
@@ -138,11 +164,26 @@ export function HomeAnnouncementsSection() {
         </ScrollView>
       </View>
 
-      {/* Announcements Feed (Facebook Style Posts) */}
-      {loading && announcements.length === 0 ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading official CVO updates...</Text>
+      {/* Announcements Feed (Facebook Style Posts or Facebook Skeletons) */}
+      {isLoading && announcements.length === 0 ? (
+        <View style={styles.skeletonContainer}>
+          <FacebookPostSkeleton hasImage />
+          <FacebookPostSkeleton />
+          <FacebookPostSkeleton hasImage />
+        </View>
+      ) : isError ? (
+        <View style={styles.emptyCard}>
+          <Ionicons name="alert-circle-outline" size={30} color={colors.warning} />
+          <Text style={styles.emptyTitle}>Unable to load announcements</Text>
+          <Text style={styles.emptySubtitle}>
+            Please check your network connection and try again.
+          </Text>
+          <Pressable
+            onPress={() => refetch()}
+            style={styles.retryBtn}
+          >
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </Pressable>
         </View>
       ) : filteredAnnouncements.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -154,14 +195,70 @@ export function HomeAnnouncementsSection() {
         </View>
       ) : (
         filteredAnnouncements.map((item, index) => (
-          <FacebookPostCard key={item.id} item={item} isFirst={index === 0} />
+          <FacebookPostCard
+            key={item.id}
+            item={item}
+            isFirst={index === 0}
+            onImagePress={() => handleOpenImage(item)}
+          />
         ))
       )}
+
+      {/* Facebook-style Fullscreen Maximized Image Viewer Modal */}
+      <FacebookImageViewerModal
+        imageInfo={maximizedImage}
+        onClose={handleCloseImage}
+      />
     </Animated.View>
   );
 }
 
-function FacebookPostCard({ item, isFirst }: { item: AnnouncementItem; isFirst: boolean }) {
+/**
+ * Facebook Post Skeleton Loader
+ * Mimics Facebook app feed loading placeholders with shimmering avatar, lines, and media.
+ */
+function FacebookPostSkeleton({ hasImage = false }: { hasImage?: boolean }) {
+  return (
+    <View style={styles.fbPostWrapper}>
+      <View style={styles.fbSeparator} />
+      <View style={styles.fbPostContainer}>
+        {/* Header Skeleton */}
+        <View style={styles.fbHeaderRow}>
+          <SkeletonCircle size={40} />
+          <View style={{ flex: 1, marginLeft: 10, gap: 6 }}>
+            <Skeleton width="45%" height={14} borderRadius={4} />
+            <Skeleton width="30%" height={11} borderRadius={4} />
+          </View>
+          <Skeleton width={18} height={18} borderRadius={9} />
+        </View>
+
+        {/* Text Body Skeleton */}
+        <View style={styles.fbTextWrap}>
+          <Skeleton width="94%" height={13} borderRadius={4} style={{ marginBottom: 6 }} />
+          <Skeleton width="86%" height={13} borderRadius={4} style={{ marginBottom: 6 }} />
+          <Skeleton width="55%" height={13} borderRadius={4} style={{ marginBottom: 4 }} />
+        </View>
+
+        {/* Image Media Skeleton (Full Bleed) */}
+        {hasImage && (
+          <View style={styles.fbFullWidthImageWrap}>
+            <Skeleton width="100%" height={280} borderRadius={0} />
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function FacebookPostCard({
+  item,
+  isFirst,
+  onImagePress,
+}: {
+  item: AnnouncementItem;
+  isFirst: boolean;
+  onImagePress: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   // Format internal brackets like [EVENT_DATE:2026-11-09] into clean human dates
@@ -293,20 +390,99 @@ function FacebookPostCard({ item, isFirst }: { item: AnnouncementItem; isFirst: 
           </Text>
         </View>
 
-        {/* Full Width Edge-to-Edge Media (0 margin, 0 padding, full bleed touches edges) */}
+        {/* Full Width Edge-to-Edge Media: Tap to Maximize in Fullscreen */}
         {item.image_url ? (
-          <View style={styles.fbFullWidthImageWrap}>
+          <Pressable
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Maximize Image"
+            onPress={onImagePress}
+            style={({ pressed }) => [
+              styles.fbFullWidthImageWrap,
+              pressed && styles.imagePressed,
+            ]}
+          >
             <Image
               source={{ uri: item.image_url }}
               style={styles.fbFullWidthImage}
               resizeMode="cover"
             />
-          </View>
+          </Pressable>
         ) : null}
 
         {/* No reactions per user explicit instruction */}
       </View>
     </View>
+  );
+}
+
+/**
+ * Facebook-style Fullscreen Maximized Photo Viewer Modal
+ */
+function FacebookImageViewerModal({
+  imageInfo,
+  onClose,
+}: {
+  imageInfo: MaximizedImageInfo | null;
+  onClose: () => void;
+}) {
+  if (!imageInfo) return null;
+
+  return (
+    <Modal
+      visible={Boolean(imageInfo)}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalBackdrop}>
+        {/* Top Header Bar */}
+        <View style={styles.modalHeader}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close photo viewer"
+            onPress={onClose}
+            hitSlop={10}
+            style={styles.modalCloseBtn}
+          >
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </Pressable>
+
+          <View style={styles.modalHeaderMeta}>
+            <Text style={styles.modalAuthorName} numberOfLines={1}>
+              {imageInfo.authorName || 'City Veterinary Office'}
+            </Text>
+            {imageInfo.created_at ? (
+              <Text style={styles.modalTimeText}>
+                {formatRelativeTime(imageInfo.created_at)} · 🌐
+              </Text>
+            ) : null}
+          </View>
+
+          <View style={styles.modalHeaderRight}>
+            <Ionicons name="ellipsis-horizontal" size={22} color="#FFFFFF" />
+          </View>
+        </View>
+
+        {/* Center Maximized Fullscreen Image */}
+        <Pressable style={styles.modalImageCenterWrap} onPress={onClose}>
+          <Image
+            source={{ uri: imageInfo.url }}
+            style={styles.modalMaximizedImage}
+            resizeMode="contain"
+          />
+        </Pressable>
+
+        {/* Bottom Post Title / Caption Overlay */}
+        {imageInfo.title ? (
+          <View style={styles.modalBottomBar}>
+            <Text style={styles.modalTitleText} numberOfLines={3}>
+              {imageInfo.title}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </Modal>
   );
 }
 
@@ -355,20 +531,12 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
 
-  /* Empty & Loading */
-  loadingBox: {
+  /* Skeleton Container */
+  skeletonContainer: {
     width: '100%',
-    padding: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    gap: 8,
   },
-  loadingText: {
-    fontFamily: typography.font.regular,
-    fontSize: 12,
-    color: '#64748B',
-  },
+
+  /* Empty & Error Cards */
   emptyCard: {
     width: '100%',
     padding: 32,
@@ -388,6 +556,18 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     marginTop: 4,
+  },
+  retryBtn: {
+    marginTop: 12,
+    backgroundColor: '#0D9488',
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  retryBtnText: {
+    fontFamily: typography.font.bold,
+    fontSize: 12,
+    color: '#FFFFFF',
   },
 
   /* Facebook Post Layout */
@@ -555,8 +735,78 @@ const styles = StyleSheet.create({
     height: 350,
     backgroundColor: '#1E293B',
   },
+  imagePressed: {
+    opacity: 0.9,
+  },
   fbFullWidthImage: {
     width: '100%',
     height: '100%',
+  },
+
+  /* Fullscreen Modal Image Viewer */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'space-between',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 54,
+    paddingBottom: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    zIndex: 10,
+  },
+  modalCloseBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalHeaderMeta: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  modalAuthorName: {
+    fontFamily: typography.font.bold,
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  modalTimeText: {
+    fontFamily: typography.font.regular,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginTop: 1,
+  },
+  modalHeaderRight: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalImageCenterWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  modalMaximizedImage: {
+    width: '100%',
+    height: '100%',
+  },
+  modalBottomBar: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  modalTitleText: {
+    fontFamily: typography.font.regular,
+    fontSize: 14,
+    color: '#FFFFFF',
+    lineHeight: 20,
   },
 });

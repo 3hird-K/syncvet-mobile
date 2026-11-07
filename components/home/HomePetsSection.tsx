@@ -43,6 +43,33 @@ function getPetGradient(pet: Pet, index: number) {
   return GRADIENT_PALETTES[index % 2 === 0 ? 0 : 2];
 }
 
+const TEASER_PETS = [
+  {
+    id: '__teaser_dog__',
+    name: 'Add Dog',
+    breed: 'Canine Passport',
+    gradient: GRADIENT_PALETTES[1], // Deep Ocean Teal
+    avatarSource: require('@assets/dog-profiles/image-removebg-preview (1).png'),
+    route: '/pets/add',
+  },
+  {
+    id: '__teaser_cat__',
+    name: 'Add Cat',
+    breed: 'Feline Passport',
+    gradient: GRADIENT_PALETTES[0], // Deep Violet
+    avatarSource: require('@assets/cat-profiles/image-removebg-preview (3).png'),
+    route: '/pets/add',
+  },
+  {
+    id: '__teaser_qr__',
+    name: 'Digital Tag',
+    breed: 'Official QR Record',
+    gradient: GRADIENT_PALETTES[2], // Rich Indigo
+    avatarSource: require('@assets/dog-profiles/image-removebg-preview (4).png'),
+    route: '/pets/add',
+  },
+];
+
 export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
   const router = useRouter();
 
@@ -52,9 +79,13 @@ export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
   };
 
   // Prepend Facebook Stories-style "Add Pet" card as the first item
-  const carouselItems: (Pet | { id: string; isCreateCard: true })[] = [
-    { id: '__add_pet_story__', isCreateCard: true },
-    ...pets,
+  // If user has 0 pets, fill carousel with interactive teaser cards so it's not empty!
+  const hasPets = pets.length > 0;
+  const carouselItems = [
+    { id: '__add_pet_story__', isCreateCard: true as const },
+    ...(hasPets
+      ? pets.map((p) => ({ ...p, isTeaser: false as const }))
+      : TEASER_PETS.map((t) => ({ ...t, isTeaser: true as const }))),
   ];
 
   return (
@@ -92,7 +123,7 @@ export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
                     pressed && styles.cardPressed,
                   ]}
                 >
-                  {/* Top 62% Image Portion: User Profile Photo */}
+                  {/* Top Image Portion: User Profile Photo */}
                   <View style={styles.createStoryTopWrap}>
                     {userPhotoUrl ? (
                       <Image
@@ -122,7 +153,65 @@ export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
               );
             }
 
-            // Pet Profile Cards
+            // Teaser Cards when user has 0 pets registered yet
+            if ('isTeaser' in item && item.isTeaser) {
+              const teaser = item as (typeof TEASER_PETS)[number];
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={teaser.name}
+                  onPress={() => {
+                    haptic.light();
+                    router.push(teaser.route as never);
+                  }}
+                  style={({ pressed }) => [
+                    styles.petCard,
+                    shadows.sm,
+                    pressed && styles.cardPressed,
+                  ]}
+                >
+                  <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+                    <Defs>
+                      <LinearGradient id={`card-grad-${teaser.id}`} x1="0" y1="0" x2="0" y2="1">
+                        <Stop offset="0%" stopColor={teaser.gradient.top} />
+                        <Stop offset="100%" stopColor={teaser.gradient.bottom} />
+                      </LinearGradient>
+                    </Defs>
+                    <Rect width="100%" height="100%" fill={`url(#card-grad-${teaser.id})`} />
+                  </Svg>
+
+                  <View style={styles.petImageWrap}>
+                    <Image
+                      source={teaser.avatarSource}
+                      style={styles.petImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+
+                  <Svg width="100%" height={85} style={styles.scrim}>
+                    <Defs>
+                      <LinearGradient id={`scrim-${teaser.id}`} x1="0" y1="0" x2="0" y2="1">
+                        <Stop offset="0%" stopColor="#000000" stopOpacity="0" />
+                        <Stop offset="45%" stopColor="#000000" stopOpacity="0.45" />
+                        <Stop offset="100%" stopColor="#000000" stopOpacity="0.9" />
+                      </LinearGradient>
+                    </Defs>
+                    <Rect width="100%" height="100%" fill={`url(#scrim-${teaser.id})`} />
+                  </Svg>
+
+                  <View style={styles.petInfo}>
+                    <Text style={styles.petName} numberOfLines={1}>
+                      {teaser.name}
+                    </Text>
+                    <Text style={styles.petBreed} numberOfLines={1}>
+                      {teaser.breed}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            }
+
+            // Real Registered Pet Profile Cards
             const pet = item as Pet;
             const petIndex = index - 1;
             const isDog = pet.species?.toLowerCase() === 'dog';
@@ -195,8 +284,8 @@ export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
 
 const styles = StyleSheet.create({
   section: {
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: 6,
+    marginBottom: 4, // Very small gap to the care action cards below
     width: '100%',
   },
   cardPressed: {
@@ -242,13 +331,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   horizontalScrollContent: {
-    gap: 6, // Very little gap just like Facebook stories!
+    gap: 6, // Very little gap just like Facebook stories
     paddingHorizontal: '1.5%',
   },
 
   /* Facebook-style Create Story / Add Pet Card */
   createStoryCard: {
-    width: 118,
+    width: 130,
     height: 195,
     borderRadius: 14,
     overflow: 'hidden',
@@ -298,7 +387,7 @@ const styles = StyleSheet.create({
 
   /* Pet Gradient Cards */
   petCard: {
-    width: 118,
+    width: 130,
     height: 195,
     borderRadius: 14,
     overflow: 'hidden',
@@ -315,7 +404,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   petImage: {
-    width: 140,
+    width: 152,
     height: 188,
   },
   scrim: {
