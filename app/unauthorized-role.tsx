@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import {
   Image,
-  Linking,
-  Platform,
   StyleSheet,
   Text,
   View,
@@ -11,9 +9,8 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth, useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
 
-import { colors, radius, shadows, typography } from '@theme';
+import { colors, radius, typography } from '@theme';
 import { Button } from '@components/ui/Button';
 import { useAuthStore } from '@store/useAuthStore';
 import { formatRoleTitle } from '@services/auth/types';
@@ -68,80 +65,60 @@ export default function UnauthorizedRoleScreen() {
     }
   };
 
-  const handleOpenWebPortal = async () => {
-    haptic.light();
-    const portalUrl = 'https://syncvet.cagayandeoro.gov.ph';
-    try {
-      await WebBrowser.openBrowserAsync(portalUrl);
-    } catch {
-      await Linking.openURL(portalUrl).catch(() => {
-        toast.info('SyncVet Web Portal', {
-          description: 'Visit syncvet.cagayandeoro.gov.ph on your computer.',
-        });
-      });
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.container}>
-        {/* Top Restricted Badge Icon */}
-        <View style={styles.iconCircle}>
-          <Ionicons name="shield-half-sharp" size={44} color={colors.warning} />
+        {/* Minimalist Brand Accent Pill */}
+        <View style={styles.badgePill}>
+          <View style={styles.statusDot} />
+          <Text style={styles.badgePillText}>Pet Owner Portal</Text>
         </View>
 
-        {/* Title & Subtitle */}
+        {/* Minimalist Heading */}
         <Text style={styles.title}>Pet Owner Access Only</Text>
         <Text style={styles.subtitle}>
-          This SyncVet mobile app is exclusively designed for CDO Pet Owners and Residents.
+          This mobile app is built exclusively for CDO pet owners and residents. Staff management tools are hosted on the web portal.
         </Text>
 
-        {/* Account & Role Card */}
-        <View style={styles.accountCard}>
-          <View style={styles.accountHeader}>
+        {/* Modern Minimalist User Profile Card */}
+        <View style={styles.profileCard}>
+          <View style={styles.profileRow}>
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={20} color={colors.primary} />
+                <Ionicons name="person-outline" size={20} color={colors.primary} />
               </View>
             )}
-            <View style={styles.accountDetails}>
-              <Text style={styles.accountName} numberOfLines={1}>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName} numberOfLines={1}>
                 {fullName}
               </Text>
-              <Text style={styles.accountEmail} numberOfLines={1}>
+              <Text style={styles.profileEmail} numberOfLines={1}>
                 {email}
               </Text>
             </View>
           </View>
 
-          {/* Detected Restricted Role Badge */}
-          <View style={styles.roleBadgeRow}>
-            <View style={styles.roleBadge}>
-              <Ionicons name="alert-circle" size={14} color={colors.warningDark} />
-              <Text style={styles.roleBadgeText}>
-                Active Role: <Text style={styles.roleBadgeStrong}>{roleTitle}</Text>
-              </Text>
-            </View>
+          {/* Minimalist Active Role Pill */}
+          <View style={styles.roleTag}>
+            <Text style={styles.roleTagLabel}>Current Account Role:</Text>
+            <Text style={styles.roleTagValue}>{roleTitle}</Text>
           </View>
         </View>
 
-        {/* Notice Explanation Box */}
-        <View style={styles.noticeBox}>
-          <Ionicons name="desktop-outline" size={20} color={colors.primary} style={styles.noticeIcon} />
-          <View style={styles.noticeContent}>
-            <Text style={styles.noticeTitle}>Staff Web Portal Required</Text>
-            <Text style={styles.noticeText}>
-              Veterinarians and Administrators must sign in via the SyncVet Web Portal or CVO Admin Console for clinic operations, consultations, and rabies management.
-            </Text>
-          </View>
+        {/* Minimalist Quiet Guidance Note */}
+        <View style={styles.guidanceBox}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} style={styles.guidanceIcon} />
+          <Text style={styles.guidanceText}>
+            Veterinarians and Administrators should sign in from a desktop browser to access clinical records and consultation consoles.
+          </Text>
         </View>
 
         <View style={styles.spacer} />
 
-        {/* Action Buttons */}
-        <View style={styles.buttonGroup}>
+        {/* Single Minimalist Action Button */}
+        <View style={styles.buttonWrap}>
           <Button
             title={signingOut ? 'Signing Out...' : 'Sign In with Pet Owner Account'}
             variant="primary"
@@ -149,13 +126,6 @@ export default function UnauthorizedRoleScreen() {
             onPress={handleSwitchAccount}
             disabled={signingOut}
             loading={signingOut}
-          />
-
-          <Button
-            title="Open CVO Web Portal"
-            variant="outline"
-            size="md"
-            onPress={handleOpenWebPortal}
           />
         </View>
       </View>
@@ -171,57 +141,68 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingTop: 36,
     paddingBottom: 24,
     alignItems: 'center',
   },
-  iconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: colors.warningLight,
-    borderWidth: 2,
-    borderColor: colors.warning,
+  badgePill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    gap: 6,
     marginBottom: 20,
-    ...shadows.sm,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  badgePillText: {
+    fontFamily: typography.font.semibold,
+    fontSize: 12,
+    color: colors.primary,
+    letterSpacing: 0.2,
   },
   title: {
     fontFamily: typography.font.bold,
-    fontSize: 24,
+    fontSize: 23,
     color: colors.textPrimary,
     textAlign: 'center',
+    letterSpacing: -0.3,
     marginBottom: 8,
   },
   subtitle: {
     fontFamily: typography.font.regular,
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 19,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     marginBottom: 28,
   },
-  accountCard: {
+  profileCard: {
     width: '100%',
     backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.lg,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  accountHeader: {
+  profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
   avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
     marginRight: 12,
+    backgroundColor: colors.border,
   },
   avatarPlaceholder: {
     width: 44,
@@ -232,77 +213,71 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  accountDetails: {
+  profileInfo: {
     flex: 1,
   },
-  accountName: {
+  profileName: {
     fontFamily: typography.font.bold,
     fontSize: 15,
     color: colors.textPrimary,
   },
-  accountEmail: {
+  profileEmail: {
     fontFamily: typography.font.regular,
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 2,
   },
-  roleBadgeRow: {
-    flexDirection: 'row',
-  },
-  roleBadge: {
+  roleTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.warningLight,
-    borderWidth: 1,
-    borderColor: colors.warning,
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 6,
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  roleBadgeText: {
+  roleTagLabel: {
     fontFamily: typography.font.medium,
     fontSize: 12,
-    color: colors.warningDark,
+    color: colors.textMuted,
   },
-  roleBadgeStrong: {
+  roleTagValue: {
     fontFamily: typography.font.bold,
-    color: colors.warningDark,
+    fontSize: 12,
+    color: colors.textPrimary,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
   },
-  noticeBox: {
+  guidanceBox: {
     width: '100%',
     flexDirection: 'row',
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: colors.border,
     borderRadius: radius.md,
     padding: 14,
-    gap: 12,
+    gap: 10,
+    alignItems: 'flex-start',
   },
-  noticeIcon: {
-    marginTop: 2,
+  guidanceIcon: {
+    marginTop: 1,
   },
-  noticeContent: {
+  guidanceText: {
     flex: 1,
-  },
-  noticeTitle: {
-    fontFamily: typography.font.bold,
-    fontSize: 13,
-    color: colors.primary,
-    marginBottom: 2,
-  },
-  noticeText: {
     fontFamily: typography.font.regular,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
     color: colors.textSecondary,
   },
   spacer: {
     flex: 1,
   },
-  buttonGroup: {
+  buttonWrap: {
     width: '100%',
-    gap: 12,
   },
 });
 
