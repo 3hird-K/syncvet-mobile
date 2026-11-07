@@ -285,10 +285,10 @@ export function AddressPicker({
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listContent}
               ListHeaderComponent={
-                searchQuery.trim() &&
-                !filteredLocations.some(
-                  (l) => l.fullLocation.toLowerCase() === searchQuery.trim().toLowerCase(),
-                ) ? (
+                (searchQuery.trim() &&
+                  !filteredLocations.some(
+                    (l) => l.fullLocation.toLowerCase() === searchQuery.trim().toLowerCase(),
+                  ) ? (
                   <Pressable
                     onPress={() => handleSelectLocation(searchQuery.trim())}
                     style={({ pressed }) => [
@@ -305,7 +305,7 @@ export function AddressPicker({
                     </View>
                     <Ionicons name="arrow-forward" size={18} color={colors.primary} />
                   </Pressable>
-                ) : null
+                ) : undefined)
               }
               renderItem={({ item }) => {
                 const isSelected = selectedLocation === item.fullLocation;

@@ -1,18 +1,51 @@
-export type UserRole = 'resident';
+export type UserRole =
+  | 'resident'
+  | 'pet_owner'
+  | 'veterinarian'
+  | 'administrator'
+  | 'admin'
+  | (string & {});
+
+/**
+ * Staff and administrative roles that must NOT access the resident mobile app.
+ * Directs them to the web portal instead.
+ */
+export function isRestrictedStaffRole(role?: string | null): boolean {
+  if (!role) return false;
+  const normalized = role.trim().toLowerCase();
+  return (
+    normalized === 'veterinarian' ||
+    normalized === 'administrator' ||
+    normalized === 'admin' ||
+    normalized === 'vet'
+  );
+}
+
+export function formatRoleTitle(role?: string | null): string {
+  if (!role) return 'Pet Owner';
+  const normalized = role.trim().toLowerCase();
+  if (normalized === 'veterinarian' || normalized === 'vet') return 'Veterinarian';
+  if (normalized === 'administrator' || normalized === 'admin') return 'Administrator';
+  if (normalized === 'pet_owner' || normalized === 'resident') return 'Pet Owner';
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
 
 export type AuthProvider = 'google' | 'email';
 
 export interface AuthUser {
   id: string;
   fullName: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   mobileNumber: string;
   address: string;
   photoUrl?: string;
   authProvider: AuthProvider;
-  /** True once the owner has completed first-run registration (mobile + address + first pet). */
+  /** True once the owner has completed first-run registration. */
   profileCompleted: boolean;
   role: UserRole;
+  rawUserMetaData?: Record<string, any>;
   createdAt: string;
   updatedAt?: string;
 }

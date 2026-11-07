@@ -8,6 +8,7 @@ import type {
   GoogleProfile,
   SignInParams,
   SignUpParams,
+  UserRole,
 } from '@services/auth';
 
 type AuthStatus = 'idle' | 'restoring' | 'authenticated' | 'unauthenticated';
@@ -30,6 +31,21 @@ interface AuthState {
     firstName?: string,
     lastName?: string
   ) => Promise<void>;
+  completeResidentOnboarding: (payload: {
+    firstName: string;
+    lastName: string;
+    fullName?: string;
+    mobileNumber: string;
+    barangay: string;
+    street: string;
+    landmark?: string;
+    smsNotificationsEnabled: boolean;
+    emergencyContactName?: string;
+    emergencyContactRelationship?: string;
+    emergencyContactPhone?: string;
+    caredAnimals?: ('dogs' | 'cats')[];
+    healthDeclarationAgreed: boolean;
+  }) => Promise<void>;
   markRegistrationComplete: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -116,16 +132,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       dbUser?.profile_completed ?? currentUser?.profileCompleted,
     );
 
+    const role: UserRole =
+      dbUser?.role ||
+      (clerkUser.publicMetadata?.role as string) ||
+      (clerkUser.unsafeMetadata?.role as string) ||
+      currentUser?.role ||
+      'resident';
+
     const updatedUser: AuthUser = {
       id: clerkUser.id || currentUser?.id || `usr_${Date.now().toString(36)}`,
       fullName,
+      firstName: dbUser?.first_name || clerkUser.firstName,
+      lastName: dbUser?.last_name || clerkUser.lastName,
       email,
       mobileNumber,
       address,
       photoUrl,
       authProvider: (currentUser?.authProvider || 'google'),
       profileCompleted,
-      role: 'resident',
+      role,
+      rawUserMetaData: dbUser?.raw_user_meta_data || currentUser?.rawUserMetaData,
       createdAt: dbUser?.created_at || currentUser?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -197,6 +223,63 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       fullName: cleanName,
       mobileNumber: cleanMobile,
       address: cleanAddress,
+      updatedAt: new Date().toISOString(),
+    };
+    await getAuthService().updateUser(updated);
+    set({ user: updated });
+  },
+
+  completeResidentOnboarding: async (payload) => {
+    const user = get().user;
+    if (!user) {
+      throw new AuthError('UNKNOWN', 'No active session.');
+    }
+
+    const cleanMobile = payload.mobileNumber.trim();
+    const cleanAddress = `${payload.street.trim()}, ${payload.barangay.trim()}, Cagayan de Oro City`;
+    const cleanFirst = payload.firstName.trim();
+    const cleanLast = payload.lastName.trim();
+    const cleanName = (payload.fullName || `${cleanFirst} ${cleanLast}`).trim() || user.fullName;
+
+    const metadata = {
+      barangay: payload.barangay.trim(),
+      street: payload.street.trim(),
+      landmark: payload.landmark?.trim() || '',
+      sms_notifications_enabled: payload.smsNotificationsEnabled,
+      emergency_contact_name: payload.emergencyContactName?.trim() || '',
+      emergency_contact_relationship: payload.emergencyContactRelationship?.trim() || '',
+      emergency_contact_phone: payload.emergencyContactPhone?.trim() || '',
+      cared_animals: payload.caredAnimals || [],
+      health_declaration_agreed: payload.healthDeclarationAgreed,
+    };
+
+    try {
+      await supabase
+        .from('users')
+        .update({
+          phone_number: cleanMobile,
+          address: cleanAddress,
+          full_name: cleanName,
+          first_name: cleanFirst || null,
+          last_name: cleanLast || null,
+          profile_completed: true,
+          raw_user_meta_data: metadata,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+    } catch (err: any) {
+      console.warn('[useAuthStore] completeResidentOnboarding error:', err?.message);
+    }
+
+    const updated: AuthUser = {
+      ...user,
+      fullName: cleanName,
+      firstName: cleanFirst,
+      lastName: cleanLast,
+      mobileNumber: cleanMobile,
+      address: cleanAddress,
+      profileCompleted: true,
+      rawUserMetaData: metadata,
       updatedAt: new Date().toISOString(),
     };
     await getAuthService().updateUser(updated);

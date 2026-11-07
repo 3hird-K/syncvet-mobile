@@ -10,51 +10,138 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
-      service_transactions: {
+      animal_control_cases: {
         Row: {
+          animal_description: string
+          barangay: string
+          breed_estimate: string | null
+          capture_time: string | null
+          case_id: string
+          color: string | null
           created_at: string
-          date: string
-          detail: string | null
+          date_captured: string
+          estimated_age: string | null
+          gender: string | null
+          holding_days_elapsed: number
           id: string
-          owner_id: string
-          reference_id: string | null
+          impounding_facility: string | null
+          intake_officer: string
+          max_holding_days: number
+          owner_claimant: Json | null
+          reason: string
+          species: string
+          specific_location: string | null
           status: string
-          title: string
-          transaction_no: string
-          transaction_type: string
+          timeline: Json
+          updated_at: string
         }
         Insert: {
+          animal_description: string
+          barangay: string
+          breed_estimate?: string | null
+          capture_time?: string | null
+          case_id: string
+          color?: string | null
           created_at?: string
-          date?: string
-          detail?: string | null
+          date_captured?: string
+          estimated_age?: string | null
+          gender?: string | null
+          holding_days_elapsed?: number
           id?: string
-          owner_id: string
-          reference_id?: string | null
+          impounding_facility?: string | null
+          intake_officer: string
+          max_holding_days?: number
+          owner_claimant?: Json | null
+          reason: string
+          species?: string
+          specific_location?: string | null
           status?: string
-          title: string
-          transaction_no: string
-          transaction_type: string
+          timeline?: Json
+          updated_at?: string
         }
         Update: {
+          animal_description?: string
+          barangay?: string
+          breed_estimate?: string | null
+          capture_time?: string | null
+          case_id?: string
+          color?: string | null
           created_at?: string
-          date?: string
-          detail?: string | null
+          date_captured?: string
+          estimated_age?: string | null
+          gender?: string | null
+          holding_days_elapsed?: number
           id?: string
-          owner_id?: string
-          reference_id?: string | null
+          impounding_facility?: string | null
+          intake_officer?: string
+          max_holding_days?: number
+          owner_claimant?: Json | null
+          reason?: string
+          species?: string
+          specific_location?: string | null
           status?: string
+          timeline?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      announcements: {
+        Row: {
+          author_id: string | null
+          author_name: string
+          author_role: string
+          category: string
+          content: string
+          created_at: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          is_pinned: boolean
+          priority: string
+          target_barangay: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name?: string
+          author_role?: string
+          category?: string
+          content: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          is_pinned?: boolean
+          priority?: string
+          target_barangay?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string
+          author_role?: string
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          is_pinned?: boolean
+          priority?: string
+          target_barangay?: string | null
           title?: string
-          transaction_no?: string
-          transaction_type?: string
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "service_transactions_owner_id_fkey"
-            columns: ["owner_id"]
+            foreignKeyName: "announcements_author_id_fkey"
+            columns: ["author_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -68,9 +155,9 @@ export type Database = {
           id: string
           location: string | null
           notes: string | null
-          owner_id: string
+          owner_id: string | null
           pet_id: string | null
-          pet_name: string
+          pet_name: string | null
           service_id: string
           status: string
           time_slot: string
@@ -82,9 +169,9 @@ export type Database = {
           id?: string
           location?: string | null
           notes?: string | null
-          owner_id: string
+          owner_id?: string | null
           pet_id?: string | null
-          pet_name: string
+          pet_name?: string | null
           service_id: string
           status?: string
           time_slot: string
@@ -96,9 +183,9 @@ export type Database = {
           id?: string
           location?: string | null
           notes?: string | null
-          owner_id?: string
+          owner_id?: string | null
           pet_id?: string | null
-          pet_name?: string
+          pet_name?: string | null
           service_id?: string
           status?: string
           time_slot?: string
@@ -120,6 +207,354 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: string | null
+          entity: string
+          id: string
+          record_id: string
+          role: string
+          user_name: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: string | null
+          entity: string
+          id?: string
+          record_id: string
+          role: string
+          user_name: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: string | null
+          entity?: string
+          id?: string
+          record_id?: string
+          role?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          attachment_url: string | null
+          chat_id: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          message_text: string
+          sender_id: string | null
+          sender_name: string | null
+          sender_role: string
+        }
+        Insert: {
+          attachment_url?: string | null
+          chat_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message_text: string
+          sender_id?: string | null
+          sender_name?: string | null
+          sender_role: string
+        }
+        Update: {
+          attachment_url?: string | null
+          chat_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message_text?: string
+          sender_id?: string | null
+          sender_name?: string | null
+          sender_role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chats: {
+        Row: {
+          assigned_vet_name: string | null
+          created_at: string
+          id: string
+          last_message: string | null
+          last_message_at: string | null
+          owner_id: string | null
+          pet_id: string | null
+          pet_name: string | null
+          status: string
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_vet_name?: string | null
+          created_at?: string
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          owner_id?: string | null
+          pet_id?: string | null
+          pet_name?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_vet_name?: string | null
+          created_at?: string
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          owner_id?: string | null
+          pet_id?: string | null
+          pet_name?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chats_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chats_pet_id_fkey"
+            columns: ["pet_id"]
+            isOneToOne: false
+            referencedRelation: "pets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultations: {
+        Row: {
+          breed: string | null
+          chief_complaint: string
+          created_at: string
+          date: string
+          diagnosis: string
+          dosage_instructions: string | null
+          encounter_no: string
+          follow_up_date: string | null
+          heart_rate_bpm: number | null
+          id: string
+          medication: string | null
+          mucous_membrane: string | null
+          owner_barangay: string | null
+          owner_contact: string | null
+          owner_id: string | null
+          owner_name: string | null
+          pet_id: string | null
+          pet_name: string | null
+          service_type: string
+          species: string
+          status: string
+          symptoms: string[] | null
+          temperature_c: number | null
+          time: string
+          treatment: string
+          updated_at: string
+          vet_name: string
+          veterinarian_notes: string | null
+          weight_kg: number | null
+        }
+        Insert: {
+          breed?: string | null
+          chief_complaint: string
+          created_at?: string
+          date?: string
+          diagnosis: string
+          dosage_instructions?: string | null
+          encounter_no: string
+          follow_up_date?: string | null
+          heart_rate_bpm?: number | null
+          id?: string
+          medication?: string | null
+          mucous_membrane?: string | null
+          owner_barangay?: string | null
+          owner_contact?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          pet_id?: string | null
+          pet_name?: string | null
+          service_type?: string
+          species: string
+          status?: string
+          symptoms?: string[] | null
+          temperature_c?: number | null
+          time?: string
+          treatment: string
+          updated_at?: string
+          vet_name: string
+          veterinarian_notes?: string | null
+          weight_kg?: number | null
+        }
+        Update: {
+          breed?: string | null
+          chief_complaint?: string
+          created_at?: string
+          date?: string
+          diagnosis?: string
+          dosage_instructions?: string | null
+          encounter_no?: string
+          follow_up_date?: string | null
+          heart_rate_bpm?: number | null
+          id?: string
+          medication?: string | null
+          mucous_membrane?: string | null
+          owner_barangay?: string | null
+          owner_contact?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          pet_id?: string | null
+          pet_name?: string | null
+          service_type?: string
+          species?: string
+          status?: string
+          symptoms?: string[] | null
+          temperature_c?: number | null
+          time?: string
+          treatment?: string
+          updated_at?: string
+          vet_name?: string
+          veterinarian_notes?: string | null
+          weight_kg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultations_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consultations_pet_id_fkey"
+            columns: ["pet_id"]
+            isOneToOne: false
+            referencedRelation: "pets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_operations: {
+        Row: {
+          barangay: string
+          created_at: string
+          id: string
+          lead: string
+          notes: string | null
+          op_id: string
+          operation_type: string
+          scheduled_date: string
+          status: string
+          target_pets: number
+          updated_at: string
+          vaccinated_pets: number
+        }
+        Insert: {
+          barangay: string
+          created_at?: string
+          id?: string
+          lead: string
+          notes?: string | null
+          op_id: string
+          operation_type: string
+          scheduled_date?: string
+          status?: string
+          target_pets?: number
+          updated_at?: string
+          vaccinated_pets?: number
+        }
+        Update: {
+          barangay?: string
+          created_at?: string
+          id?: string
+          lead?: string
+          notes?: string | null
+          op_id?: string
+          operation_type?: string
+          scheduled_date?: string
+          status?: string
+          target_pets?: number
+          updated_at?: string
+          vaccinated_pets?: number
+        }
+        Relationships: []
+      }
+      inventory_items: {
+        Row: {
+          batch_number: string
+          category: string
+          created_at: string
+          expiration_date: string
+          fefo_priority: number
+          id: string
+          manufacturer: string | null
+          minimum_stock: number
+          name: string
+          status: string
+          stock: number
+          storage_location: string | null
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          batch_number: string
+          category: string
+          created_at?: string
+          expiration_date: string
+          fefo_priority?: number
+          id?: string
+          manufacturer?: string | null
+          minimum_stock?: number
+          name: string
+          status?: string
+          stock?: number
+          storage_location?: string | null
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_number?: string
+          category?: string
+          created_at?: string
+          expiration_date?: string
+          fefo_priority?: number
+          id?: string
+          manufacturer?: string | null
+          minimum_stock?: number
+          name?: string
+          status?: string
+          stock?: number
+          storage_location?: string | null
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       pets: {
         Row: {
@@ -198,6 +633,156 @@ export type Database = {
           },
         ]
       }
+      queue_tickets: {
+        Row: {
+          appointment_id: string | null
+          breed: string | null
+          called_at: string | null
+          check_in_time: string | null
+          checked_in_at: string | null
+          checked_in_via: string | null
+          completed_at: string | null
+          consultation_room: string | null
+          created_at: string
+          date: string
+          encounter_no: string | null
+          id: string
+          notes: string | null
+          owner_barangay: string | null
+          owner_contact: string | null
+          owner_id: string | null
+          owner_name: string | null
+          pet_id: string | null
+          pet_name: string
+          pet_photo_url: string | null
+          queue_sequence: number
+          service_id: string | null
+          service_title: string | null
+          serving_vet: string | null
+          species: string | null
+          status: string
+          ticket_number: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_id?: string | null
+          breed?: string | null
+          called_at?: string | null
+          check_in_time?: string | null
+          checked_in_at?: string | null
+          checked_in_via?: string | null
+          completed_at?: string | null
+          consultation_room?: string | null
+          created_at?: string
+          date: string
+          encounter_no?: string | null
+          id: string
+          notes?: string | null
+          owner_barangay?: string | null
+          owner_contact?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          pet_id?: string | null
+          pet_name: string
+          pet_photo_url?: string | null
+          queue_sequence: number
+          service_id?: string | null
+          service_title?: string | null
+          serving_vet?: string | null
+          species?: string | null
+          status?: string
+          ticket_number: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string | null
+          breed?: string | null
+          called_at?: string | null
+          check_in_time?: string | null
+          checked_in_at?: string | null
+          checked_in_via?: string | null
+          completed_at?: string | null
+          consultation_room?: string | null
+          created_at?: string
+          date?: string
+          encounter_no?: string | null
+          id?: string
+          notes?: string | null
+          owner_barangay?: string | null
+          owner_contact?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          pet_id?: string | null
+          pet_name?: string
+          pet_photo_url?: string | null
+          queue_sequence?: number
+          service_id?: string | null
+          service_title?: string | null
+          serving_vet?: string | null
+          species?: string | null
+          status?: string
+          ticket_number?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      service_transactions: {
+        Row: {
+          created_at: string
+          date: string
+          detail: string | null
+          id: string
+          owner_id: string
+          pet_id: string | null
+          reference_id: string | null
+          status: string
+          title: string
+          transaction_no: string
+          transaction_type: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          detail?: string | null
+          id?: string
+          owner_id: string
+          pet_id?: string | null
+          reference_id?: string | null
+          status?: string
+          title: string
+          transaction_no: string
+          transaction_type: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          detail?: string | null
+          id?: string
+          owner_id?: string
+          pet_id?: string | null
+          reference_id?: string | null
+          status?: string
+          title?: string
+          transaction_no?: string
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_transactions_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_transactions_pet_id_fkey"
+            columns: ["pet_id"]
+            isOneToOne: false
+            referencedRelation: "pets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           address: string | null
@@ -245,6 +830,84 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      vaccination_records: {
+        Row: {
+          administered_date: string
+          barangay: string | null
+          batch_number: string | null
+          breed: string | null
+          created_at: string
+          id: string
+          next_due_date: string | null
+          owner_contact: string | null
+          owner_id: string | null
+          owner_name: string | null
+          pet_id: string | null
+          pet_name: string | null
+          record_no: string
+          species: string
+          status: string
+          updated_at: string
+          vaccine_name: string
+          veterinarian: string
+        }
+        Insert: {
+          administered_date?: string
+          barangay?: string | null
+          batch_number?: string | null
+          breed?: string | null
+          created_at?: string
+          id?: string
+          next_due_date?: string | null
+          owner_contact?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          pet_id?: string | null
+          pet_name?: string | null
+          record_no: string
+          species?: string
+          status?: string
+          updated_at?: string
+          vaccine_name: string
+          veterinarian: string
+        }
+        Update: {
+          administered_date?: string
+          barangay?: string | null
+          batch_number?: string | null
+          breed?: string | null
+          created_at?: string
+          id?: string
+          next_due_date?: string | null
+          owner_contact?: string | null
+          owner_id?: string | null
+          owner_name?: string | null
+          pet_id?: string | null
+          pet_name?: string | null
+          record_no?: string
+          species?: string
+          status?: string
+          updated_at?: string
+          vaccine_name?: string
+          veterinarian?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vaccination_records_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vaccination_records_pet_id_fkey"
+            columns: ["pet_id"]
+            isOneToOne: false
+            referencedRelation: "pets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

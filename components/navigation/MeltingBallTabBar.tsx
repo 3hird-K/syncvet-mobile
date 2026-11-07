@@ -25,7 +25,15 @@ import type { ComponentProps } from 'react';
 import { useRouter } from 'expo-router';
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
-import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
+
+export interface BottomTabBarProps {
+  state: any;
+  descriptors: any;
+  navigation?: any;
+  emitter?: any;
+  navigateToTab?: (routeKey: string) => void;
+  insets?: any;
+}
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -257,12 +265,15 @@ function TabItem({
  * - Active label revealed cleanly inside the navbar below the cradle.
  * - 100% fluid, responsive layout across all device widths.
  */
-export function MeltingBallTabBar({
-  state,
-  descriptors,
-  navigation,
-  insets,
-}: MeltingBallTabBarProps) {
+export function MeltingBallTabBar(props: MeltingBallTabBarProps) {
+  const {
+    state,
+    descriptors,
+    navigation,
+    emitter,
+    navigateToTab,
+    insets,
+  } = props;
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
@@ -388,21 +399,33 @@ export function MeltingBallTabBar({
 
       {/* 3. Interactive Tab Buttons Row (Layer 3 - Highest Z-Index) */}
       <View style={[styles.tabsRow, { width: barWidth, height: DOCK_HEIGHT }]}>
-        {state.routes.map((route, index) => {
+        {state.routes.map((route: any, index: number) => {
           const isFocused = state.index === index;
 
           const onPress = () => {
             haptic.light();
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
+            const event = navigation?.emit
+              ? navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              })
+              : emitter?.emit?.({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
 
-            if (event.defaultPrevented) return;
+            if (event?.defaultPrevented) return;
 
             if (!isFocused) {
-              navigation.navigate(route.name, route.params);
+              if (navigation?.navigate) {
+                navigation.navigate(route.name, route.params);
+              } else if (navigateToTab) {
+                navigateToTab(route.key);
+              } else {
+                router.navigate(route.name as never);
+              }
             } else {
               // If already focused on this tab (e.g. inside a subscreen like /pets/[id]), return to root of this tab
               const rootPath = TAB_ROOT_PATHS[route.name];
@@ -414,10 +437,17 @@ export function MeltingBallTabBar({
 
           const onLongPress = () => {
             haptic.medium();
-            navigation.emit({
-              type: 'tabLongPress',
-              target: route.key,
-            });
+            if (navigation?.emit) {
+              navigation.emit({
+                type: 'tabLongPress',
+                target: route.key,
+              });
+            } else if (emitter?.emit) {
+              emitter.emit({
+                type: 'tabLongPress',
+                target: route.key,
+              });
+            }
           };
 
           return (

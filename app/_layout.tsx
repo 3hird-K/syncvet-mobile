@@ -65,10 +65,10 @@ WebBrowser.maybeCompleteAuthSession();
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.preventAutoHideAsync().catch(() => { });
 
 export const unstable_settings = {
-  initialRouteName: 'index',
+  anchor: 'index',
 };
 
 export default function RootLayout() {
@@ -84,12 +84,12 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (Platform.OS === 'android') {
-      RNStatusBar.setTranslucent(true);
-      RNStatusBar.setBackgroundColor('transparent');
+      (RNStatusBar as any).setTranslucent?.(true);
+      (RNStatusBar as any).setBackgroundColor?.('transparent');
     }
 
     // Initialize native notification channels and response routing listeners
-    notificationService.init().catch(() => {});
+    notificationService.init().catch(() => { });
     notificationRouter.setupListeners();
 
     return () => {
@@ -100,7 +100,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded || fontError) {
       restoreSession().finally(() => {
-        SplashScreen.hideAsync().catch(() => {});
+        SplashScreen.hideAsync().catch(() => { });
       });
     }
   }, [fontsLoaded, fontError, restoreSession]);

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
 
 export enum SafePermissionStatus {
   GRANTED = 'granted',
@@ -30,9 +31,15 @@ let nativeNotifications: typeof import('expo-notifications') | null = null;
 let isExpoGoAndroid = false;
 
 try {
-  const isExpoGo =
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
-    Constants.appOwnership === 'expo';
+  let isExpoGo = false;
+  try {
+    isExpoGo =
+      isRunningInExpoGo() ||
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+      Constants.appOwnership === 'expo';
+  } catch {
+    isExpoGo = false;
+  }
 
   if (isExpoGo && Platform.OS === 'android') {
     isExpoGoAndroid = true;
@@ -71,7 +78,7 @@ export const ExpoNotificationAdapter = {
       try {
         return await nativeNotifications.setNotificationChannelAsync(channelId, channelOptions);
       } catch (e) {
-        console.log('[ExpoNotificationAdapter] setNotificationChannelAsync error:', e);
+        // Suppress expected channel provider error in restricted environments like Android Expo Go
       }
     }
     return null;

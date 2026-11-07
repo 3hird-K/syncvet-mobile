@@ -7,6 +7,7 @@ import { useAuth, useUser } from '@clerk/expo';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { supabase } from '@lib/supabase';
+import { isRestrictedStaffRole } from '@services/auth/types';
 import { PawFootprintLoader } from '@components/ui/PawLoading';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
 
@@ -40,17 +41,17 @@ export default function SSOCallbackScreen() {
       }).then(async () => {
         await useAuthStore.getState().syncUserFromClerk(clerkUser);
         const currentUser = useAuthStore.getState().user;
-        let petsCount = 0;
-        try {
-          const { data } = await supabase.from('pets').select('id').eq('owner_id', clerkUser.id);
-          petsCount = (data || []).length;
-        } catch {}
+
+        // Redirect Veterinarians and Administrators away from pet owner mobile app
+        if (isRestrictedStaffRole(currentUser?.role)) {
+          router.replace('/unauthorized-role');
+          return;
+        }
 
         const hasCompletedProfile = Boolean(
           currentUser?.profileCompleted &&
           currentUser?.mobileNumber &&
-          currentUser?.address &&
-          petsCount > 0
+          currentUser?.address
         );
 
         await new Promise((res) => setTimeout(res, 800));

@@ -216,7 +216,7 @@ export function DropdownSelect({
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listContent}
               ListHeaderComponent={
-                allowCustom && searchQuery.trim() && !hasExactMatch ? (
+                (allowCustom && searchQuery.trim() && !hasExactMatch ? (
                   <Pressable
                     onPress={() => handleSelect(searchQuery.trim())}
                     style={({ pressed }) => [
@@ -235,7 +235,7 @@ export function DropdownSelect({
                     </View>
                     <Ionicons name="arrow-forward" size={18} color={colors.primary} />
                   </Pressable>
-                ) : null
+                ) : undefined)
               }
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>

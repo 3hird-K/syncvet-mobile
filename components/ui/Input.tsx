@@ -34,7 +34,7 @@ export interface InputProps extends TextInputProps {
   containerStyle?: object;
 }
 
-export const Input = forwardRef<TextInput, InputProps>(function Input(
+export const Input = forwardRef<any, InputProps>(function Input(
   {
     label,
     error,

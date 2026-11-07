@@ -1,6 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import {
+  Image,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -9,17 +16,15 @@ import Animated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth, useUser } from '@clerk/expo';
 
 import { colors, radius, shadows, typography } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
-import { useDataStore } from '@store/useDataStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import { PhotoIllustration } from '@components/ui/PhotoIllustration';
-import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
+import { isRestrictedStaffRole } from '@services/auth/types';
 
-const SPLASH_DURATION = 1800;
+const SPLASH_DURATION = 1600;
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -30,11 +35,10 @@ export default function SplashScreen() {
   const user = useAuthStore((state) => state.user);
   const googleSignIn = useAuthStore((state) => state.googleSignIn);
 
-  const heroScale = useSharedValue(0.7);
-  const heroOpacity = useSharedValue(0);
-  const heroY = useSharedValue(20);
+  const emblemScale = useSharedValue(0.75);
+  const emblemOpacity = useSharedValue(0);
   const textOpacity = useSharedValue(0);
-  const textY = useSharedValue(16);
+  const textY = useSharedValue(14);
   const progress = useSharedValue(0);
   const done = useRef(false);
   const clerkSynced = useRef(false);
@@ -58,9 +62,8 @@ export default function SplashScreen() {
 
   useEffect(() => {
     if (reducedMotion) {
-      heroScale.value = 1;
-      heroOpacity.value = 1;
-      heroY.value = 0;
+      emblemScale.value = 1;
+      emblemOpacity.value = 1;
       textOpacity.value = 1;
       textY.value = 0;
       progress.value = 1;
@@ -69,16 +72,21 @@ export default function SplashScreen() {
           done.current = true;
           routeToNext();
         }
-      }, 600);
+      }, 500);
       return () => clearTimeout(t);
     }
 
-    heroScale.value = withTiming(1, { duration: 750, easing: Easing.out(Easing.back(1.4)) });
-    heroOpacity.value = withTiming(1, { duration: 550 });
-    heroY.value = withTiming(0, { duration: 750, easing: Easing.out(Easing.cubic) });
-    textOpacity.value = withDelay(300, withTiming(1, { duration: 500 }));
-    textY.value = withDelay(300, withTiming(0, { duration: 600, easing: Easing.out(Easing.cubic) }));
-    progress.value = withTiming(1, { duration: SPLASH_DURATION - 200, easing: Easing.inOut(Easing.cubic) });
+    emblemScale.value = withTiming(1, {
+      duration: 700,
+      easing: Easing.out(Easing.back(1.3)),
+    });
+    emblemOpacity.value = withTiming(1, { duration: 500 });
+    textOpacity.value = withDelay(250, withTiming(1, { duration: 500 }));
+    textY.value = withDelay(250, withTiming(0, { duration: 550, easing: Easing.out(Easing.cubic) }));
+    progress.value = withTiming(1, {
+      duration: SPLASH_DURATION - 200,
+      easing: Easing.inOut(Easing.cubic),
+    });
 
     const t = setTimeout(() => {
       if (!done.current) {
@@ -96,13 +104,15 @@ export default function SplashScreen() {
     const isAuth = (status === 'authenticated' && !!currentUser) || Boolean(isSignedIn);
 
     if (isAuth) {
-      const cachedPets = useDataStore.getState().pets;
-      const hasPets = cachedPets.length > 0;
+      if (isRestrictedStaffRole(currentUser?.role)) {
+        router.replace('/unauthorized-role');
+        return;
+      }
+
       const hasCompletedProfile = Boolean(
         currentUser?.profileCompleted &&
         currentUser?.mobileNumber &&
-        currentUser?.address &&
-        hasPets
+        currentUser?.address
       );
 
       if (hasCompletedProfile) {
@@ -117,56 +127,70 @@ export default function SplashScreen() {
     }
   };
 
-  const heroStyle = useAnimatedStyle(() => ({
-    opacity: heroOpacity.value,
-    transform: [{ scale: heroScale.value }, { translateY: heroY.value }],
+  const emblemAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: emblemOpacity.value,
+    transform: [{ scale: emblemScale.value }],
   }));
 
-  const textStyle = useAnimatedStyle(() => ({
+  const textAnimatedStyle = useAnimatedStyle(() => ({
     opacity: textOpacity.value,
     transform: [{ translateY: textY.value }],
   }));
 
-  const progressStyle = useAnimatedStyle(() => ({
+  const progressAnimatedStyle = useAnimatedStyle(() => ({
     width: `${progress.value * 100}%`,
   }));
 
   return (
     <View style={styles.container}>
-      {/* Clean Ambient Floating Pastel Bubbles */}
-      <AnimatedBubbleBackground variant="splash" />
+      <StatusBar style="light" />
 
-      <View style={styles.centerContent}>
-        {/* Main Highlight Hero Illustration (fam2-removebg-preview.png) */}
-        <Animated.View style={[styles.heroWrap, heroStyle]}>
-          <Image
-            source={require('@assets/no-backgrounds/fam2-removebg-preview.png')}
-            style={[styles.heroHighlightImage, { width: Math.min(width * 0.94, 420) }]}
-            resizeMode="contain"
-            accessibilityRole="image"
-            accessibilityLabel="SyncVet Community - Doctors, Families, and Pets"
-          />
-        </Animated.View>
+      {/* Decorative Ambient Soft Background Circles */}
+      <View style={[styles.ambientCircle, styles.ambientCircleLarge]} />
+      <View style={[styles.ambientCircle, styles.ambientCircleSmall]} />
 
-        {/* Branding & Subtitle Tag */}
-        <Animated.View style={[styles.textWrap, textStyle]}>
-          <Image
-            source={require('@assets/loadingscreen/syncvet.png')}
-            style={[styles.wordmarkImage, { width: Math.min(width * 0.88, 360) }]}
-            resizeMode="contain"
-            accessibilityRole="image"
-            accessibilityLabel="SyncVet Wordmark"
-          />
-          <Text style={styles.tagline}>Your pet’s care, connected to your city.</Text>
-
-          {/* Integrated 90% Width Loading Progress Bar */}
-          <View style={styles.progressBlock}>
-            <View style={styles.progressTrack}>
-              <Animated.View style={[styles.progressFill, progressStyle]} />
-            </View>
-            <Text style={styles.loadingText}>Preparing your care experience...</Text>
+      <View style={styles.contentWrap}>
+        {/* App Hero Emblem */}
+        <Animated.View style={[styles.emblemWrap, emblemAnimatedStyle]}>
+          <View style={styles.emblemGlow}>
+            <Image
+              source={require('@assets/icon.png')}
+              style={styles.emblemImage}
+              resizeMode="contain"
+            />
           </View>
         </Animated.View>
+
+        {/* Brand Wordmark & Official City Pill */}
+        <Animated.View style={[styles.brandWrap, textAnimatedStyle]}>
+          <Text style={styles.brandTitle}>
+            Sync<Text style={styles.brandTitleAccent}>Vet</Text>
+          </Text>
+
+          <View style={styles.cvoBadge}>
+            <Ionicons name="shield-checkmark" size={13} color={colors.white} />
+            <Text style={styles.cvoBadgeText}>CVO CAGAYAN DE ORO</Text>
+          </View>
+
+          <Text style={styles.tagline}>
+            Official Digital Pet Health Platform
+          </Text>
+
+          {/* Minimalist Progress Track */}
+          <View style={styles.progressBlock}>
+            <View style={styles.progressTrack}>
+              <Animated.View style={[styles.progressFill, progressAnimatedStyle]} />
+            </View>
+            <Text style={styles.loadingText}>Connecting to municipal services...</Text>
+          </View>
+        </Animated.View>
+      </View>
+
+      {/* Bottom Municipal Seal Text */}
+      <View style={styles.footerWrap}>
+        <Text style={styles.footerText}>
+          City Veterinary Office · Republic of the Philippines
+        </Text>
       </View>
     </View>
   );
@@ -175,66 +199,141 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E6F5F2',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
-  centerContent: {
+
+  /* Decorative Ambient Circles for Subtle Depth */
+  ambientCircle: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  ambientCircleLarge: {
+    width: 380,
+    height: 380,
+    top: -60,
+    right: -100,
+  },
+  ambientCircleSmall: {
+    width: 260,
+    height: 260,
+    bottom: -40,
+    left: -80,
+  },
+
+  contentWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 360,
   },
-  heroWrap: {
+
+  /* Emblem */
+  emblemWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  heroHighlightImage: {
-    height: 230,
-    maxHeight: 270,
+  emblemGlow: {
+    width: 104,
+    height: 104,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.lg,
   },
-  textWrap: {
+  emblemImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+  },
+
+  /* Brand Typography */
+  brandWrap: {
     alignItems: 'center',
     width: '100%',
   },
-  wordmarkImage: {
-    height: 125,
-    maxHeight: 145,
-    marginVertical: 6,
-  },
-  tagline: {
-    ...typography.body,
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: 6,
+  brandTitle: {
+    fontFamily: typography.font.extrabold,
+    fontSize: 36,
+    color: colors.white,
+    letterSpacing: 0.5,
     textAlign: 'center',
   },
+  brandTitleAccent: {
+    color: '#A5F3E3',
+  },
+  cvoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    gap: 6,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  cvoBadgeText: {
+    fontFamily: typography.font.bold,
+    fontSize: 11,
+    color: colors.white,
+    letterSpacing: 0.8,
+  },
+  tagline: {
+    fontFamily: typography.font.medium,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.88)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  /* Progress Track */
   progressBlock: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 28,
+    marginTop: 36,
     gap: 10,
   },
   progressTrack: {
-    width: '90%',
-    maxWidth: 360,
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(0, 168, 150, 0.18)',
+    width: 180,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: radius.pill,
-    backgroundColor: colors.primary,
+    borderRadius: 2,
+    backgroundColor: colors.white,
   },
   loadingText: {
-    ...typography.small,
-    color: colors.textMuted,
+    fontFamily: typography.font.medium,
     fontSize: 12,
-    letterSpacing: 0.2,
+    color: 'rgba(255, 255, 255, 0.72)',
+    letterSpacing: 0.3,
+  },
+
+  /* Footer Municipal Text */
+  footerWrap: {
+    position: 'absolute',
+    bottom: 28,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontFamily: typography.font.regular,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.65)',
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
 });
+

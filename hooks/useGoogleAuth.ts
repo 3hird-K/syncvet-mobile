@@ -1,13 +1,17 @@
 import React, { useCallback, useState } from 'react';
+import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 import { useSSO } from '@clerk/expo';
+import { isRunningInExpoGo } from 'expo';
 
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { supabase } from '@lib/supabase';
+import { isRestrictedStaffRole } from '@services/auth/types';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -89,20 +93,22 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         await useAuthStore.getState().syncUserFromClerk(clerkUser);
       }
       const currentUser = useAuthStore.getState().user;
-      let petsCount = 0;
-      const ownerId = clerkUser?.id || currentUser?.id || '';
-      if (ownerId) {
-        try {
-          const { data } = await supabase.from('pets').select('id').eq('owner_id', ownerId);
-          petsCount = (data || []).length;
-        } catch {}
+
+      // Restrict Veterinarian & Administrator accounts from continuing into pet owner app
+      if (isRestrictedStaffRole(currentUser?.role)) {
+        await new Promise((res) => setTimeout(res, 600));
+        router.replace('/unauthorized-role');
+        setTimeout(() => {
+          useAuthStore.getState().setAuthLoading(false);
+          setConnecting(false);
+        }, 400);
+        return;
       }
 
       const hasCompletedProfile = Boolean(
         currentUser?.profileCompleted &&
         currentUser?.mobileNumber &&
-        currentUser?.address &&
-        petsCount > 0
+        currentUser?.address
       );
 
       // Provide a deliberate, smooth loading experience with PawLoading
@@ -135,10 +141,30 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         await WebBrowser.dismissAuthSession();
       } catch {}
 
-      const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'syncvet',
-        path: 'sso-callback',
-      });
+      let isExpoGo = false;
+      try {
+        isExpoGo = isRunningInExpoGo();
+      } catch {
+        isExpoGo = false;
+      }
+
+      // In Expo Go on Android, Android OS only recognises the exp:// scheme to return to the Expo Go client.
+      // Custom schemes like syncvet:// only work in standalone / custom dev builds.
+      let redirectUrl = 'syncvet://sso-callback';
+      if (isExpoGo) {
+        const base =
+          Constants.linkingUri ||
+          `exp://${Platform.OS === 'android' ? '192.168.254.101' : 'localhost'}:8081`;
+        const cleanBase = base.replace(/\/--\/.*$/, '').replace(/\/$/, '');
+        redirectUrl = `${cleanBase}/--/sso-callback`;
+      } else {
+        redirectUrl = AuthSession.makeRedirectUri({
+          scheme: 'syncvet',
+          path: 'sso-callback',
+        });
+      }
+
+      console.log('[useGoogleAuth] OAuth Redirect URL:', redirectUrl);
 
       const { createdSessionId, setActive, signIn, signUp } = await startSSOFlow({
         strategy: 'oauth_google',

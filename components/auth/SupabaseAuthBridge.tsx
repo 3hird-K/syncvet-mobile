@@ -66,28 +66,20 @@ export function SupabaseAuthBridge() {
     }
   }, [clerkUser?.id, isSignedIn]);
 
-  // 5. Verify account existence in Clerk and Supabase public.users
+  // 5. Verify account existence in Supabase public.users
   useEffect(() => {
     if (clerkUser) {
+      if (sessionInitializedRef.current === clerkUser.id) return;
+      sessionInitializedRef.current = clerkUser.id;
       let isMounted = true;
 
       (async () => {
-        // Step A: Verify user still actively exists on Clerk
-        try {
-          await clerkUser.reload();
-        } catch (clerkErr) {
-          console.warn('[SupabaseAuthBridge] Clerk user no longer exists on Clerk. Logging out.');
-          await clerkSignOut().catch(() => {});
-          await useAuthStore.getState().signOut().catch(() => {});
-          return;
-        }
-
         let dbUser: any = null;
         let dbError: any = null;
         try {
           const { data, error } = await supabase
             .from('users')
-            .select('id, profile_completed')
+            .select('id, role, profile_completed')
             .eq('id', clerkUser.id)
             .maybeSingle();
           dbUser = data;
@@ -124,14 +116,11 @@ export function SupabaseAuthBridge() {
                 },
                 { onConflict: 'id' },
               );
-            sessionInitializedRef.current = clerkUser.id;
           } catch (upsertErr) {
             console.warn('[SupabaseAuthBridge] Failed to create user in Supabase:', upsertErr);
           }
           return;
         }
-
-        sessionInitializedRef.current = clerkUser.id;
 
         // Sync fresh profile into auth store
         await syncUserFromClerk(clerkUser).catch((err) => {
@@ -156,7 +145,7 @@ export function SupabaseAuthBridge() {
         isMounted = false;
       };
     }
-  }, [clerkUser, syncUserFromClerk, clerkSignOut]);
+  }, [clerkUser?.id, syncUserFromClerk, clerkSignOut]);
 
   // 5. Supabase JWT Token Provider
   useEffect(() => {

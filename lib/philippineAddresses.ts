@@ -7,6 +7,133 @@ export interface PhLocation {
   fullLocation: string;
 }
 
+/**
+ * Complete list of all 80 official Barangays of Cagayan de Oro City:
+ * - 40 Named Suburban and Rural Barangays
+ * - 40 Urban Poblacion Barangays (Barangay 1 through Barangay 40)
+ */
+export const CDO_BARANGAYS: string[] = [
+  // 40 Named Suburban and Rural Barangays
+  'Agusan',
+  'Baikingon',
+  'Balubal',
+  'Balulang',
+  'Bayabas',
+  'Bayanga',
+  'Besigan',
+  'Bonbon',
+  'Bugo',
+  'Bulua',
+  'Camaman-an',
+  'Canitoan',
+  'Carmen',
+  'Consolacion',
+  'Cugman',
+  'Dansolihon',
+  'F.S. Catanico',
+  'Gusa',
+  'Indahag',
+  'Iponan',
+  'Kauswagan',
+  'Lapasan',
+  'Lumbia',
+  'Macabalan',
+  'Macasandig',
+  'Mambuaya',
+  'Nazareth',
+  'Pagatpat',
+  'Patag',
+  'Pigsag-an',
+  'Puerto',
+  'Puntod',
+  'San Simon',
+  'Tablon',
+  'Taglimao',
+  'Tagpangi',
+  'Tignapoloan',
+  'Tuburan',
+  'Tumpagon',
+  'Poblacion',
+  // 40 Urban Poblacion Barangays
+  'Barangay 1',
+  'Barangay 2',
+  'Barangay 3',
+  'Barangay 4',
+  'Barangay 5',
+  'Barangay 6',
+  'Barangay 7',
+  'Barangay 8',
+  'Barangay 9',
+  'Barangay 10',
+  'Barangay 11',
+  'Barangay 12',
+  'Barangay 13',
+  'Barangay 14',
+  'Barangay 15',
+  'Barangay 16',
+  'Barangay 17',
+  'Barangay 18',
+  'Barangay 19',
+  'Barangay 20',
+  'Barangay 21',
+  'Barangay 22',
+  'Barangay 23',
+  'Barangay 24',
+  'Barangay 25',
+  'Barangay 26',
+  'Barangay 27',
+  'Barangay 28',
+  'Barangay 29',
+  'Barangay 30',
+  'Barangay 31',
+  'Barangay 32',
+  'Barangay 33',
+  'Barangay 34',
+  'Barangay 35',
+  'Barangay 36',
+  'Barangay 37',
+  'Barangay 38',
+  'Barangay 39',
+  'Barangay 40',
+];
+
+/**
+ * Validates whether an input represents a valid official Cagayan de Oro Barangay.
+ * Returns the canonical capitalized Barangay name, or null if invalid.
+ */
+export function findMatchingCDOBarangay(input?: string | null): string | null {
+  if (!input) return null;
+  const clean = input.trim().toLowerCase();
+  if (!clean) return null;
+
+  // Direct exact match (case-insensitive)
+  const direct = CDO_BARANGAYS.find((b) => b.toLowerCase() === clean);
+  if (direct) return direct;
+
+  // Match with prefix variants (e.g. "Brgy Carmen" -> "Carmen", "Barangay 1" -> "Barangay 1")
+  const stripped = clean.replace(/^(barangay|brgy\.?)\s+/i, '').trim();
+  const strippedMatch = CDO_BARANGAYS.find((b) => {
+    const bLower = b.toLowerCase();
+    const bStripped = bLower.replace(/^(barangay|brgy\.?)\s+/i, '').trim();
+    return bLower === stripped || bStripped === stripped;
+  });
+  if (strippedMatch) return strippedMatch;
+
+  // If user typed a pure number (e.g. "1" or "21"), match to "Barangay 1" or "Barangay 21"
+  if (/^\d{1,2}$/.test(clean)) {
+    const num = parseInt(clean, 10);
+    if (num >= 1 && num <= 40) {
+      return `Barangay ${num}`;
+    }
+  }
+
+  return null;
+}
+
+export function isValidCDOBarangay(input?: string | null): boolean {
+  return findMatchingCDOBarangay(input) !== null;
+}
+
 export const PHILIPPINE_LOCATIONS: PhLocation[] = [
   // =========================================================================
   // REGION X - MISAMIS ORIENTAL: CAGAYAN DE ORO CITY (COMPLETE BARANGAYS)

@@ -69,8 +69,11 @@ export default function OnboardingScreen() {
   }, [googleError]);
 
   // Seamlessly check existing authentication on initial mount (cold start)
+  const coldStartCheckedRef = useRef(false);
   useEffect(() => {
+    if (coldStartCheckedRef.current) return;
     if (clerkLoaded && isSignedIn && clerkUser && !connectingGoogle) {
+      coldStartCheckedRef.current = true;
       setCheckingAuth(true);
       try {
         void WebBrowser.dismissAuthSession();
@@ -79,17 +82,10 @@ export default function OnboardingScreen() {
 
       useAuthStore.getState().syncUserFromClerk(clerkUser).then(async () => {
         const currentUser = useAuthStore.getState().user;
-        let petsCount = 0;
-        try {
-          const { data } = await supabase.from('pets').select('id').eq('owner_id', clerkUser.id);
-          petsCount = (data || []).length;
-        } catch {}
-
         const hasCompletedProfile = Boolean(
           currentUser?.profileCompleted &&
           currentUser?.mobileNumber &&
-          currentUser?.address &&
-          petsCount > 0
+          currentUser?.address
         );
 
         try {
