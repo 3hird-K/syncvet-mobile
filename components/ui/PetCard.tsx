@@ -34,6 +34,7 @@ export function PetCard({ pet, onPress, compact = false }: PetCardProps) {
           avatarId={pet.avatarId}
           species={pet.species}
           photoUrl={pet.photoUrl}
+          petName={pet.name}
           size={compact ? 56 : 64}
         />
       </View>

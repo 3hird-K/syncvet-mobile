@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -9,165 +10,117 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
-import { formatAge, ageFromBirthYear } from '@lib/format';
 import { haptic } from '@lib/haptics';
-import { SectionHeader } from '@components/ui/SectionHeader';
-import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
+import { getPetAvatarSource } from '@lib/petAvatars';
 import type { Pet } from '@services/data';
 
 interface HomePetsSectionProps {
   pets: Pet[];
 }
 
+const GRADIENT_PALETTES = [
+  // 0: Deep Purple / Violet (like Gehlee, Cadmus, Angela in Pet Registry)
+  { top: '#4C1D95', bottom: '#170530' },
+  // 1: Deep Ocean / Teal (like Oreo in Pet Registry)
+  { top: '#0D9488', bottom: '#042F2C' },
+  // 2: Rich Indigo
+  { top: '#3730A3', bottom: '#0F0E2A' },
+  // 3: Deep Emerald
+  { top: '#065F46', bottom: '#022C22' },
+  // 4: Warm Plum
+  { top: '#701A75', bottom: '#260429' },
+];
+
+function getPetGradient(pet: Pet, index: number) {
+  const isDog = pet.species?.toLowerCase() === 'dog';
+  if (isDog) {
+    return GRADIENT_PALETTES[1]; // Deep Ocean Teal for dogs
+  }
+  return GRADIENT_PALETTES[index % 2 === 0 ? 0 : 2]; // Rich Violet / Indigo for cats
+}
+
 export function HomePetsSection({ pets }: HomePetsSectionProps) {
   const router = useRouter();
 
-  // 1. Empty state: No pets registered yet
+  // If no pets registered yet, show an empty state card
   if (pets.length === 0) {
     return (
       <Animated.View entering={FadeInDown.delay(60).duration(260)} style={styles.section}>
-        <SectionHeader title="My Pets" />
-        <View style={[styles.onboardingCard, shadows.sm]}>
-          <View style={styles.onboardingIconCircle}>
-            <Ionicons name="paw" size={26} color={colors.primary} />
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <Ionicons name="paw" size={17} color={colors.primary} />
+            <Text style={styles.headerTitle}>PET REGISTRY</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>0</Text>
+            </View>
           </View>
-          <View style={styles.onboardingTextCol}>
-            <Text style={styles.onboardingTitle}>Your pets deserve a profile</Text>
-            <Text style={styles.onboardingSub}>
-              Register your pet to manage vaccination schedules and digital health passports.
-            </Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add first pet"
-            onPress={() => {
-              haptic.light();
-              router.push('/pets/add' as never);
-            }}
-            style={({ pressed }) => [styles.onboardingBtn, pressed && styles.onboardingBtnPressed]}
-          >
-            <Ionicons name="add" size={16} color={colors.white} />
-            <Text style={styles.onboardingBtnText}>Add Pet</Text>
-          </Pressable>
         </View>
-      </Animated.View>
-    );
-  }
-
-  // 2. Single Pet Hero Showcase
-  if (pets.length === 1) {
-    const pet = pets[0];
-    const isDog = pet.species?.toLowerCase() === 'dog';
-    const ageText = pet.birthYear
-      ? formatAge(ageFromBirthYear(pet.birthYear))
-      : null;
-
-    return (
-      <Animated.View entering={FadeInDown.delay(60).duration(260)} style={styles.section}>
-        <SectionHeader
-          title="My Pets"
-          icon={<Ionicons name="paw-outline" size={17} color={colors.primaryDark} />}
-          actionLabel="View All"
-          onAction={() => {
-            haptic.light();
-            router.push('/pets' as never);
-          }}
-        />
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${pet.name}'s Health Passport`}
+          accessibilityLabel="Register first pet"
           onPress={() => {
             haptic.light();
-            router.push(`/pets/${pet.id}` as never);
+            router.push('/pets/add' as never);
           }}
           style={({ pressed }) => [
-            styles.singlePetHeroCard,
-            shadows.sm,
+            styles.emptyRegisterCard,
             pressed && styles.cardPressed,
           ]}
         >
-          <View style={styles.singlePetAvatarWrap}>
-            <PopoutPetAvatar
-              avatarId={pet.avatarId}
-              species={pet.species}
-              photoUrl={pet.photoUrl}
-              size={64}
-              scale={1.35}
-            />
+          <View style={styles.registerIconBox}>
+            <Ionicons name="add" size={26} color="#0F766E" />
           </View>
-
-          <View style={styles.singlePetInfo}>
-            <View style={styles.petNameRow}>
-              <Text style={styles.petName} numberOfLines={1}>
-                {pet.name}
-              </Text>
-              {pet._pendingSync ? (
-                <View style={styles.pendingTag}>
-                  <Text style={styles.pendingTagText}>Pending</Text>
-                </View>
-              ) : null}
-              <View
-                style={[
-                  styles.vaxBadge,
-                  pet.isVaccinated ? styles.vaxBadgeSuccess : styles.vaxBadgeWarning,
-                ]}
-              >
-                <Ionicons
-                  name={pet.isVaccinated ? 'shield-checkmark' : 'alert-circle'}
-                  size={11}
-                  color={pet.isVaccinated ? colors.success : colors.warning}
-                />
-                <Text
-                  style={[
-                    styles.vaxBadgeText,
-                    pet.isVaccinated ? styles.vaxTextSuccess : styles.vaxTextWarning,
-                  ]}
-                >
-                  {pet.isVaccinated ? 'Protected' : 'Needs Shot'}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.petBreed} numberOfLines={1}>
-              {pet.breed || (isDog ? 'Canine' : 'Feline')}
-              {ageText ? ` · ${ageText}` : ''}
-            </Text>
-
-            <View style={styles.passportLinkRow}>
-              <Text style={styles.passportLinkText}>View Digital Passport</Text>
-              <Ionicons name="arrow-forward" size={13} color={colors.primary} />
-            </View>
-          </View>
+          <Text style={styles.registerTitle}>Register Pet</Text>
+          <Text style={styles.registerSubtitle}>Add your first companion to CDO registry</Text>
         </Pressable>
       </Animated.View>
     );
   }
 
-  // 3. Multi-Pet Horizontal Carousel with "+ Add Pet" Card
+  // Prepend "+ Register Pet" card as the very first card in the carousel (matching design)
+  const listItems = [{ id: '__register_pet__' } as unknown as Pet, ...pets];
+
   return (
     <Animated.View entering={FadeInDown.delay(60).duration(260)} style={styles.section}>
-      <SectionHeader
-        title="My Pets"
-        icon={<Ionicons name="paw-outline" size={17} color={colors.primaryDark} />}
-        actionLabel="View All"
-        onAction={() => {
-          haptic.light();
-          router.push('/pets' as never);
-        }}
-      />
+      {/* Header: PET REGISTRY [5] | View All > */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <Ionicons name="paw" size={17} color={colors.primary} />
+          <Text style={styles.headerTitle}>PET REGISTRY</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{pets.length}</Text>
+          </View>
+        </View>
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="View All Pets"
+          onPress={() => {
+            haptic.light();
+            router.push('/pets' as never);
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.viewAllBtn, pressed && styles.viewAllPressed]}
+        >
+          <Text style={styles.viewAllText}>View All</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+        </Pressable>
+      </View>
+
+      {/* Horizontal Carousel */}
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
-        data={[...pets, { id: '__add_pet__' } as unknown as Pet]}
+        data={listItems}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.horizontalScrollContent}
-        renderItem={({ item: pet }) => {
-          // "+ Add Pet" Action Card at the end
-          if (pet.id === '__add_pet__') {
+        renderItem={({ item: pet, index }) => {
+          // Card 0: Dashed "Register Pet / Add Companion" Card
+          if (pet.id === '__register_pet__') {
             return (
               <Pressable
                 accessibilityRole="button"
@@ -177,23 +130,23 @@ export function HomePetsSection({ pets }: HomePetsSectionProps) {
                   router.push('/pets/add' as never);
                 }}
                 style={({ pressed }) => [
-                  styles.addPetCard,
+                  styles.registerPetCard,
                   pressed && styles.cardPressed,
                 ]}
               >
-                <View style={styles.addPetIconWrap}>
-                  <Ionicons name="add" size={22} color={colors.primary} />
+                <View style={styles.registerIconBox}>
+                  <Ionicons name="add" size={26} color="#0F766E" />
                 </View>
-                <Text style={styles.addPetTitle}>Add Pet</Text>
-                <Text style={styles.addPetSub}>New Profile</Text>
+                <Text style={styles.registerTitle}>Register Pet</Text>
+                <Text style={styles.registerSubtitle}>Add Companion</Text>
               </Pressable>
             );
           }
 
+          // Pet Cards (Full-bleed vibrant gradient cards)
           const isDog = pet.species?.toLowerCase() === 'dog';
-          const ageText = pet.birthYear
-            ? formatAge(ageFromBirthYear(pet.birthYear))
-            : null;
+          const gradient = getPetGradient(pet, index);
+          const avatarSource = getPetAvatarSource(pet.avatarId, pet.species, pet.photoUrl, pet.name);
 
           return (
             <Pressable
@@ -204,58 +157,51 @@ export function HomePetsSection({ pets }: HomePetsSectionProps) {
                 router.push(`/pets/${pet.id}` as never);
               }}
               style={({ pressed }) => [
-                styles.multiPetCard,
+                styles.petCard,
                 shadows.sm,
                 pressed && styles.cardPressed,
               ]}
             >
-              <View style={styles.multiPetAvatarWrap}>
-                <PopoutPetAvatar
-                  avatarId={pet.avatarId}
-                  species={pet.species}
-                  photoUrl={pet.photoUrl}
-                  size={58}
-                  scale={1.3}
+              {/* Full-bleed Gradient Background */}
+              <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
+                <Defs>
+                  <LinearGradient id={`card-grad-${pet.id}-${index}`} x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0%" stopColor={gradient.top} />
+                    <Stop offset="100%" stopColor={gradient.bottom} />
+                  </LinearGradient>
+                </Defs>
+                <Rect width="100%" height="100%" fill={`url(#card-grad-${pet.id}-${index})`} />
+              </Svg>
+
+              {/* Pet 3D Avatar Image */}
+              <View style={styles.petImageWrap}>
+                <Image
+                  source={avatarSource}
+                  style={styles.petImage}
+                  resizeMode="contain"
                 />
               </View>
 
-              <View style={styles.multiPetBody}>
-                <View style={styles.petNameRow}>
-                  <Text style={styles.multiPetName} numberOfLines={1}>
-                    {pet.name}
-                  </Text>
-                  {pet._pendingSync ? (
-                    <View style={styles.pendingTag}>
-                      <Text style={styles.pendingTagText}>Pending</Text>
-                    </View>
-                  ) : null}
-                </View>
+              {/* Bottom Scrim for crisp text contrast */}
+              <Svg width="100%" height={75} style={styles.scrim}>
+                <Defs>
+                  <LinearGradient id={`scrim-${pet.id}-${index}`} x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0%" stopColor="#000000" stopOpacity="0" />
+                    <Stop offset="45%" stopColor="#000000" stopOpacity="0.45" />
+                    <Stop offset="100%" stopColor="#000000" stopOpacity="0.9" />
+                  </LinearGradient>
+                </Defs>
+                <Rect width="100%" height="100%" fill={`url(#scrim-${pet.id}-${index})`} />
+              </Svg>
 
-                <Text style={styles.multiPetBreed} numberOfLines={1}>
-                  {pet.breed || (isDog ? 'Canine' : 'Feline')}
-                  {ageText ? ` · ${ageText}` : ''}
+              {/* Bottom Pet Name & Breed Info */}
+              <View style={styles.petInfo}>
+                <Text style={styles.petName} numberOfLines={1}>
+                  {pet.name}
                 </Text>
-
-                <View
-                  style={[
-                    styles.vaxBadge,
-                    pet.isVaccinated ? styles.vaxBadgeSuccess : styles.vaxBadgeWarning,
-                  ]}
-                >
-                  <Ionicons
-                    name={pet.isVaccinated ? 'shield-checkmark' : 'alert-circle'}
-                    size={10}
-                    color={pet.isVaccinated ? colors.success : colors.warning}
-                  />
-                  <Text
-                    style={[
-                      styles.vaxBadgeText,
-                      pet.isVaccinated ? styles.vaxTextSuccess : styles.vaxTextWarning,
-                    ]}
-                  >
-                    {pet.isVaccinated ? 'Protected' : 'Needs Shot'}
-                  </Text>
-                </View>
+                <Text style={styles.petBreed} numberOfLines={1}>
+                  {pet.breed || (isDog ? 'Canine' : 'Feline')}
+                </Text>
               </View>
             </Pressable>
           );
@@ -271,214 +217,155 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     opacity: 0.92,
-    transform: [{ scale: 0.985 }],
+    transform: [{ scale: 0.975 }],
   },
-  // 1. Onboarding
-  onboardingCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(10, 110, 100, 0.12)',
-    gap: spacing.sm,
-  },
-  onboardingIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(10, 110, 100, 0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  onboardingTextCol: {
-    flex: 1,
-    gap: 2,
-  },
-  onboardingTitle: {
-    ...typography.captionBold,
-    fontSize: 14,
-    color: colors.textPrimary,
-    fontFamily: typography.font.bold,
-  },
-  onboardingSub: {
-    ...typography.small,
-    fontSize: 11.5,
-    color: colors.textMuted,
-    lineHeight: 15,
-  },
-  onboardingBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primaryDark,
-    paddingHorizontal: 12,
-    paddingVertical: 7.5,
-    borderRadius: radius.pill,
-  },
-  onboardingBtnPressed: {
-    opacity: 0.85,
-  },
-  onboardingBtnText: {
-    ...typography.captionBold,
-    color: colors.white,
-    fontSize: 12,
-    fontFamily: typography.font.bold,
-  },
-  // 2. Single Pet Hero
-  singlePetHeroCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(10, 110, 100, 0.12)',
-    gap: spacing.md,
-  },
-  singlePetAvatarWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  singlePetInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  petNameRow: {
+
+  /* Header */
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
-  petName: {
-    ...typography.title,
+  headerTitle: {
+    fontFamily: typography.font.bold,
+    fontSize: 13,
     color: colors.textPrimary,
-    fontSize: 14.5,
-    fontFamily: typography.font.bold,
-    flex: 1,
+    letterSpacing: 0.6,
   },
-  pendingTag: {
-    backgroundColor: 'rgba(245, 158, 11, 0.14)',
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.25)',
-  },
-  pendingTagText: {
-    ...typography.captionBold,
-    fontSize: 9.5,
-    fontFamily: typography.font.bold,
-    color: colors.warning,
-  },
-  petBreed: {
-    ...typography.small,
-    color: colors.textMuted,
-    fontSize: 11.5,
-  },
-  passportLinkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  passportLinkText: {
-    ...typography.captionBold,
-    fontSize: 11.5,
-    color: colors.primaryDark,
-    fontFamily: typography.font.bold,
-  },
-  vaxBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  countBadge: {
+    backgroundColor: '#E0E7FF',
     paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: radius.pill,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    marginLeft: 2,
   },
-  vaxBadgeSuccess: {
-    backgroundColor: 'rgba(16, 185, 129, 0.10)',
-  },
-  vaxBadgeWarning: {
-    backgroundColor: 'rgba(245, 158, 11, 0.10)',
-  },
-  vaxBadgeText: {
-    ...typography.captionBold,
-    fontSize: 10,
+  countBadgeText: {
     fontFamily: typography.font.bold,
+    fontSize: 11,
+    color: '#4338CA',
   },
-  vaxTextSuccess: {
-    color: colors.success,
+  viewAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
-  vaxTextWarning: {
-    color: colors.warning,
+  viewAllPressed: {
+    opacity: 0.7,
   },
-  // 3. Multi-Pet Horizontal Scroll
+  viewAllText: {
+    fontFamily: typography.font.bold,
+    fontSize: 12,
+    color: colors.primary,
+  },
+
+  /* Horizontal Carousel */
   horizontalScrollContent: {
     gap: 12,
     paddingRight: spacing.md,
   },
-  multiPetCard: {
-    width: 170,
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(10, 110, 100, 0.10)',
-    gap: 6,
-  },
-  multiPetAvatarWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 60,
-  },
-  multiPetBody: {
-    gap: 3,
-  },
-  multiPetName: {
-    ...typography.title,
-    fontSize: 14,
-    fontFamily: typography.font.bold,
-    color: colors.textPrimary,
-  },
-  multiPetBreed: {
-    ...typography.small,
-    fontSize: 11.5,
-    color: colors.textMuted,
-  },
-  addPetCard: {
-    width: 125,
-    backgroundColor: 'rgba(10, 110, 100, 0.04)',
-    borderRadius: radius.xl,
-    padding: 12,
+
+  /* Register Pet Card (Dashed Border) */
+  registerPetCard: {
+    width: 138,
+    height: 196,
+    backgroundColor: '#F0FDFA',
+    borderRadius: 16,
     borderWidth: 1.5,
+    borderColor: '#99F6E4',
     borderStyle: 'dashed',
-    borderColor: 'rgba(10, 110, 100, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
+    padding: 12,
   },
-  addPetIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.surface,
+  registerIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#CCFBF1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(10, 110, 100, 0.12)',
+    marginBottom: 8,
   },
-  addPetTitle: {
-    ...typography.title,
-    fontSize: 12.5,
+  registerTitle: {
     fontFamily: typography.font.bold,
-    color: colors.primaryDark,
+    fontSize: 14,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginTop: 4,
   },
-  addPetSub: {
-    ...typography.small,
-    fontSize: 10.5,
+  registerSubtitle: {
+    fontFamily: typography.font.regular,
+    fontSize: 11,
     color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 3,
+  },
+
+  /* Empty Register Card */
+  emptyRegisterCard: {
+    width: '100%',
+    height: 140,
+    backgroundColor: '#F0FDFA',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#99F6E4',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+
+  /* Pet Full-Bleed Gradient Card */
+  petCard: {
+    width: 138,
+    height: 196,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#1E1035',
+  },
+  petImageWrap: {
+    width: '100%',
+    height: 138,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 10,
+  },
+  petImage: {
+    width: 120,
+    height: 125,
+  },
+  scrim: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  petInfo: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  petName: {
+    fontFamily: typography.font.bold,
+    fontSize: 15,
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  petBreed: {
+    fontFamily: typography.font.regular,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.88)',
+    marginTop: 2,
   },
 });

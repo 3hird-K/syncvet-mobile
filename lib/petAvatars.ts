@@ -94,7 +94,16 @@ export const DOG_AVATARS: PetAvatarOption[] = [
   },
 ];
 
+export const DEFAULT_DOG_AVATAR = require('@assets/dog-profiles/image-removebg-preview (1).png');
+export const DEFAULT_CAT_AVATAR = require('@assets/cat-profiles/image-removebg-preview (8).png');
+
 export const CAT_AVATARS: PetAvatarOption[] = [
+  {
+    id: 'cat-8',
+    label: 'Snowy White',
+    species: 'cat',
+    source: require('@assets/cat-profiles/image-removebg-preview (8).png'),
+  },
   {
     id: 'cat-default',
     label: 'Sweet Orange Tabby',
@@ -144,12 +153,6 @@ export const CAT_AVATARS: PetAvatarOption[] = [
     source: require('@assets/cat-profiles/image-removebg-preview (7).png'),
   },
   {
-    id: 'cat-8',
-    label: 'Snowy White',
-    species: 'cat',
-    source: require('@assets/cat-profiles/image-removebg-preview (8).png'),
-  },
-  {
     id: 'cat-9',
     label: 'Ragdoll Blue',
     species: 'cat',
@@ -185,17 +188,53 @@ export const CAT_AVATARS: PetAvatarOption[] = [
     species: 'cat',
     source: require('@assets/no-backgrounds/cat3-removebg-preview.png'),
   },
+  {
+    id: 'cat-kittens',
+    label: 'Maine Coon Family',
+    species: 'cat',
+    source: require('@assets/no-backgrounds/catsss-removebg-preview.png'),
+  },
 ];
 
 export function getPetAvatarSource(
   avatarId?: string,
   species?: string,
   photoUrl?: string | null,
+  petName?: string,
 ): ImageSourcePropType {
-  if (photoUrl && (photoUrl.startsWith('http') || photoUrl.startsWith('file:') || photoUrl.startsWith('data:'))) {
-    return { uri: photoUrl };
+  // 1. If photo_url is provided from database / custom upload, prioritize it!
+  if (photoUrl && typeof photoUrl === 'string') {
+    const cleanUrl = photoUrl.trim();
+    if (
+      cleanUrl.length > 0 &&
+      cleanUrl !== 'null' &&
+      cleanUrl !== 'undefined' &&
+      (cleanUrl.startsWith('http://') ||
+        cleanUrl.startsWith('https://') ||
+        cleanUrl.startsWith('file:') ||
+        cleanUrl.startsWith('data:') ||
+        cleanUrl.startsWith('content:'))
+    ) {
+      return { uri: cleanUrl };
+    }
   }
 
+  // 2. Special name presets
+  const nameKey = (petName || '').toLowerCase().trim();
+  if (nameKey === 'gehlee') {
+    return require('@assets/no-backgrounds/catsss-removebg-preview.png');
+  }
+  if (nameKey === 'cadmus') {
+    return require('@assets/cat-profiles/image-removebg-preview (3).png');
+  }
+  if (nameKey === 'angela') {
+    return require('@assets/cat-profiles/image-removebg-preview (1).png');
+  }
+  if (nameKey === 'oreo') {
+    return require('@assets/dog-profiles/image-removebg-preview (1) copy.png');
+  }
+
+  // 3. Avatar ID match
   if (avatarId) {
     const dogFound = DOG_AVATARS.find((a) => a.id === avatarId);
     if (dogFound) return dogFound.source;
@@ -203,6 +242,7 @@ export function getPetAvatarSource(
     if (catFound) return catFound.source;
   }
 
+  // 4. Default fallback: Border Collie for dog, Snowy White for cat
   const isCat = species?.toLowerCase() === 'cat';
-  return isCat ? CAT_AVATARS[0].source : DOG_AVATARS[0].source;
+  return isCat ? DEFAULT_CAT_AVATAR : DEFAULT_DOG_AVATAR;
 }

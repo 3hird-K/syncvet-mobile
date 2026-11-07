@@ -285,6 +285,7 @@ export default function PetProfileScreen() {
               avatarId={customAvatarId || pet.avatarId}
               species={pet.species}
               photoUrl={customPhotoUrl || pet.photoUrl}
+              petName={pet.name}
               size={76}
               scale={1.22}
               showCameraBadge

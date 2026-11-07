@@ -48,6 +48,7 @@ export function PetPassportCard({ pet, index, onQrPress }: PetPassportCardProps)
               avatarId={pet.avatarId}
               species={pet.species}
               photoUrl={pet.photoUrl}
+              petName={pet.name}
               size={54}
               scale={1.3}
             />

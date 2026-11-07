@@ -16,6 +16,7 @@ interface PopoutPetAvatarProps {
   avatarId?: string;
   species: Species;
   photoUrl?: string;
+  petName?: string;
   /** Diameter of the circular frame. Default is 78 */
   size?: number;
   /** Image scale multiplier relative to circle. Default is 1.55 */
@@ -31,6 +32,7 @@ export function PopoutPetAvatar({
   avatarId,
   species,
   photoUrl,
+  petName,
   size = 78,
   scale = 1.55,
   showCameraBadge = false,
@@ -40,7 +42,7 @@ export function PopoutPetAvatar({
   bgColor,
 }: PopoutPetAvatarProps) {
   const isDog = species === 'dog';
-  const avatarSource = getPetAvatarSource(avatarId, species, photoUrl);
+  const avatarSource = getPetAvatarSource(avatarId, species, photoUrl, petName);
   const isCustomPhoto = Boolean(photoUrl);
 
   // Exact 3D Popout Proportions

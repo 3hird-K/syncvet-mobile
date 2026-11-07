@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Keyboard,
   Platform,
@@ -20,10 +20,10 @@ import Animated, {
 import type { SharedValue } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
-import type { ComponentProps } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useRouter } from 'expo-router';
-import { colors, radius, shadows, typography } from '@theme';
+import { colors, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 
 export interface BottomTabBarProps {
@@ -32,12 +32,17 @@ export interface BottomTabBarProps {
   navigation?: any;
   emitter?: any;
   navigateToTab?: (routeKey: string) => void;
-  insets?: any;
+  insets?: {
+    top?: number;
+    bottom?: number;
+    left?: number;
+    right?: number;
+  };
 }
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-type IoniconName = ComponentProps<typeof Ionicons>['name'];
+type IoniconName = keyof typeof Ionicons.glyphMap;
 
 export interface TabRouteConfig {
   name: string;
@@ -234,14 +239,14 @@ function TabItem({
     >
       <View style={styles.tabContent}>
         {/* Animated Rising Icon */}
-        <Animated.View style={[styles.iconContainer, animatedIconWrapperStyle]}>
+        <Animated.View style={[styles.iconContainer, animatedIconWrapperStyle as any]}>
           {/* Active (White) Icon */}
-          <Animated.View style={[styles.iconAbsolute, animatedActiveIconStyle]}>
+          <Animated.View style={[styles.iconAbsolute, animatedActiveIconStyle as any]}>
             <Ionicons name={config.activeIcon} size={22} color={colors.white} />
           </Animated.View>
 
           {/* Inactive (Muted) Icon */}
-          <Animated.View style={[styles.iconAbsolute, animatedInactiveIconStyle]}>
+          <Animated.View style={[styles.iconAbsolute, animatedInactiveIconStyle as any]}>
             <Ionicons name={config.inactiveIcon} size={22} color={colors.textMuted} />
           </Animated.View>
         </Animated.View>
@@ -249,7 +254,7 @@ function TabItem({
         {/* Animated Rising Label */}
         <Animated.Text
           numberOfLines={1}
-          style={[styles.tabLabel, animatedLabelStyle]}
+          style={[styles.tabLabel, animatedLabelStyle as any]}
         >
           {config.label}
         </Animated.Text>
@@ -358,7 +363,8 @@ export function MeltingBallTabBar(props: MeltingBallTabBarProps) {
     };
   });
 
-  const bottomInset = Math.max(insets.bottom, 12);
+  const safeInsets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets?.bottom ?? safeInsets.bottom, 12);
 
   if (isKeyboardVisible || isExplicitlyHidden || isFullScreenFlow) {
     return null;
@@ -380,7 +386,7 @@ export function MeltingBallTabBar(props: MeltingBallTabBarProps) {
       <View style={[styles.svgBackgroundWrapper, shadows.lg]}>
         <Svg width={barWidth} height={DOCK_HEIGHT} viewBox={`0 0 ${barWidth} ${DOCK_HEIGHT}`}>
           <AnimatedPath
-            animatedProps={animatedSvgProps}
+            animatedProps={animatedSvgProps as any}
             fill={colors.surface}
             stroke="rgba(10, 110, 100, 0.10)"
             strokeWidth={1.5}
@@ -392,7 +398,7 @@ export function MeltingBallTabBar(props: MeltingBallTabBarProps) {
       <Animated.View
         style={[
           styles.floatingBadge,
-          animatedBadgeStyle,
+          animatedBadgeStyle as any,
         ]}
         pointerEvents="none"
       />
