@@ -229,7 +229,6 @@ function FacebookPostSkeleton({ hasImage = false }: { hasImage?: boolean }) {
             <Skeleton width="45%" height={14} borderRadius={4} />
             <Skeleton width="30%" height={11} borderRadius={4} />
           </View>
-          <Skeleton width={18} height={18} borderRadius={9} />
         </View>
 
         {/* Text Body Skeleton */}
@@ -346,16 +345,6 @@ function FacebookPostCard({
               <Text style={styles.fbDot}>·</Text>
               <Ionicons name="earth" size={11} color="#65676B" />
             </View>
-          </View>
-
-          {/* Facebook Header Action Icons: Ellipsis & Close */}
-          <View style={styles.fbHeaderActions}>
-            <Pressable hitSlop={8} style={styles.fbIconBtn}>
-              <Ionicons name="ellipsis-horizontal" size={18} color="#65676B" />
-            </Pressable>
-            <Pressable hitSlop={8} style={styles.fbIconBtn}>
-              <Ionicons name="close" size={18} color="#65676B" />
-            </Pressable>
           </View>
         </View>
 
@@ -678,14 +667,6 @@ const styles = StyleSheet.create({
   fbDot: {
     fontSize: 12,
     color: '#65676B',
-  },
-  fbHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  fbIconBtn: {
-    padding: 6,
   },
 
   /* Post Text */
