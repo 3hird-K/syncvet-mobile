@@ -216,10 +216,7 @@ function serviceLabel(serviceId: string): string {
   const labels: Record<string, string> = {
     consultation: 'Consultation',
     vaccination: 'Vaccination',
-    'spay-neuter': 'Spay / Neuter',
-    deworming: 'Deworming',
-    'pet-registration': 'Pet Registration',
-    other: 'City Veterinary Service',
+    'spay-neuter': 'Spay & Neuter',
   };
   return labels[serviceId] ?? 'Veterinary service';
 }

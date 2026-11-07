@@ -57,6 +57,7 @@ export interface AuthSession {
 
 /** Profile returned by Google identity (mock in this phase). */
 export interface GoogleProfile {
+  id?: string;
   email: string;
   fullName: string;
   photoUrl?: string;

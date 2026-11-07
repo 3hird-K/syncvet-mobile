@@ -32,11 +32,12 @@ export function toPetModel(row: any): Pet {
 }
 
 export function toAppointmentModel(row: any): Appointment {
+  const petName = row.pets?.name || row.pet_name || 'Companion';
   return {
     id: row.id,
     ownerId: row.owner_id,
     petId: row.pet_id || '',
-    petName: row.pet_name,
+    petName,
     serviceId: row.service_id,
     status: (row.status || 'pending') as any,
     date: row.date,
@@ -222,15 +223,56 @@ export class SupabaseDataService implements DataService {
   async getAppointments(ownerId: string): Promise<Appointment[]> {
     const { data, error } = await supabase
       .from('appointments')
-      .select('*')
+      .select('*, pets(id, name, species, breed, avatar_id, photo_url)')
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('Error fetching appointments from Supabase:', error.message);
-      return [];
+      console.warn('Error fetching appointments with pets join from Supabase:', error.message);
+      // Fallback query if join has any syntax difference
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .order('created_at', { ascending: false });
+
+      if (fallbackError) {
+        console.warn('Error fetching fallback appointments from Supabase:', fallbackError.message);
+        return [];
+      }
+      return (fallbackData || []).map(toAppointmentModel);
     }
     return (data || []).map(toAppointmentModel);
+  }
+
+  /**
+   * Fetch a pet record directly by pet ID
+   */
+  async getPetById(petId: string): Promise<Pet | null> {
+    if (!petId) return null;
+    const { data, error } = await supabase
+      .from('pets')
+      .select('*')
+      .eq('id', petId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return toPetModel(data);
+  }
+
+  /**
+   * Fetch a user profile record directly by user ID
+   */
+  async getUserById(userId: string): Promise<any | null> {
+    if (!userId) return null;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data;
   }
 
   async bookAppointment(ownerId: string, input: BookingInput): Promise<Appointment> {

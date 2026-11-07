@@ -90,16 +90,6 @@ const CLINICAL_REASONS: Record<string, string[]> = {
     'Routine Spaying (Female)',
     'Routine Castration (Male)',
   ],
-  deworming: [
-    'Routine Internal Deworming',
-    'Flea & Tick Treatment Spot-On',
-    'Heartworm Preventative',
-  ],
-  'pet-registration': [
-    'Official CDO Digital Tag Registration',
-    'Pet Microchipping & Passport Issue',
-  ],
-  other: ['General Veterinary Inquiry', 'Prescription Refill', 'Health Certificate Request'],
 };
 
 interface PetVaccinationTimeline {

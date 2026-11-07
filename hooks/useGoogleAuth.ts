@@ -83,15 +83,80 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         signInFlow?.userData?.imageUrl ||
         clerkUser?.imageUrl;
 
+      const userId = clerkUser?.id || signInFlow?.createdUserId || signUpFlow?.createdUserId || signInFlow?.userData?.id;
+
       await useAuthStore.getState().googleSignIn({
+        id: userId,
         email: clerkEmail || 'user@syncvet.app',
         fullName: clerkName || 'SyncVet Resident',
         photoUrl,
       });
 
-      if (clerkUser) {
+      let liveDbUser: any = null;
+      if (userId) {
+        try {
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          liveDbUser = data;
+        } catch (fetchErr) {
+          console.warn('[useGoogleAuth] Supabase fetch user note:', fetchErr);
+        }
+
+        // If the user does not exist in Supabase at all, insert initial skeleton row
+        if (!liveDbUser) {
+          try {
+            const { data: insertedUser } = await supabase
+              .from('users')
+              .insert({
+                id: userId,
+                email: clerkEmail || `${userId}@resident.syncvet.app`,
+                full_name: clerkName,
+                first_name: firstName || null,
+                last_name: lastName || null,
+                avatar_url: photoUrl || null,
+                role: 'Pet Owner',
+                profile_completed: false,
+                updated_at: new Date().toISOString(),
+              })
+              .select('*')
+              .maybeSingle();
+            liveDbUser = insertedUser;
+          } catch (insertErr) {
+            console.warn('[useGoogleAuth] Supabase initial insert note:', insertErr);
+          }
+        }
+      }
+
+      // Sync live resident profile from Supabase into auth store
+      if (liveDbUser) {
+        const fullUser = {
+          id: liveDbUser.id,
+          fullName: liveDbUser.full_name || clerkName,
+          firstName: liveDbUser.first_name || firstName,
+          lastName: liveDbUser.last_name || lastName,
+          email: liveDbUser.email || clerkEmail,
+          mobileNumber: liveDbUser.phone_number || '',
+          address: liveDbUser.address || '',
+          photoUrl: liveDbUser.avatar_url || photoUrl,
+          authProvider: 'google' as const,
+          profileCompleted: Boolean(liveDbUser.profile_completed),
+          role: liveDbUser.role || 'resident',
+          rawUserMetaData: liveDbUser.raw_user_meta_data || undefined,
+          createdAt: liveDbUser.created_at || new Date().toISOString(),
+          updatedAt: liveDbUser.updated_at || new Date().toISOString(),
+        };
+        useAuthStore.setState({
+          status: 'authenticated',
+          user: fullUser,
+          token: `token_${fullUser.id}`,
+        });
+      } else if (clerkUser) {
         await useAuthStore.getState().syncUserFromClerk(clerkUser);
       }
+
       const currentUser = useAuthStore.getState().user;
 
       // Restrict Veterinarian & Administrator accounts from continuing into pet owner app
@@ -107,8 +172,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       const hasCompletedProfile = Boolean(
         currentUser?.profileCompleted &&
-        currentUser?.mobileNumber &&
-        currentUser?.address
+        (currentUser?.mobileNumber || currentUser?.address)
       );
 
       // Provide a deliberate, smooth loading experience with PawLoading

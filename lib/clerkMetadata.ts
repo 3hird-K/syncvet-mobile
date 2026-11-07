@@ -10,9 +10,6 @@ const SERVICE_TITLES: Record<string, string> = {
   consultation: 'Consultation',
   vaccination: 'Vaccination',
   'spay-neuter': 'Spay & Neuter',
-  deworming: 'Deworming',
-  'pet-registration': 'Pet Registration',
-  other: 'Veterinary Service',
 };
 
 /**

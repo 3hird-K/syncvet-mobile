@@ -14,6 +14,8 @@ import type {
  */
 export interface DataService {
   getPets(ownerId: string): Promise<Pet[]>;
+  getPetById?(petId: string): Promise<Pet | null>;
+  getUserById?(userId: string): Promise<any | null>;
   addPet(ownerId: string, input: PetInput): Promise<Pet>;
   updatePet(pet: Pet): Promise<void>;
   deletePet(ownerId: string, petId: string): Promise<void>;

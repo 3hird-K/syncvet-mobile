@@ -93,6 +93,29 @@ class SupabaseRealtimeService {
           event: 'DELETE',
           schema: 'public',
           table: 'users',
+        },
+        async (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (!deletedId || deletedId === ownerId) {
+            console.warn(`[SupabaseRealtime] Resident account deleted in Supabase for owner: ${ownerId}. Logging out.`);
+            this.unsubscribe();
+            try {
+              if (this.onAccountDeletedCallback) {
+                await this.onAccountDeletedCallback();
+              }
+              await useAuthStore.getState().signOut();
+            } catch (err) {
+              console.error('[SupabaseRealtime] Sign out error:', err);
+            }
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'users',
           filter: `id=eq.${ownerId}`,
         },
         async () => {

@@ -29,7 +29,6 @@ export default function UnauthorizedRoleScreen() {
   const detectedRole =
     currentUser?.role ||
     (clerkUser?.publicMetadata?.role as string) ||
-    (clerkUser?.unsafeMetadata?.role as string) ||
     'Veterinarian';
 
   const roleTitle = formatRoleTitle(detectedRole);

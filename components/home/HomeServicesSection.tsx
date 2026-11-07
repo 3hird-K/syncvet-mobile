@@ -10,15 +10,13 @@ import { haptic } from '@lib/haptics';
 import { SectionHeader } from '@components/ui/SectionHeader';
 import { ServiceCard } from '@components/ui/ServiceCard';
 
-const HOME_SERVICES = SERVICES.slice(0, 4);
-
 export function HomeServicesSection() {
   const router = useRouter();
 
-  // Group into pairs of 2 for a guaranteed 2-column grid
+  // Group into pairs: [Consultation, Vaccination], and [Spay & Neuter]
   const rows = [
-    [HOME_SERVICES[0], HOME_SERVICES[1]],
-    [HOME_SERVICES[2], HOME_SERVICES[3]],
+    [SERVICES[0], SERVICES[1]],
+    [SERVICES[2]],
   ];
 
   return (

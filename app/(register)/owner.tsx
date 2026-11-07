@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -30,6 +31,7 @@ import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { DropdownSelect } from '@components/ui/DropdownSelect';
 import { Button } from '@components/ui/Button';
+import { supabase } from '@lib/supabase';
 import { syncQueue, syncEngine } from '@services/sync';
 import { toast } from '@components/ui/Sonner';
 
@@ -89,6 +91,17 @@ export default function ResidentOnboardingScreen() {
     (state) => state.completeResidentOnboarding,
   );
 
+  const userEmail =
+    clerkUser?.primaryEmailAddress?.emailAddress ||
+    currentUser?.email ||
+    'resident@cagayandeoro.gov.ph';
+  const userPhoto = clerkUser?.imageUrl || currentUser?.photoUrl;
+  const ownerId =
+    clerkUser?.id ||
+    (currentUser?.id?.startsWith('user_') ? currentUser.id : undefined) ||
+    currentUser?.id ||
+    '';
+
   const [step, setStep] = useState<OnboardingStep>(1);
   const [submitting, setSubmitting] = useState(false);
   const [isPhoneFocused, setIsPhoneFocused] = useState(false);
@@ -146,10 +159,10 @@ export default function ResidentOnboardingScreen() {
     currentUser?.rawUserMetaData?.cared_animals || ['dogs'],
   );
 
-  // Sync initial user details once
+  // Sync initial user details once and fetch Supabase public.users if exists
   const initialSyncRef = useRef(false);
   useEffect(() => {
-    if (!initialSyncRef.current && (clerkUser || currentUser)) {
+    if (!initialSyncRef.current && (clerkUser || currentUser || ownerId)) {
       initialSyncRef.current = true;
       const initialFirst = clerkUser?.firstName || currentUser?.firstName || '';
       const initialLast = clerkUser?.lastName || currentUser?.lastName || '';
@@ -158,8 +171,54 @@ export default function ResidentOnboardingScreen() {
       if (initialFirst) setFirstName(initialFirst);
       if (initialLast) setLastName(initialLast);
       if (initialMobile) setMobileNumber(formatPhilippineMobileInput(initialMobile));
+
+      if (ownerId) {
+        (async () => {
+          try {
+            const { data: dbUser } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', ownerId)
+              .maybeSingle();
+
+            if (dbUser) {
+              if (dbUser.profile_completed) {
+                router.replace('/(main)');
+                return;
+              }
+              if (dbUser.first_name) setFirstName(dbUser.first_name);
+              if (dbUser.last_name) setLastName(dbUser.last_name);
+              if (dbUser.phone_number) setMobileNumber(formatPhilippineMobileInput(dbUser.phone_number));
+              const meta = (dbUser.raw_user_meta_data as any) || {};
+              if (meta.barangay) {
+                setBarangaySearch(meta.barangay);
+                setSelectedBarangay(meta.barangay);
+              }
+              if (meta.streetAddress || meta.street) {
+                setStreet(meta.streetAddress || meta.street);
+              }
+              if (meta.landmark) setLandmark(meta.landmark);
+              if (meta.smsConsent !== undefined || meta.sms_notifications_enabled !== undefined) {
+                setSmsConsent(Boolean(meta.smsConsent ?? meta.sms_notifications_enabled));
+              }
+              if (meta.emergencyContactName || meta.emergency_contact_name) {
+                setEmergencyContact(meta.emergencyContactName || meta.emergency_contact_name);
+              }
+              if (meta.emergencyContactRelation || meta.emergency_contact_relationship) {
+                setRelationship(meta.emergencyContactRelation || meta.emergency_contact_relationship);
+              }
+              if (meta.emergencyContactPhone || meta.emergency_contact_phone) {
+                setEmergencyPhone(formatPhilippineMobileInput(meta.emergencyContactPhone || meta.emergency_contact_phone));
+              }
+              if (meta.caredAnimals || meta.cared_animals) {
+                setCaredAnimals(meta.caredAnimals || meta.cared_animals);
+              }
+            }
+          } catch {}
+        })();
+      }
     }
-  }, [clerkUser, currentUser]);
+  }, [clerkUser, currentUser, ownerId]);
 
   // Strict 09 Philippine mobile validation
   const isPhoneValid = useMemo(() => {
@@ -235,15 +294,64 @@ export default function ResidentOnboardingScreen() {
     return true;
   }, [step, isStep1Valid]);
 
-  // Programmatic scroll to a specific step
-  const goToStep = useCallback((target: OnboardingStep) => {
-    haptic.light();
-    setStep(target);
-    horizontalScrollRef.current?.scrollTo({
-      x: (target - 1) * width,
-      animated: true,
-    });
-  }, [width]);
+  // Programmatic scroll to a specific step with auto-save progress
+  const saveStepProgress = useCallback(
+    async (currentStepNum: number) => {
+      if (!ownerId) return;
+      const cleanMobile = mobileNumber.replace(/[\s\-]/g, '');
+      const finalBarangay = matchedBarangay || selectedBarangay.trim() || barangaySearch.trim();
+      const now = new Date().toISOString();
+
+      try {
+        if (currentStepNum === 1 && isStep1Valid) {
+          await supabase.from('users').update({
+            first_name: firstName.trim() || null,
+            last_name: lastName.trim() || null,
+            full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+            phone_number: cleanMobile || null,
+            updated_at: now,
+          }).eq('id', ownerId);
+        } else if (currentStepNum === 2 && isStep2Valid) {
+          const fullAddress = `${street.trim()}, ${finalBarangay}, Cagayan de Oro City, Misamis Oriental`;
+          await supabase.from('users').update({
+            address: fullAddress,
+            updated_at: now,
+          }).eq('id', ownerId);
+        }
+      } catch (saveErr) {
+        console.warn('[saveStepProgress] Supabase progress auto-save note:', saveErr);
+      }
+    },
+    [
+      ownerId,
+      mobileNumber,
+      matchedBarangay,
+      selectedBarangay,
+      barangaySearch,
+      isStep1Valid,
+      isStep2Valid,
+      userEmail,
+      firstName,
+      lastName,
+      userPhoto,
+      street,
+      landmark,
+      smsConsent,
+    ],
+  );
+
+  const goToStep = useCallback(
+    (target: OnboardingStep) => {
+      haptic.light();
+      saveStepProgress(step);
+      setStep(target);
+      horizontalScrollRef.current?.scrollTo({
+        x: (target - 1) * width,
+        animated: true,
+      });
+    },
+    [width, step, saveStepProgress],
+  );
 
   // Stepper Header click handling
   const handleStepHeaderPress = (target: OnboardingStep) => {
@@ -333,6 +441,28 @@ export default function ResidentOnboardingScreen() {
     try {
       const finalBarangay = matchedBarangay || selectedBarangay.trim() || barangaySearch.trim();
       const cleanMobile = mobileNumber.replace(/[\s\-]/g, '');
+      const cleanEmergency = emergencyPhone.replace(/[\s\-]/g, '');
+      const cleanStreet = street.trim();
+      const fullAddress = `${cleanStreet}, ${finalBarangay}, Cagayan de Oro City, Misamis Oriental`;
+      const petTypes = (caredAnimals || ['dogs']).map((a) => (a === 'dogs' ? 'Dogs' : 'Cats'));
+
+      const cleanRelation = relationship === 'Spouse / Partner' ? 'Spouse' : relationship;
+      const metadata = {
+        address: fullAddress,
+        barangay: finalBarangay,
+        landmark: landmark.trim(),
+        petTypes,
+        roleTitle: 'Pet Owner',
+        smsConsent,
+        accountType: 'pet_owner',
+        phoneNumber: cleanMobile,
+        mobileNumber: cleanMobile,
+        streetAddress: cleanStreet,
+        profileCompleted: true,
+        emergencyContactName: emergencyContact.trim(),
+        emergencyContactPhone: cleanEmergency,
+        emergencyContactRelation: cleanRelation,
+      };
 
       await completeResidentOnboarding({
         firstName: firstName.trim(),
@@ -340,35 +470,79 @@ export default function ResidentOnboardingScreen() {
         fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
         mobileNumber: cleanMobile,
         barangay: finalBarangay,
-        street: street.trim(),
+        street: cleanStreet,
         landmark: landmark.trim(),
         smsNotificationsEnabled: smsConsent,
         emergencyContactName: emergencyContact.trim(),
         emergencyContactRelationship: relationship,
-        emergencyContactPhone: emergencyPhone.replace(/[\s\-]/g, ''),
+        emergencyContactPhone: cleanEmergency,
         caredAnimals,
         healthDeclarationAgreed: true,
+        explicitUserId: ownerId,
       });
 
+      // Direct registration into Supabase public.users
+      if (ownerId) {
+        const now = new Date().toISOString();
+        try {
+          const { data: updatedUsers, error: updateErr } = await supabase
+            .from('users')
+            .update({
+              first_name: firstName.trim() || null,
+              last_name: lastName.trim() || null,
+              full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+              phone_number: cleanMobile,
+              address: fullAddress,
+              avatar_url: userPhoto || null,
+              role: 'Pet Owner',
+              profile_completed: true,
+              raw_user_meta_data: metadata,
+              updated_at: now,
+            })
+            .eq('id', ownerId)
+            .select();
+
+          if (!updatedUsers || updatedUsers.length === 0) {
+            await supabase.from('users').upsert(
+              {
+                id: ownerId,
+                email: userEmail,
+                first_name: firstName.trim() || null,
+                last_name: lastName.trim() || null,
+                full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+                phone_number: cleanMobile,
+                address: fullAddress,
+                avatar_url: userPhoto || null,
+                role: 'Pet Owner',
+                profile_completed: true,
+                raw_user_meta_data: metadata,
+                updated_at: now,
+              },
+              { onConflict: 'id' },
+            );
+          }
+          console.log('[handleFinish] Supabase public.users registration successfully saved!');
+        } catch (dbErr) {
+          console.warn('[handleFinish] Direct Supabase save note:', dbErr);
+        }
+      }
+
+      // Ensure Clerk unsafeMetadata is completely wiped; pure Supabase architecture
+      if (clerkUser) {
+        try {
+          await clerkUser.update({ unsafeMetadata: {} });
+        } catch {}
+      }
+
       // Enqueue to offline synchronization engine
-      const ownerId = currentUser?.id || clerkUser?.id || '';
       if (ownerId) {
         await syncQueue.enqueue(ownerId, 'profile', ownerId, 'UPDATE_PROFILE', {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           mobileNumber: cleanMobile,
-          address: `${street.trim()}, ${finalBarangay}, Cagayan de Oro City`,
-          metadata: {
-            barangay: finalBarangay,
-            street: street.trim(),
-            landmark: landmark.trim(),
-            sms_notifications_enabled: smsConsent,
-            emergency_contact_name: emergencyContact.trim(),
-            emergency_contact_relationship: relationship,
-            emergency_contact_phone: emergencyPhone.replace(/[\s\-]/g, ''),
-            cared_animals: caredAnimals,
-            health_declaration_agreed: true,
-          },
+          address: fullAddress,
+          metadata,
+          timestamp: Date.now(),
         });
         syncEngine.sync(ownerId, clerkUser).catch(() => {});
       }
@@ -389,12 +563,6 @@ export default function ResidentOnboardingScreen() {
       setSubmitting(false);
     }
   };
-
-  const userEmail =
-    clerkUser?.primaryEmailAddress?.emailAddress ||
-    currentUser?.email ||
-    'resident@cagayandeoro.gov.ph';
-  const userPhoto = clerkUser?.imageUrl || currentUser?.photoUrl;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -694,6 +862,38 @@ export default function ResidentOnboardingScreen() {
                 )}
               </View>
 
+              <View style={styles.actionWrap}>
+                <Pressable
+                  onPress={() => {
+                    if (!isStep1Valid) {
+                      haptic.warning();
+                      toast.error('Profile Incomplete', {
+                        description: 'Please enter your First Name and an 11-digit mobile number starting with 09.',
+                      });
+                      return;
+                    }
+                    goToStep(2);
+                  }}
+                  disabled={!isStep1Valid}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    !isStep1Valid && styles.primaryBtnDisabled,
+                    pressed && isStep1Valid && styles.primaryBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue to Location"
+                >
+                  <Text style={[styles.primaryBtnText, !isStep1Valid && styles.primaryBtnTextDisabled]}>
+                    Continue
+                  </Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={18}
+                    color={isStep1Valid ? colors.white : colors.textDisabled}
+                  />
+                </Pressable>
+              </View>
+
               <View style={styles.footerWrap}>
                 <Text style={styles.footerText}>
                   Protected by City Veterinary Office of Cagayan de Oro - Data Privacy Act of 2012
@@ -871,6 +1071,40 @@ export default function ResidentOnboardingScreen() {
                 />
               </View>
 
+              <View style={styles.actionWrap}>
+                <Pressable
+                  onPress={() => {
+                    if (!isStep2Valid) {
+                      haptic.warning();
+                      toast.error('Location Incomplete', {
+                        description: !isBarangayValid
+                          ? 'Please enter or select an official Cagayan de Oro barangay.'
+                          : 'Street / House No. is required to proceed.',
+                      });
+                      return;
+                    }
+                    goToStep(3);
+                  }}
+                  disabled={!isStep2Valid}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    !isStep2Valid && styles.primaryBtnDisabled,
+                    pressed && isStep2Valid && styles.primaryBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue to Safety and Pets"
+                >
+                  <Text style={[styles.primaryBtnText, !isStep2Valid && styles.primaryBtnTextDisabled]}>
+                    Continue
+                  </Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={18}
+                    color={isStep2Valid ? colors.white : colors.textDisabled}
+                  />
+                </Pressable>
+              </View>
+
               <View style={styles.footerWrap}>
                 <Text style={styles.footerText}>
                   Protected by City Veterinary Office of Cagayan de Oro - Data Privacy Act of 2012
@@ -987,15 +1221,30 @@ export default function ResidentOnboardingScreen() {
               </View>
 
               {/* Complete Registration Action Button */}
-              <View style={styles.submitWrap}>
-                <Button
-                  title={submitting ? 'Saving Profile...' : 'Complete Registration'}
-                  variant="primary"
-                  size="lg"
+              <View style={styles.actionWrap}>
+                <Pressable
                   onPress={handleFinish}
                   disabled={submitting}
-                  loading={submitting}
-                />
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    submitting && styles.primaryBtnDisabled,
+                    pressed && !submitting && styles.primaryBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Complete Registration"
+                >
+                  {submitting ? (
+                    <View style={styles.btnRow}>
+                      <ActivityIndicator size="small" color={colors.white} />
+                      <Text style={styles.primaryBtnText}>Saving Profile...</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.btnRow}>
+                      <Text style={styles.primaryBtnText}>Complete Registration</Text>
+                      <Ionicons name="checkmark-circle" size={19} color={colors.white} />
+                    </View>
+                  )}
+                </Pressable>
               </View>
 
               <View style={styles.footerWrap}>
@@ -1504,9 +1753,52 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 
-  /* Complete Registration Button */
-  submitWrap: {
-    marginTop: 20,
+  /* Registration Action Buttons */
+  actionWrap: {
+    marginTop: 24,
+    marginBottom: 4,
+  },
+  primaryBtn: {
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    shadowColor: colors.primaryStrong,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  primaryBtnPressed: {
+    backgroundColor: colors.primaryStrong,
+    transform: [{ scale: 0.985 }],
+    shadowOpacity: 0.08,
+  },
+  primaryBtnDisabled: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primaryBtnText: {
+    fontFamily: typography.font.bold,
+    fontSize: 15.5,
+    color: colors.white,
+    letterSpacing: 0.2,
+  },
+  primaryBtnTextDisabled: {
+    color: colors.textDisabled,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
 
   /* Footer */

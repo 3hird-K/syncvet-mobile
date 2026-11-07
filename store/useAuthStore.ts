@@ -45,6 +45,7 @@ interface AuthState {
     emergencyContactPhone?: string;
     caredAnimals?: ('dogs' | 'cats')[];
     healthDeclarationAgreed: boolean;
+    explicitUserId?: string;
   }) => Promise<void>;
   markRegistrationComplete: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -135,7 +136,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const role: UserRole =
       dbUser?.role ||
       (clerkUser.publicMetadata?.role as string) ||
-      (clerkUser.unsafeMetadata?.role as string) ||
       currentUser?.role ||
       'resident';
 
@@ -231,30 +231,50 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   completeResidentOnboarding: async (payload) => {
     const user = get().user;
-    if (!user) {
+    const targetUserId =
+      payload.explicitUserId ||
+      (user?.id?.startsWith('user_') ? user.id : undefined) ||
+      user?.id;
+
+    if (!targetUserId) {
       throw new AuthError('UNKNOWN', 'No active session.');
     }
 
     const cleanMobile = payload.mobileNumber.trim();
-    const cleanAddress = `${payload.street.trim()}, ${payload.barangay.trim()}, Cagayan de Oro City`;
+    const cleanAddress = `${payload.street.trim()}, ${payload.barangay.trim()}, Cagayan de Oro City, Misamis Oriental`;
     const cleanFirst = payload.firstName.trim();
     const cleanLast = payload.lastName.trim();
-    const cleanName = (payload.fullName || `${cleanFirst} ${cleanLast}`).trim() || user.fullName;
+    const cleanName = (payload.fullName || `${cleanFirst} ${cleanLast}`).trim() || user?.fullName || 'Resident';
+
+    const petTypes = (payload.caredAnimals || ['dogs']).map((a) =>
+      a === 'dogs' ? 'Dogs' : 'Cats',
+    );
+
+    const cleanRelation =
+      payload.emergencyContactRelationship === 'Spouse / Partner'
+        ? 'Spouse'
+        : (payload.emergencyContactRelationship?.trim() || 'Spouse');
 
     const metadata = {
+      address: cleanAddress,
       barangay: payload.barangay.trim(),
-      street: payload.street.trim(),
       landmark: payload.landmark?.trim() || '',
-      sms_notifications_enabled: payload.smsNotificationsEnabled,
-      emergency_contact_name: payload.emergencyContactName?.trim() || '',
-      emergency_contact_relationship: payload.emergencyContactRelationship?.trim() || '',
-      emergency_contact_phone: payload.emergencyContactPhone?.trim() || '',
-      cared_animals: payload.caredAnimals || [],
-      health_declaration_agreed: payload.healthDeclarationAgreed,
+      petTypes,
+      roleTitle: 'Pet Owner',
+      smsConsent: payload.smsNotificationsEnabled,
+      accountType: 'pet_owner',
+      phoneNumber: cleanMobile,
+      mobileNumber: cleanMobile,
+      streetAddress: payload.street.trim(),
+      profileCompleted: true,
+      emergencyContactName: payload.emergencyContactName?.trim() || '',
+      emergencyContactPhone: payload.emergencyContactPhone?.trim() || '',
+      emergencyContactRelation: cleanRelation,
     };
 
     try {
-      await supabase
+      const now = new Date().toISOString();
+      const { data: updatedRows } = await supabase
         .from('users')
         .update({
           phone_number: cleanMobile,
@@ -262,23 +282,56 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           full_name: cleanName,
           first_name: cleanFirst || null,
           last_name: cleanLast || null,
+          avatar_url: user?.photoUrl || null,
+          role: 'Pet Owner',
           profile_completed: true,
           raw_user_meta_data: metadata,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         })
-        .eq('id', user.id);
+        .eq('id', targetUserId)
+        .select();
+
+      if (!updatedRows || updatedRows.length === 0) {
+        await supabase
+          .from('users')
+          .upsert(
+            {
+              id: targetUserId,
+              email: user?.email || `${targetUserId}@resident.syncvet.app`,
+              phone_number: cleanMobile,
+              address: cleanAddress,
+              full_name: cleanName,
+              first_name: cleanFirst || null,
+              last_name: cleanLast || null,
+              avatar_url: user?.photoUrl || null,
+              role: 'Pet Owner',
+              profile_completed: true,
+              raw_user_meta_data: metadata,
+              updated_at: now,
+            },
+            { onConflict: 'id' },
+          );
+      }
     } catch (err: any) {
       console.warn('[useAuthStore] completeResidentOnboarding error:', err?.message);
     }
 
     const updated: AuthUser = {
-      ...user,
+      ...(user || {
+        id: targetUserId,
+        email: `${targetUserId}@resident.syncvet.app`,
+        authProvider: 'google',
+        role: 'resident',
+        createdAt: new Date().toISOString(),
+      }),
+      id: targetUserId,
       fullName: cleanName,
       firstName: cleanFirst,
       lastName: cleanLast,
       mobileNumber: cleanMobile,
       address: cleanAddress,
       profileCompleted: true,
+      role: 'resident',
       rawUserMetaData: metadata,
       updatedAt: new Date().toISOString(),
     };

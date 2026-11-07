@@ -24,12 +24,9 @@ import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
 import { ServicesScreenSkeleton } from '@components/ui/Skeleton';
 
 const SERVICE_TAGS: Record<string, { label: string; bg: string; color: string }> = {
+  consultation: { label: 'General Wellness', bg: 'rgba(0, 168, 150, 0.12)', color: colors.primary },
   vaccination: { label: 'Free City Program', bg: 'rgba(16, 185, 129, 0.12)', color: colors.success },
   'spay-neuter': { label: 'Free Kapon Initiative', bg: 'rgba(37, 99, 235, 0.12)', color: '#2563EB' },
-  consultation: { label: 'General Wellness', bg: 'rgba(0, 168, 150, 0.12)', color: colors.primary },
-  deworming: { label: 'Parasite Control', bg: 'rgba(245, 158, 11, 0.12)', color: colors.warning },
-  'pet-registration': { label: 'Official Passport', bg: 'rgba(139, 92, 246, 0.12)', color: '#8B5CF6' },
-  other: { label: 'Municipal Care', bg: 'rgba(7, 30, 38, 0.08)', color: colors.textSecondary },
 };
 
 export default function ServicesScreen() {

@@ -44,44 +44,11 @@ export const SERVICES: ServiceDef[] = [
     name: 'Spay & Neuter',
     tagline: 'Responsible pet ownership',
     description:
-      'Register your pet for the city’s free spay and neuter program.',
+      'Register your pet for the city’s free spay and neuter (kapon) surgery program.',
     icon: 'fitness-outline',
     color: colors.info,
     bg: colors.infoLight,
     cta: 'Register for Surgery',
-  },
-  {
-    id: 'deworming',
-    name: 'Deworming',
-    tagline: 'Regular parasite protection',
-    description:
-      'Schedule routine deworming to keep your pet healthy and parasite-free.',
-    icon: 'medkit-outline',
-    color: colors.warningDark,
-    bg: colors.warningLight,
-    cta: 'Schedule Deworming',
-  },
-  {
-    id: 'pet-registration',
-    name: 'Pet Registration',
-    tagline: 'Register a pet with the city',
-    description:
-      'Register a new pet with the City Veterinary Office for licensing and record keeping.',
-    icon: 'paw-outline',
-    color: colors.successDark,
-    bg: colors.successLight,
-    cta: 'Register Your Pet',
-  },
-  {
-    id: 'other',
-    name: 'Other Services',
-    tagline: 'Everything else from the office',
-    description:
-      'Reach out about other city veterinary services, programs, and support.',
-    icon: 'grid-outline',
-    color: colors.textSecondary,
-    bg: colors.surfaceMuted,
-    cta: 'Contact the Office',
   },
 ];
 

@@ -99,11 +99,16 @@ export class MockAuthService implements AuthService {
     // otherwise a resident record is provisioned from the Google profile.
     const existing = users[email];
     if (existing) {
+      if (profile.id && (!existing.id || existing.id.startsWith('usr_'))) {
+        existing.id = profile.id;
+        users[email] = existing;
+        await saveMockUsers(users);
+      }
       return this.createSession(existing);
     }
 
     const user: AuthUser = {
-      id: `usr_${Date.now().toString(36)}`,
+      id: profile.id || `usr_${Date.now().toString(36)}`,
       fullName: profile.fullName.trim() || 'Resident',
       email,
       mobileNumber: '',

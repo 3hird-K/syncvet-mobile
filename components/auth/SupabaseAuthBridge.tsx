@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { useAuth, useUser } from '@clerk/expo';
 import { setSupabaseTokenProvider, supabase } from '@lib/supabase';
 import { useAuthStore } from '@store/useAuthStore';
 import { supabaseRealtimeService } from '@services/realtime/SupabaseRealtimeService';
+import { toast } from '@components/ui/Sonner';
 
 /**
  * Headless bridge component that connects Clerk's authenticated session
@@ -10,9 +12,10 @@ import { supabaseRealtimeService } from '@services/realtime/SupabaseRealtimeServ
  * 
  * Responsibilities:
  * 1. Automatically signs out of local store if user is deleted or revoked in Clerk.
- * 2. Automatically signs out of Clerk if user record is deleted in Supabase.
+ * 2. Automatically signs out of Clerk and mobile session if user record is deleted in Supabase admin.
  * 3. Mounts root-level Supabase Realtime subscription to catch instant DELETE events.
- * 4. Syncs user profile data into store without resurrecting deleted accounts.
+ * 4. Active heartbeat poll & AppState listener to detect admin deletion in real-time.
+ * 5. Syncs user profile data into store without resurrecting deleted accounts.
  */
 export function SupabaseAuthBridge() {
   const { getToken, isSignedIn, isLoaded, signOut: clerkSignOut } = useAuth();
@@ -48,6 +51,9 @@ export function SupabaseAuthBridge() {
   useEffect(() => {
     supabaseRealtimeService.setOnAccountDeleted(async () => {
       console.warn('[SupabaseAuthBridge] Realtime account deleted event received. Signing out.');
+      toast.error('Account Deleted', {
+        description: 'Your account was deleted by an administrator.',
+      });
       await clerkSignOut().catch(() => {});
       await useAuthStore.getState().signOut().catch(() => {});
     });
@@ -92,7 +98,19 @@ export function SupabaseAuthBridge() {
 
         // Step B: User is not in Supabase public.users
         if (!dbError && !dbUser) {
-          // Create user record in Supabase public.users for valid Clerk session
+          const currentStoreUser = useAuthStore.getState().user;
+          // Only sign out if this exact user previously had a completed profile and was deleted in the admin
+          if (currentStoreUser && currentStoreUser.id === clerkUser.id && currentStoreUser.profileCompleted) {
+            console.warn('[SupabaseAuthBridge] Resident profile was deleted in Supabase admin. Signing out.');
+            toast.error('Account Deleted', {
+              description: 'Your account was removed by an administrator.',
+            });
+            await clerkSignOut().catch(() => {});
+            await useAuthStore.getState().signOut().catch(() => {});
+            return;
+          }
+
+          // Register initial user record in Supabase public.users for valid Clerk session
           const email =
             clerkUser.primaryEmailAddress?.emailAddress || `${clerkUser.id}@resident.syncvet.app`;
           const fullName =
@@ -112,6 +130,8 @@ export function SupabaseAuthBridge() {
                   first_name: clerkUser.firstName || null,
                   last_name: clerkUser.lastName || null,
                   avatar_url: avatarUrl,
+                  role: 'Pet Owner',
+                  profile_completed: false,
                   updated_at: new Date().toISOString(),
                 },
                 { onConflict: 'id' },
@@ -119,10 +139,18 @@ export function SupabaseAuthBridge() {
           } catch (upsertErr) {
             console.warn('[SupabaseAuthBridge] Failed to create user in Supabase:', upsertErr);
           }
-          return;
         }
 
-        // Sync fresh profile into auth store
+        if (clerkUser.unsafeMetadata && Object.keys(clerkUser.unsafeMetadata).length > 0) {
+          try {
+            await clerkUser.update({ unsafeMetadata: {} });
+            console.log('[SupabaseAuthBridge] Cleared Clerk unsafeMetadata - profile is stored directly in Supabase public.users.');
+          } catch (metaErr) {
+            console.warn('[SupabaseAuthBridge] Note clearing Clerk unsafeMetadata:', metaErr);
+          }
+        }
+
+        // Sync fresh profile into auth store directly from Supabase
         await syncUserFromClerk(clerkUser).catch((err) => {
           console.warn('Failed to sync user from Clerk to store:', err);
         });
@@ -147,7 +175,57 @@ export function SupabaseAuthBridge() {
     }
   }, [clerkUser?.id, syncUserFromClerk, clerkSignOut]);
 
-  // 5. Supabase JWT Token Provider
+  // 6. Active deletion heartbeat: Automatically logs out if admin deletes the user in the database
+  useEffect(() => {
+    if (!clerkUser?.id || !isSignedIn) return;
+
+    let isMounted = true;
+
+    const checkUserStillExistsInAdmin = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, profile_completed')
+          .eq('id', clerkUser.id)
+          .maybeSingle();
+
+        if (!isMounted) return;
+
+        // If the query returns null, the record was deleted in the admin console!
+        if (!error && !data) {
+          const currentStoreUser = useAuthStore.getState().user;
+          if (currentStoreUser && currentStoreUser.id === clerkUser.id && currentStoreUser.profileCompleted) {
+            console.warn('[SupabaseAuthBridge] Heartbeat detected user was deleted by admin. Logging out automatically.');
+            toast.error('Account Deleted', {
+              description: 'Your account was deleted by an administrator.',
+            });
+            await clerkSignOut().catch(() => {});
+            await useAuthStore.getState().signOut().catch(() => {});
+          }
+        }
+      } catch (err) {
+        // Network offline / momentary hiccup, ignore
+      }
+    };
+
+    // Check periodically every 5 seconds
+    const intervalId = setInterval(checkUserStillExistsInAdmin, 5000);
+
+    // Also check immediately when app returns to foreground
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        checkUserStillExistsInAdmin();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      appStateSub.remove();
+    };
+  }, [clerkUser?.id, isSignedIn, clerkSignOut]);
+
+  // 7. Supabase JWT Token Provider
   useEffect(() => {
     if (isSignedIn) {
       setSupabaseTokenProvider(async () => {
