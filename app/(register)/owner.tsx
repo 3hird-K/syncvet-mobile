@@ -145,7 +145,6 @@ export default function ResidentOnboardingScreen() {
   const [caredAnimals, setCaredAnimals] = useState<('dogs' | 'cats')[]>(
     currentUser?.rawUserMetaData?.cared_animals || ['dogs'],
   );
-  const [healthDeclaration, setHealthDeclaration] = useState(true);
 
   // Sync initial user details once
   const initialSyncRef = useRef(false);
@@ -222,9 +221,7 @@ export default function ResidentOnboardingScreen() {
     return isBarangayValid && street.trim().length > 0;
   }, [isBarangayValid, street]);
 
-  const isStep3Valid = useMemo(() => {
-    return healthDeclaration;
-  }, [healthDeclaration]);
+  const isStep3Valid = true;
 
   // Step access control: prevent swiping next if required fields aren't filled
   const canAccessStep2 = isStep1Valid;
@@ -332,14 +329,6 @@ export default function ResidentOnboardingScreen() {
   };
 
   const handleFinish = async () => {
-    if (!healthDeclaration) {
-      haptic.warning();
-      toast.error('Consent Required', {
-        description: 'Please agree to the Municipal Health Declaration to complete registration.',
-      });
-      return;
-    }
-
     setSubmitting(true);
     try {
       const finalBarangay = matchedBarangay || selectedBarangay.trim() || barangaySearch.trim();
@@ -358,7 +347,7 @@ export default function ResidentOnboardingScreen() {
         emergencyContactRelationship: relationship,
         emergencyContactPhone: emergencyPhone.replace(/[\s\-]/g, ''),
         caredAnimals,
-        healthDeclarationAgreed: healthDeclaration,
+        healthDeclarationAgreed: true,
       });
 
       // Enqueue to offline synchronization engine
@@ -378,7 +367,7 @@ export default function ResidentOnboardingScreen() {
             emergency_contact_relationship: relationship,
             emergency_contact_phone: emergencyPhone.replace(/[\s\-]/g, ''),
             cared_animals: caredAnimals,
-            health_declaration_agreed: healthDeclaration,
+            health_declaration_agreed: true,
           },
         });
         syncEngine.sync(ownerId, clerkUser).catch(() => {});
@@ -439,7 +428,7 @@ export default function ResidentOnboardingScreen() {
               ]}
               numberOfLines={1}
             >
-              Profile & Contact
+              Profile
             </Text>
           </Pressable>
 
@@ -550,9 +539,7 @@ export default function ResidentOnboardingScreen() {
                 ? isStep2Valid
                   ? 'Location ready · Swipe to proceed'
                   : 'Barangay & Street address required'
-                : isStep3Valid
-                ? 'Ready · Confirm declaration and tap complete'
-                : 'Municipal declaration agreement required'}
+                : 'Ready · Tap Complete Registration to finish'}
             </Text>
           </View>
         </View>
@@ -912,28 +899,27 @@ export default function ResidentOnboardingScreen() {
                 Helps municipal veterinarians reach secondary contact in animal emergencies or lost pet recoveries.
               </Text>
 
-              {/* Emergency Contact & Relationship */}
-              <View style={[styles.nameRow, isCompact && styles.nameRowStack]}>
-                <View style={[styles.nameCol, { marginRight: isCompact ? 0 : 8 }]}>
-                  <Text style={styles.inputLabel}>Emergency Contact Person</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={emergencyContact}
-                    onChangeText={setEmergencyContact}
-                    placeholder="e.g. Maria Dela Cruz"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
+              {/* Emergency Contact Person */}
+              <View style={styles.fieldSection}>
+                <Text style={styles.inputLabel}>Emergency Contact Person</Text>
+                <TextInput
+                  style={styles.input}
+                  value={emergencyContact}
+                  onChangeText={setEmergencyContact}
+                  placeholder="e.g. Maria Dela Cruz"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
 
-                <View style={[styles.nameCol, { marginLeft: isCompact ? 0 : 8, marginTop: isCompact ? 12 : 0 }]}>
-                  <DropdownSelect
-                    label="Relationship"
-                    value={relationship}
-                    options={RELATIONSHIP_OPTIONS}
-                    onChange={setRelationship}
-                    title="Select Relationship"
-                  />
-                </View>
+              {/* Relationship */}
+              <View style={styles.fieldSection}>
+                <DropdownSelect
+                  label="Relationship to Pet Owner"
+                  value={relationship}
+                  options={RELATIONSHIP_OPTIONS}
+                  onChange={setRelationship}
+                  title="Select Relationship"
+                />
               </View>
 
               {/* Emergency Contact Phone */}
@@ -1000,29 +986,6 @@ export default function ResidentOnboardingScreen() {
                 </View>
               </View>
 
-              {/* Municipal Health Declaration */}
-              <Pressable
-                style={styles.notificationCard}
-                onPress={() => {
-                  haptic.light();
-                  setHealthDeclaration((prev) => !prev);
-                }}
-              >
-                <View style={[styles.checkbox, healthDeclaration && styles.checkboxChecked, { marginRight: 12 }]}>
-                  {healthDeclaration ? (
-                    <Ionicons name="checkmark" size={14} color={colors.white} />
-                  ) : null}
-                </View>
-                <View style={styles.notificationTextWrap}>
-                  <Text style={styles.notificationTitle}>
-                    Municipal Health Declaration & Consent
-                  </Text>
-                  <Text style={styles.notificationDesc}>
-                    I certify that information provided is accurate and consent to official CVO health notifications.
-                  </Text>
-                </View>
-              </Pressable>
-
               {/* Complete Registration Action Button */}
               <View style={styles.submitWrap}>
                 <Button
@@ -1030,7 +993,7 @@ export default function ResidentOnboardingScreen() {
                   variant="primary"
                   size="lg"
                   onPress={handleFinish}
-                  disabled={submitting || !healthDeclaration}
+                  disabled={submitting}
                   loading={submitting}
                 />
               </View>
