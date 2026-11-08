@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   FlatList,
   Image,
@@ -15,7 +15,8 @@ import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { colors, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { getPetAvatarSource } from '@lib/petAvatars';
-import type { Pet } from '@services/data';
+import { RegisterPetModal } from '@components/pets';
+import type { Pet, Species } from '@services/data';
 
 interface HomePetsSectionProps {
   pets: Pet[];
@@ -72,10 +73,13 @@ const TEASER_PETS = [
 
 export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
   const router = useRouter();
+  const [registerModalVisible, setRegisterModalVisible] = useState(false);
+  const [modalSpecies, setModalSpecies] = useState<Species>('dog');
 
-  const handleRegisterPress = () => {
+  const handleRegisterPress = (initialSpec: Species = 'dog') => {
     haptic.light();
-    router.push('/pets/add' as never);
+    setModalSpecies(initialSpec);
+    setRegisterModalVisible(true);
   };
 
   // Prepend Facebook Stories-style "Add Pet" card as the first item
@@ -116,7 +120,7 @@ export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Add Pet"
-                  onPress={handleRegisterPress}
+                  onPress={() => handleRegisterPress('dog')}
                   style={({ pressed }) => [
                     styles.createStoryCard,
                     shadows.sm,
@@ -156,13 +160,13 @@ export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
             // Teaser Cards when user has 0 pets registered yet
             if ('isTeaser' in item && item.isTeaser) {
               const teaser = item as (typeof TEASER_PETS)[number];
+              const isCatTeaser = teaser.id === '__teaser_cat__';
               return (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={teaser.name}
                   onPress={() => {
-                    haptic.light();
-                    router.push(teaser.route as never);
+                    handleRegisterPress(isCatTeaser ? 'cat' : 'dog');
                   }}
                   style={({ pressed }) => [
                     styles.petCard,
@@ -278,6 +282,13 @@ export function HomePetsSection({ pets, userPhotoUrl }: HomePetsSectionProps) {
           }}
         />
       </View>
+
+      {/* Official Pet Registration Modal matching municipal card spec */}
+      <RegisterPetModal
+        visible={registerModalVisible}
+        onClose={() => setRegisterModalVisible(false)}
+        initialSpecies={modalSpecies}
+      />
     </Animated.View>
   );
 }

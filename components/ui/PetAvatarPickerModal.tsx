@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -11,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { haptic } from '@lib/haptics';
@@ -57,36 +55,6 @@ export function PetAvatarPickerModal({
 
   const avatarsToDisplay: PetAvatarOption[] = activeTab === 'dog' ? DOG_AVATARS : CAT_AVATARS;
 
-  const handlePickFromGallery = async () => {
-    try {
-      haptic.light();
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(
-          'Permission Required',
-          'Please grant access to your photo library to pick a custom pet photo.',
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]?.uri) {
-        const uri = result.assets[0].uri;
-        haptic.success();
-        onSelectAvatar('custom', uri);
-        onClose();
-      }
-    } catch (e) {
-      console.log('Image picker error:', e);
-    }
-  };
-
   const handleSelectPreset = (item: PetAvatarOption) => {
     haptic.light();
     setSelectedId(item.id);
@@ -108,7 +76,7 @@ export function PetAvatarPickerModal({
             <View style={styles.header}>
               <View>
                 <Text style={styles.title}>Choose {petName}'s Profile</Text>
-                <Text style={styles.subtitle}>Select an illustrated avatar or upload photo</Text>
+                <Text style={styles.subtitle}>Select an official SyncVet pet avatar</Text>
               </View>
               <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={8}>
                 <Ionicons name="close" size={20} color={colors.textSecondary} />
@@ -165,21 +133,6 @@ export function PetAvatarPickerModal({
                 </Text>
               </Pressable>
             </View>
-
-            {/* Custom Photo Shortcut */}
-            <Pressable
-              onPress={handlePickFromGallery}
-              style={[styles.uploadCard, shadows.sm]}
-            >
-              <View style={styles.uploadIconWrap}>
-                <Ionicons name="camera" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.uploadTextWrap}>
-                <Text style={styles.uploadTitle}>Upload Custom Pet Photo</Text>
-                <Text style={styles.uploadSub}>Pick a picture from your camera roll</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-            </Pressable>
 
             {/* Avatar Grid */}
             <ScrollView
@@ -321,41 +274,8 @@ const styles = StyleSheet.create({
   tabBtnTextDisabled: {
     color: colors.textMuted,
   },
-  uploadCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3FAF8',
-    borderRadius: radius.lg,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.20)',
-    marginBottom: spacing.sm,
-    gap: 10,
-  },
-  uploadIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(0, 168, 150, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  uploadTextWrap: {
-    flex: 1,
-    gap: 1,
-  },
-  uploadTitle: {
-    ...typography.captionBold,
-    color: colors.primaryDark,
-    fontSize: 12.5,
-  },
-  uploadSub: {
-    ...typography.small,
-    color: colors.textSecondary,
-    fontSize: 10.5,
-  },
   gridScroll: {
-    maxHeight: 280,
+    maxHeight: 360,
   },
   gridContent: {
     paddingBottom: spacing.md,

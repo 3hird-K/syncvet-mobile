@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Image,
-  ImageSourcePropType,
   Modal,
   Platform,
   Pressable,
@@ -38,6 +37,9 @@ export interface AnnouncementItem {
   author?: {
     id: string;
     avatar_url?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    full_name?: string | null;
   } | null;
 }
 
@@ -57,6 +59,82 @@ const CATEGORIES = [
   'Urgent Advisory',
 ] as const;
 
+const AVATAR_BG_COLORS = [
+  '#0D9488', // Teal
+  '#2563EB', // Blue
+  '#7C3AED', // Violet
+  '#059669', // Emerald
+  '#D97706', // Amber
+  '#E11D48', // Rose
+  '#4F46E5', // Indigo
+  '#0891B2', // Cyan
+];
+
+export function getAvatarBgColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % AVATAR_BG_COLORS.length;
+  return AVATAR_BG_COLORS[index];
+}
+
+export function getAuthorInitials(item: AnnouncementItem): string {
+  // 1. Check author first_name and last_name from users table
+  const firstName = item.author?.first_name?.trim();
+  const lastName = item.author?.last_name?.trim();
+  if (firstName && lastName) {
+    return `${firstName[0]}${lastName[0]}`.toUpperCase();
+  }
+  if (firstName && !lastName && firstName.length >= 2) {
+    return firstName.slice(0, 2).toUpperCase();
+  }
+
+  // 2. Parse from author.full_name or item.author_name
+  const name = (item.author?.full_name || item.author_name || '').trim();
+  if (!name) return 'CV';
+
+  // Strip common honorific / professional prefixes (e.g. "Dr. ", "Doc ", "Atty. ")
+  const cleaned = name.replace(/^(Dr\.|Doctor|Doc|Atty\.|Engr\.|Hon\.)\s+/i, '').trim();
+
+  // Strip trailing credentials (e.g. ", DVM", ", MD", ", RN")
+  const strippedCredentials = cleaned.replace(/,\s*(DVM|MD|RN|PhD|MS|BS).*$/i, '').trim();
+
+  const words = strippedCredentials.split(/\s+/).filter(Boolean);
+
+  if (words.length >= 2) {
+    const firstInitial = words[0][0];
+    const lastInitial = words[words.length - 1][0];
+    return `${firstInitial}${lastInitial}`.toUpperCase();
+  }
+
+  if (words.length === 1 && words[0].length >= 2) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+
+  return (words[0]?.[0] || 'CV').toUpperCase();
+}
+
+export function getAuthorAvatarUrl(item: AnnouncementItem): string | null {
+  const url = item.author?.avatar_url;
+  if (url && typeof url === 'string') {
+    const trimmed = url.trim();
+    if (
+      trimmed.length > 0 &&
+      trimmed !== 'null' &&
+      trimmed !== 'undefined' &&
+      (trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://') ||
+        trimmed.startsWith('file:') ||
+        trimmed.startsWith('data:') ||
+        trimmed.startsWith('content:'))
+    ) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
 function formatRelativeTime(dateString: string): string {
   try {
     const diffMs = Date.now() - new Date(dateString).getTime();
@@ -70,28 +148,6 @@ function formatRelativeTime(dateString: string): string {
   } catch {
     return 'recently';
   }
-}
-
-function getAuthorAvatarSource(item: AnnouncementItem): ImageSourcePropType {
-  // 1. If author has custom uploaded avatar_url in database, prioritize it
-  if (item.author?.avatar_url && typeof item.author.avatar_url === 'string') {
-    const url = item.author.avatar_url.trim();
-    if (
-      url.length > 0 &&
-      url !== 'null' &&
-      url !== 'undefined' &&
-      (url.startsWith('http://') ||
-        url.startsWith('https://') ||
-        url.startsWith('file:') ||
-        url.startsWith('data:') ||
-        url.startsWith('content:'))
-    ) {
-      return { uri: url };
-    }
-  }
-
-  // 2. Default official municipal CVO doctor/staff avatar
-  return require('@assets/no-backgrounds/doctor11-removebg-preview.png');
 }
 
 export function HomeAnnouncementsSection() {
@@ -109,7 +165,7 @@ export function HomeAnnouncementsSection() {
     queryFn: async (): Promise<AnnouncementItem[]> => {
       const { data, error } = await supabase
         .from('announcements')
-        .select('*, author:users(id, avatar_url)')
+        .select('*, author:users(id, avatar_url, first_name, last_name, full_name)')
         .eq('is_active', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -286,6 +342,14 @@ function FacebookPostCard({
   onImagePress: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  const avatarUrl = useMemo(() => getAuthorAvatarUrl(item), [item]);
+  const initials = useMemo(() => getAuthorInitials(item), [item]);
+  const avatarBgColor = useMemo(
+    () => getAvatarBgColor(item.author_name || initials),
+    [item.author_name, initials],
+  );
 
   // Format internal brackets like [EVENT_DATE:2026-11-09] into clean human dates
   const cleanContent = useMemo(() => {
@@ -308,10 +372,6 @@ function FacebookPostCard({
     return cleanContent.slice(0, 150).trim();
   }, [cleanContent, isLong, expanded]);
 
-  const avatarSource = useMemo(() => {
-    return getAuthorAvatarSource(item);
-  }, [item]);
-
   return (
     <View style={styles.fbPostWrapper}>
       {/* 8px Facebook Feed Separator between posts */}
@@ -332,12 +392,22 @@ function FacebookPostCard({
 
         {/* Facebook Header: Avatar, Name, Verified Badge, Time, Globe */}
         <View style={styles.fbHeaderRow}>
-          <View style={styles.fbAvatarWrap}>
-            <Image
-              source={avatarSource}
-              style={styles.fbAvatarImg}
-              resizeMode="cover"
-            />
+          <View
+            style={[
+              styles.fbAvatarWrap,
+              (!avatarUrl || imageError) && { backgroundColor: avatarBgColor },
+            ]}
+          >
+            {avatarUrl && !imageError ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                style={styles.fbAvatarImg}
+                resizeMode="cover"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <Text style={styles.fbAvatarInitialsText}>{initials}</Text>
+            )}
           </View>
 
           <View style={styles.fbAuthorMeta}>
@@ -630,6 +700,13 @@ const styles = StyleSheet.create({
   fbAvatarImg: {
     width: 40,
     height: 40,
+  },
+  fbAvatarInitialsText: {
+    fontFamily: typography.font.bold,
+    fontSize: 14,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   fbAuthorMeta: {
     flex: 1,
