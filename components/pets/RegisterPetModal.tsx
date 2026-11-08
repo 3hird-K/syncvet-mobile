@@ -20,10 +20,12 @@ import { useUser } from '@clerk/expo';
 
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
+import { generateMicrochipNumber, generateUUID } from '@lib/uuid';
 import { toast } from '@components/ui/Sonner';
 import {
   CAT_AVATARS,
   DOG_AVATARS,
+  getAvatarPath,
   getPetAvatarSource,
 } from '@lib/petAvatars';
 import { PetAvatarPickerModal } from '@components/ui/PetAvatarPickerModal';
@@ -104,7 +106,7 @@ export function RegisterPetModal({
 
   // Form states
   const [species, setSpecies] = useState<Species>(initialSpecies);
-  const [avatarId, setAvatarId] = useState<string>(initialSpecies === 'cat' ? 'cat-3' : 'dog-1');
+  const [avatarId, setAvatarId] = useState<string>(initialSpecies === 'cat' ? 'cat-2' : 'dog-5');
   const [name, setName] = useState('');
   const [gender, setGender] = useState<PetGender>('male');
   const [breed, setBreed] = useState<string>('');
@@ -144,7 +146,7 @@ export function RegisterPetModal({
   React.useEffect(() => {
     if (visible) {
       setSpecies(initialSpecies);
-      setAvatarId(initialSpecies === 'cat' ? 'cat-3' : 'dog-1');
+      setAvatarId(initialSpecies === 'cat' ? 'cat-2' : 'dog-5');
       setName('');
       setGender('male');
       setBreed('');
@@ -169,13 +171,13 @@ export function RegisterPetModal({
 
       // Auto-switch avatar to appropriate species default
       if (newSpecies === 'cat') {
-        setAvatarId('cat-3'); // British Shorthair / Cat Avatar
+        setAvatarId('cat-2'); // image-removebg-preview (2).png
         // Reset breed if it's currently a dog breed
         if (breed && !CAT_BREEDS.includes(breed)) {
           setBreed('');
         }
       } else {
-        setAvatarId('dog-1'); // Border Collie / Dog Avatar
+        setAvatarId('dog-5'); // image-removebg-preview (5).png
         // Reset breed if it's currently a cat breed
         if (breed && !DOG_BREEDS.includes(breed)) {
           setBreed('');
@@ -224,6 +226,7 @@ export function RegisterPetModal({
 
   // Submit Pet Registration to Supabase & Local Cache
   const handleSave = async () => {
+    if (saving) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
       haptic.warning();
@@ -249,19 +252,27 @@ export function RegisterPetModal({
     try {
       const fallbackBreed = species === 'dog' ? 'Aspin (Asong Pinoy)' : 'Puspin (Pusang Pinoy)';
       const chosenBreed = breed.trim() || fallbackBreed;
+      const petId = generateUUID();
+      const microchipNumber = generateMicrochipNumber();
+      const formattedWeight =
+        WEIGHT_OPTIONS.find((opt) => opt.value === weightCategory)?.label || 'Medium (10 – 25 kg)';
+      const photoUrl = getAvatarPath(avatarId, species);
 
       const petPayload = {
-        id: `pet-${Date.now()}`,
+        id: petId,
         name: trimmedName,
-        species,
+        species: (species === 'cat' ? 'Cat' : 'Dog') as any,
         breed: chosenBreed,
-        gender,
+        gender: (gender === 'female' ? 'Female' : 'Male') as any,
         birthYear,
-        weightCategory,
+        weightCategory: formattedWeight,
         notes: colorMarks.trim() || undefined,
         avatarId,
+        photoUrl,
         isVaccinated: false,
         isSpayedNeutered: false,
+        rabiesVaccinated: false,
+        microchipNumber,
       };
 
       await addPet(ownerId, petPayload, clerkUser);

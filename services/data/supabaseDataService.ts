@@ -1,4 +1,6 @@
 import { supabase } from '@lib/supabase';
+import { generateMicrochipNumber, generateUUID } from '@lib/uuid';
+import { getAvatarPath } from '@lib/petAvatars';
 import type { DataService } from './DataService';
 import type {
   Appointment,
@@ -15,14 +17,16 @@ export function toPetModel(row: any): Pet {
     name: row.name,
     species: (row.species?.toLowerCase() === 'cat' ? 'cat' : 'dog') as any,
     breed: row.breed || '',
-    gender: (row.gender || 'male') as any,
+    gender: (row.gender?.toLowerCase() === 'female' ? 'female' : 'male') as any,
     birthYear: row.birth_year ?? new Date().getFullYear(),
     isVaccinated: Boolean(row.is_vaccinated),
     isSpayedNeutered: Boolean(row.is_spayed_neutered),
+    rabiesVaccinated: Boolean(row.rabies_vaccinated),
     weightCategory: row.weight_category || undefined,
     notes: row.notes || undefined,
     avatarId: row.avatar_id || undefined,
     photoUrl: row.photo_url || undefined,
+    microchipNumber: row.microchip_number || undefined,
     vaccinationDoses: row.vaccination_doses ?? 0,
     lastVaccinationDate: row.last_vaccination_date || undefined,
     nextVaccinationDate: row.next_vaccination_date || undefined,
@@ -116,30 +120,67 @@ export class SupabaseDataService implements DataService {
   async addPet(ownerId: string, input: PetInput): Promise<Pet> {
     await this.ensureUserExists(ownerId);
     const now = new Date().toISOString();
-    const id = (input as any).id || `pet_${Date.now()}`;
+    // Ensure alphanumeric standard UUID matching Supabase gen_random_uuid()
+    const rawId = (input as any).id;
+    const id =
+      rawId && !rawId.startsWith('pet-') && !rawId.startsWith('pet_')
+        ? rawId
+        : generateUUID();
+
+    const species =
+      typeof input.species === 'string' && input.species.toLowerCase() === 'cat'
+        ? 'Cat'
+        : 'Dog';
+
+    const gender =
+      typeof input.gender === 'string' && input.gender.toLowerCase() === 'female'
+        ? 'Female'
+        : 'Male';
+
+    const microchipNumber =
+      (input as any).microchipNumber ||
+      (input as any).microchip_number ||
+      generateMicrochipNumber();
+
+    const formatWeightCategory = (val?: string | null): string | null => {
+      if (!val) return null;
+      const lower = val.toLowerCase().trim();
+      if (lower === 'small') return 'Small (Under 10 kg)';
+      if (lower === 'medium') return 'Medium (10 – 25 kg)';
+      if (lower === 'large') return 'Large (25 – 45 kg)';
+      if (lower === 'giant') return 'Giant (Over 45 kg)';
+      return val;
+    };
+
+    const photoUrl = input.photoUrl || getAvatarPath(input.avatarId, species);
 
     const { data, error } = await supabase
       .from('pets')
-      .insert({
-        id,
-        owner_id: ownerId,
-        name: input.name,
-        species: input.species,
-        breed: input.breed || null,
-        gender: input.gender || 'male',
-        birth_year: input.birthYear,
-        is_vaccinated: Boolean(input.isVaccinated),
-        is_spayed_neutered: Boolean(input.isSpayedNeutered),
-        weight_category: input.weightCategory || null,
-        notes: input.notes || null,
-        avatar_id: input.avatarId || null,
-        photo_url: input.photoUrl || null,
-        vaccination_doses: input.vaccinationDoses ?? 0,
-        last_vaccination_date: input.lastVaccinationDate || null,
-        next_vaccination_date: input.nextVaccinationDate || null,
-        created_at: now,
-        updated_at: now,
-      })
+      .upsert(
+        {
+          id,
+          owner_id: ownerId,
+          name: input.name,
+          species,
+          breed: input.breed || null,
+          gender,
+          birth_year: input.birthYear,
+          is_vaccinated: Boolean(input.isVaccinated),
+          is_spayed_neutered: Boolean(input.isSpayedNeutered),
+          rabies_vaccinated: Boolean((input as any).rabiesVaccinated || (input as any).rabies_vaccinated),
+          weight_category: formatWeightCategory(input.weightCategory),
+          notes: input.notes || null,
+          avatar_id: input.avatarId || null,
+          photo_url: photoUrl,
+          microchip_number: microchipNumber,
+          vaccination_doses: input.vaccinationDoses ?? 0,
+          last_vaccination_date: input.lastVaccinationDate || null,
+          next_vaccination_date: input.nextVaccinationDate || null,
+          created_at: now,
+          updated_at: now,
+        },
+        { onConflict: 'id' },
+      )
       .select()
       .single();
 
@@ -150,15 +191,24 @@ export class SupabaseDataService implements DataService {
 
     const pet = toPetModel(data);
 
-    // Auto-log official pet registration transaction
+    // Auto-log official pet registration transaction if not already logged
     try {
-      await this.logTransaction(ownerId, {
-        type: 'registration',
-        title: `${pet.name} Registered`,
-        detail: `${pet.species === 'cat' ? 'Cat' : 'Dog'}${pet.breed ? ` · ${pet.breed}` : ''}`,
-        status: 'completed',
-        referenceId: pet.id,
-      });
+      const { data: existingTx } = await supabase
+        .from('service_transactions')
+        .select('id')
+        .eq('reference_id', pet.id)
+        .eq('transaction_type', 'registration')
+        .maybeSingle();
+
+      if (!existingTx) {
+        await this.logTransaction(ownerId, {
+          type: 'registration',
+          title: `${pet.name} Registered`,
+          detail: `${pet.species === 'cat' ? 'Cat' : 'Dog'}${pet.breed ? ` · ${pet.breed}` : ''}`,
+          status: 'completed',
+          referenceId: pet.id,
+        });
+      }
     } catch (txErr: any) {
       console.warn('Note logging pet registration transaction:', txErr?.message);
     }

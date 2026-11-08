@@ -50,7 +50,7 @@ const TEASER_PETS = [
     name: 'Add Dog',
     breed: 'Canine Passport',
     gradient: GRADIENT_PALETTES[1], // Deep Ocean Teal
-    avatarSource: require('@assets/dog-profiles/image-removebg-preview (1).png'),
+    avatarSource: require('@assets/dog-profiles/image-removebg-preview (5).png'),
     route: '/pets/add',
   },
   {
@@ -58,7 +58,7 @@ const TEASER_PETS = [
     name: 'Add Cat',
     breed: 'Feline Passport',
     gradient: GRADIENT_PALETTES[0], // Deep Violet
-    avatarSource: require('@assets/cat-profiles/image-removebg-preview (3).png'),
+    avatarSource: require('@assets/cat-profiles/image-removebg-preview (2).png'),
     route: '/pets/add',
   },
   {

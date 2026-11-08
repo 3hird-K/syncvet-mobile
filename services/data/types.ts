@@ -13,10 +13,12 @@ export interface Pet {
   birthYear: number;
   isVaccinated?: boolean;
   isSpayedNeutered?: boolean;
+  rabiesVaccinated?: boolean;
   weightCategory?: string;
   notes?: string;
   avatarId?: string;
   photoUrl?: string;
+  microchipNumber?: string;
   vaccinationDoses?: number;
   lastVaccinationDate?: string;
   nextVaccinationDate?: string;

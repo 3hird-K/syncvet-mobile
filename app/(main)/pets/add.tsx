@@ -29,6 +29,7 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { required } from '@lib/validation';
 import { haptic } from '@lib/haptics';
 import { currentYear } from '@lib/format';
+import { generateUUID } from '@lib/uuid';
 import { getPetAvatarSource } from '@lib/petAvatars';
 import { useForm } from '@hooks/useForm';
 import { useAuthStore } from '@store/useAuthStore';
@@ -350,7 +351,7 @@ export default function AddPetScreen() {
     setNetworkError(undefined);
     try {
       const petPayload = {
-        id: `pet-${Date.now()}`,
+        id: generateUUID(),
         name: fields.name.value.trim(),
         species,
         breed: fields.breed.value.trim(),

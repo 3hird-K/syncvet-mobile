@@ -12,6 +12,7 @@ import type {
   ServiceTransaction,
 } from '@services/data';
 import { queryClient, queryKeys } from '@lib/queryClient';
+import { generateMicrochipNumber, generateUUID } from '@lib/uuid';
 
 interface DataState {
   pets: Pet[];
@@ -183,10 +184,18 @@ export const useDataStore = create<DataState>((set, get) => {
 
     addPet: async (ownerId, input, clerkUser) => {
       const now = new Date().toISOString();
+      const petId =
+        (input as any).id && !(input as any).id.startsWith('pet-') && !(input as any).id.startsWith('pet_')
+          ? (input as any).id
+          : generateUUID();
+      const microchipNumber =
+        (input as any).microchipNumber || (input as any).microchip_number || generateMicrochipNumber();
+
       const pet: Pet = {
         ...input,
-        id: (input as any).id || `pet-${Date.now()}`,
+        id: petId,
         ownerId,
+        microchipNumber,
         createdAt: (input as any).createdAt || now,
         updatedAt: now,
         _pendingSync: true,
