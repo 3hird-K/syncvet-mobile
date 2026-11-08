@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Image,
+  ImageSourcePropType,
   Modal,
   Platform,
   Pressable,
@@ -34,6 +35,10 @@ export interface AnnouncementItem {
   image_url: string | null;
   created_at: string;
   updated_at: string;
+  author?: {
+    id: string;
+    avatar_url?: string | null;
+  } | null;
 }
 
 export interface MaximizedImageInfo {
@@ -67,6 +72,28 @@ function formatRelativeTime(dateString: string): string {
   }
 }
 
+function getAuthorAvatarSource(item: AnnouncementItem): ImageSourcePropType {
+  // 1. If author has custom uploaded avatar_url in database, prioritize it
+  if (item.author?.avatar_url && typeof item.author.avatar_url === 'string') {
+    const url = item.author.avatar_url.trim();
+    if (
+      url.length > 0 &&
+      url !== 'null' &&
+      url !== 'undefined' &&
+      (url.startsWith('http://') ||
+        url.startsWith('https://') ||
+        url.startsWith('file:') ||
+        url.startsWith('data:') ||
+        url.startsWith('content:'))
+    ) {
+      return { uri: url };
+    }
+  }
+
+  // 2. Default official municipal CVO doctor/staff avatar
+  return require('@assets/no-backgrounds/doctor11-removebg-preview.png');
+}
+
 export function HomeAnnouncementsSection() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [maximizedImage, setMaximizedImage] = useState<MaximizedImageInfo | null>(null);
@@ -82,7 +109,7 @@ export function HomeAnnouncementsSection() {
     queryFn: async (): Promise<AnnouncementItem[]> => {
       const { data, error } = await supabase
         .from('announcements')
-        .select('*')
+        .select('*, author:users(id, avatar_url)')
         .eq('is_active', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -93,7 +120,7 @@ export function HomeAnnouncementsSection() {
 
       // Filter out internal system configuration records (e.g. quota config)
       return (data || []).filter(
-        (a) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
+        (a: any) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
       );
     },
     staleTime: 1000 * 60 * 3, // 3 minutes stale time
@@ -281,20 +308,9 @@ function FacebookPostCard({
     return cleanContent.slice(0, 150).trim();
   }, [cleanContent, isLong, expanded]);
 
-  const authorInitials = useMemo(() => {
-    if (!item.author_name) return 'CVO';
-    return item.author_name
-      .split(' ')
-      .map((w) => w[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-  }, [item.author_name]);
-
-  const isDrHelen =
-    item.author_name?.toLowerCase().includes('helen') ||
-    item.author_role?.toLowerCase().includes('veterinarian');
+  const avatarSource = useMemo(() => {
+    return getAuthorAvatarSource(item);
+  }, [item]);
 
   return (
     <View style={styles.fbPostWrapper}>
@@ -314,20 +330,14 @@ function FacebookPostCard({
           </View>
         )}
 
-        {/* Facebook Header: Avatar, Name, Verified Badge, Time, Globe, More/Close */}
+        {/* Facebook Header: Avatar, Name, Verified Badge, Time, Globe */}
         <View style={styles.fbHeaderRow}>
           <View style={styles.fbAvatarWrap}>
-            {isDrHelen ? (
-              <Image
-                source={require('@assets/no-backgrounds/doctor11-removebg-preview.png')}
-                style={styles.fbAvatarImg}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.fbAvatarFallback}>
-                <Text style={styles.fbAvatarFallbackText}>{authorInitials}</Text>
-              </View>
-            )}
+            <Image
+              source={avatarSource}
+              style={styles.fbAvatarImg}
+              resizeMode="cover"
+            />
           </View>
 
           <View style={styles.fbAuthorMeta}>
@@ -446,10 +456,6 @@ function FacebookImageViewerModal({
                 {formatRelativeTime(imageInfo.created_at)} · 🌐
               </Text>
             ) : null}
-          </View>
-
-          <View style={styles.modalHeaderRight}>
-            <Ionicons name="ellipsis-horizontal" size={22} color="#FFFFFF" />
           </View>
         </View>
 
@@ -617,26 +623,13 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E6F5F2',
     alignItems: 'center',
     justifyContent: 'center',
   },
   fbAvatarImg: {
     width: 40,
     height: 40,
-  },
-  fbAvatarFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#0D9488',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fbAvatarFallbackText: {
-    fontFamily: typography.font.bold,
-    fontSize: 14,
-    color: '#FFFFFF',
   },
   fbAuthorMeta: {
     flex: 1,
@@ -761,12 +754,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 1,
-  },
-  modalHeaderRight: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   modalImageCenterWrap: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -8,14 +8,35 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeIn, FadeOut } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { colors, radius, shadows, spacing, typography } from '@theme';
+import { colors, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
+
+const STORAGE_KEY = '@syncvet_care_cards_visible';
 
 export function HomeCareActionCards() {
   const router = useRouter();
+  const [visible, setVisible] = useState(true);
   const [procedureModalVisible, setProcedureModalVisible] = useState(false);
+
+  // Restore saved hide/show preference
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((saved) => {
+        if (saved !== null) {
+          setVisible(saved === 'true');
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const toggleVisibility = (newVal: boolean) => {
+    haptic.light();
+    setVisible(newVal);
+    AsyncStorage.setItem(STORAGE_KEY, String(newVal)).catch(() => {});
+  };
 
   const handleRequestClinicalCare = () => {
     haptic.light();
@@ -35,8 +56,60 @@ export function HomeCareActionCards() {
     } as never);
   };
 
+  // If collapsed/hidden: show compact strip with 'Show' toggle
+  if (!visible) {
+    return (
+      <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={styles.container}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show care services"
+          onPress={() => toggleVisibility(true)}
+          style={({ pressed }) => [
+            styles.collapsedStrip,
+            pressed && styles.collapsedStripPressed,
+          ]}
+        >
+          <View style={styles.collapsedLeft}>
+            <View style={styles.collapsedIconBox}>
+              <Ionicons name="medkit-outline" size={15} color="#0D9488" />
+            </View>
+            <Text style={styles.collapsedTitle}>Request Care & Procedures</Text>
+          </View>
+
+          <View style={styles.showPill}>
+            <Text style={styles.showPillText}>Show</Text>
+            <Ionicons name="chevron-down" size={13} color="#0D9488" />
+          </View>
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  // If expanded/visible: show toggle bar with 'Hide' + the 2 care cards
   return (
-    <Animated.View entering={FadeInDown.delay(90).duration(280)} style={styles.container}>
+    <Animated.View entering={FadeInDown.delay(90).duration(260)} style={styles.container}>
+      {/* Header bar with Hide button */}
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleLeft}>
+          <Ionicons name="medkit" size={12} color="#0D9488" />
+          <Text style={styles.toggleLabel}>CARE ACTIONS</Text>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Hide care cards"
+          onPress={() => toggleVisibility(false)}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.hideBtn,
+            pressed && styles.hideBtnPressed,
+          ]}
+        >
+          <Text style={styles.hideBtnText}>Hide</Text>
+          <Ionicons name="chevron-up" size={12} color="#64748B" />
+        </Pressable>
+      </View>
+
       <View style={styles.row}>
         {/* Card 1: Request Clinical Care (Consultation) */}
         <Pressable
@@ -202,6 +275,95 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 4,
   },
+
+  /* Collapsed Strip (when user selects 'Hide') */
+  collapsedStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    ...shadows.sm,
+  },
+  collapsedStripPressed: {
+    backgroundColor: '#F8FAFC',
+    transform: [{ scale: 0.99 }],
+  },
+  collapsedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  collapsedIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    backgroundColor: '#E6F5F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collapsedTitle: {
+    fontFamily: typography.font.bold,
+    fontSize: 12.5,
+    color: '#0F172A',
+  },
+  showPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#E6F5F2',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+  },
+  showPillText: {
+    fontFamily: typography.font.bold,
+    fontSize: 11,
+    color: '#0D9488',
+  },
+
+  /* Toggle Row (when visible) */
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  toggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  toggleLabel: {
+    fontFamily: typography.font.bold,
+    fontSize: 11,
+    color: '#0D9488',
+    letterSpacing: 0.5,
+  },
+  hideBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  hideBtnPressed: {
+    opacity: 0.7,
+  },
+  hideBtnText: {
+    fontFamily: typography.font.medium,
+    fontSize: 10.5,
+    color: '#64748B',
+  },
+
+  /* Care Cards Row */
   row: {
     flexDirection: 'row',
     gap: 10,
