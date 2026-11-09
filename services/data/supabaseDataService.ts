@@ -228,6 +228,7 @@ export class SupabaseDataService implements DataService {
         birth_year: pet.birthYear,
         is_vaccinated: Boolean(pet.isVaccinated),
         is_spayed_neutered: Boolean(pet.isSpayedNeutered),
+        rabies_vaccinated: pet.rabiesVaccinated ?? Boolean(pet.isVaccinated),
         weight_category: pet.weightCategory || null,
         notes: pet.notes || null,
         avatar_id: pet.avatarId || null,

@@ -14,9 +14,10 @@ interface PetPassportCardProps {
   pet: Pet;
   index: number;
   onQrPress?: (pet: Pet) => void;
+  onPress?: (pet: Pet) => void;
 }
 
-export function PetPassportCard({ pet, index, onQrPress }: PetPassportCardProps) {
+export function PetPassportCard({ pet, index, onQrPress, onPress }: PetPassportCardProps) {
   const router = useRouter();
 
   const isDog = pet.species?.toLowerCase() === 'dog';
@@ -37,7 +38,11 @@ export function PetPassportCard({ pet, index, onQrPress }: PetPassportCardProps)
         accessibilityLabel={`${pet.name}'s Health Passport`}
         onPress={() => {
           haptic.light();
-          router.push(`/pets/${pet.id}` as never);
+          if (onPress) {
+            onPress(pet);
+          } else {
+            router.push(`/pets/${pet.id}` as never);
+          }
         }}
         style={({ pressed }) => [styles.card, shadows.sm, pressed && styles.cardPressed]}
       >

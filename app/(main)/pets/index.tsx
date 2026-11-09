@@ -1,72 +1,49 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useUser } from '@clerk/expo';
+import React, { useMemo, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '@theme';
+import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
-import { useAuthStore } from '@store/useAuthStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
-import { Screen } from '@components/ui/Screen';
 import { PetsScreenSkeleton } from '@components/ui/Skeleton';
-import { PetQrTagModal } from '@components/ui/PetQrTagModal';
-import { PetQrScannerModal } from '@components/ui/PetQrScannerModal';
-import {
-  PetsHeader,
-  PetsSearchFilter,
-  PetPassportCard,
-  PetsEmptyState,
-  type PetFilterCategory,
-} from '@components/pets';
-import type { Pet } from '@services/data';
+import { PetPassportView, RegisterPetModal } from '@components/pets';
+import type { Pet, Species } from '@services/data';
 
 export default function PetsScreen() {
-  const { user: clerkUser } = useUser();
-  const user = useAuthStore((state) => state.user);
-  const { pets: storePets, loading, loaded, syncNow } = useResidentData();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { id: paramId } = useLocalSearchParams<{ id?: string }>();
+  const { pets: storePets, loading, loaded } = useResidentData();
 
-  const [activeFilter, setActiveFilter] = useState<PetFilterCategory>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedQrPet, setSelectedQrPet] = useState<Pet | null>(null);
-  const [scannerVisible, setScannerVisible] = useState(false);
-
-  // Pure Supabase source of truth
   const allPets: Pet[] = storePets || [];
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
+  const [registerModalVisible, setRegisterModalVisible] = useState(false);
+  const [registerSpecies, setRegisterSpecies] = useState<Species>('dog');
 
-  // Real-time search & filter
-  const filteredPets = useMemo(() => {
-    return allPets.filter((pet) => {
-      // Category filter
-      if (activeFilter === 'dog' && pet.species?.toLowerCase() !== 'dog') return false;
-      if (activeFilter === 'cat' && pet.species?.toLowerCase() !== 'cat') return false;
-      if (activeFilter === 'needs_vaccine' && pet.isVaccinated) return false;
-
-      // Text search query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const matchesName = pet.name.toLowerCase().includes(query);
-        const matchesBreed = (pet.breed || '').toLowerCase().includes(query);
-        const matchesSpecies = (pet.species || '').toLowerCase().includes(query);
-        return matchesName || matchesBreed || matchesSpecies;
-      }
-
-      return true;
-    });
-  }, [allPets, activeFilter, searchQuery]);
-
-  // Statistics
-  const dogCount = allPets.filter((p) => p.species?.toLowerCase() === 'dog').length;
-  const catCount = allPets.filter((p) => p.species?.toLowerCase() === 'cat').length;
-  const needsVaccineCount = allPets.filter((p) => !p.isVaccinated).length;
-
-  const handleRefresh = useCallback(async () => {
-    haptic.light();
-    try {
-      await syncNow();
-    } catch (e) {
-      console.log('Pets refresh error:', e);
+  React.useEffect(() => {
+    if (paramId) {
+      setSelectedPetId(paramId);
     }
-  }, [syncNow]);
+  }, [paramId]);
+
+  // Default view is the first registered pet!
+  const activePet = useMemo(() => {
+    if (allPets.length === 0) return null;
+    if (selectedPetId) {
+      const found = allPets.find((p) => p.id === selectedPetId);
+      if (found) return found;
+    }
+    return allPets[0];
+  }, [allPets, selectedPetId]);
+
+  const handleOpenRegister = (species: Species) => {
+    haptic.light();
+    setRegisterSpecies(species);
+    setRegisterModalVisible(true);
+  };
 
   if (loading && !loaded && allPets.length === 0) {
     return (
@@ -76,83 +53,205 @@ export default function PetsScreen() {
     );
   }
 
+  // 1. If user has registered pets, display the first pet as default in PetPassportView!
+  if (activePet) {
+    return (
+      <AnimatedScreen animation="zoom">
+        <View style={styles.screen}>
+          <PetPassportView
+            pet={activePet}
+            onClose={() => router.replace('/' as never)}
+            isCard={false}
+            onSelectPet={(targetPet) => setSelectedPetId(targetPet.id)}
+          />
+        </View>
+
+        <RegisterPetModal
+          visible={registerModalVisible}
+          onClose={() => setRegisterModalVisible(false)}
+          initialSpecies={registerSpecies}
+        />
+      </AnimatedScreen>
+    );
+  }
+
+  // 2. If user doesn't have any pets yet, display an inviting Add Pet view!
   return (
     <AnimatedScreen animation="zoom">
-      <Screen scroll onRefresh={handleRefresh} contentContainerStyle={styles.scrollContent}>
-        {/* 1. Header with Title & "+ Add Pet" Button & "Scan Tag" Button */}
-        <PetsHeader
-          petsCount={allPets.length}
-          onScanPress={() => setScannerVisible(true)}
-        />
-
-        {/* 2. Search Bar & Filter Chips */}
-        {allPets.length > 0 ? (
-          <PetsSearchFilter
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            activeFilter={activeFilter}
-            onFilterChange={setActiveFilter}
-            totalCount={allPets.length}
-            dogCount={dogCount}
-            catCount={catCount}
-            needsVaccineCount={needsVaccineCount}
-          />
-        ) : null}
-
-        {/* 4. Pet Passport Cards or Empty States */}
-        {allPets.length === 0 ? (
-          <PetsEmptyState type="no_pets" />
-        ) : filteredPets.length === 0 ? (
-          <PetsEmptyState
-            type="no_results"
-            onClearFilter={() => {
-              setSearchQuery('');
-              setActiveFilter('all');
-            }}
-          />
-        ) : (
-          <View style={styles.petsList}>
-            {filteredPets.map((pet, idx) => (
-              <PetPassportCard
-                key={pet.id}
-                pet={pet}
-                index={idx}
-                onQrPress={(p) => setSelectedQrPet(p)}
+      <View
+        style={[
+          styles.emptyPageContainer,
+          {
+            paddingTop: Math.max(insets.top, 24) + 16,
+            paddingBottom: Math.max(insets.bottom, 20) + 90,
+          },
+        ]}
+      >
+        <View style={styles.emptyCard}>
+          {/* Dual Pet Avatars Hero */}
+          <View style={styles.avatarsRow}>
+            <View style={styles.avatarBubble}>
+              <Image
+                source={require('@assets/cat-profiles/image-removebg-preview (2).png')}
+                style={styles.heroPetImg}
+                resizeMode="contain"
               />
-            ))}
+            </View>
+            <View style={[styles.avatarBubble, styles.avatarBubbleOverlap]}>
+              <Image
+                source={require('@assets/dog-profiles/image-removebg-preview (5).png')}
+                style={styles.heroPetImg}
+                resizeMode="contain"
+              />
+            </View>
           </View>
-        )}
-      </Screen>
 
-      {/* Official Digital Pet Tag Modal */}
-      <PetQrTagModal
-        visible={Boolean(selectedQrPet)}
-        onClose={() => setSelectedQrPet(null)}
-        pet={selectedQrPet}
-        owner={{
-          id: user?.id || clerkUser?.id,
-          fullName: user?.fullName || clerkUser?.fullName || 'SyncVet Resident',
-          mobileNumber: user?.mobileNumber || clerkUser?.primaryPhoneNumber?.phoneNumber || '',
-          address: user?.address || 'Cagayan de Oro City',
-        }}
-      />
+          {/* Badge */}
+          <View style={styles.emptyBadge}>
+            <Ionicons name="paw" size={14} color="#0D9488" />
+            <Text style={styles.emptyBadgeText}>Official Companion Registry</Text>
+          </View>
 
-      {/* Pet Tag Scanner Camera Modal */}
-      <PetQrScannerModal
-        visible={scannerVisible}
-        onClose={() => setScannerVisible(false)}
+          {/* Title & Desc */}
+          <Text style={styles.emptyTitle}>No Pets Registered Yet</Text>
+          <Text style={styles.emptyDesc}>
+            Register your dog or cat with the City Veterinary Office to generate an official Digital Pet Passport, track anti-rabies immunizations, and schedule free municipal clinical care.
+          </Text>
+
+          {/* Two Big Add Buttons */}
+          <View style={styles.btnRow}>
+            <Pressable
+              onPress={() => handleOpenRegister('dog')}
+              style={[styles.primaryAddBtn, { backgroundColor: '#0D9488' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Register a Dog"
+            >
+              <Ionicons name="add-circle" size={18} color="#FFFFFF" />
+              <Text style={styles.primaryAddBtnText}>Register Dog</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleOpenRegister('cat')}
+              style={[styles.primaryAddBtn, { backgroundColor: '#7C3AED' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Register a Cat"
+            >
+              <Ionicons name="add-circle" size={18} color="#FFFFFF" />
+              <Text style={styles.primaryAddBtnText}>Register Cat</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      <RegisterPetModal
+        visible={registerModalVisible}
+        onClose={() => setRegisterModalVisible(false)}
+        initialSpecies={registerSpecies}
       />
     </AnimatedScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    backgroundColor: colors.background,
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    width: '100%',
   },
-  petsList: {
-    gap: 0,
+  emptyPageContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    ...shadows.sm,
+  },
+  avatarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  avatarBubble: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 2,
+    borderColor: '#0D9488',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarBubbleOverlap: {
+    marginLeft: -16,
+    backgroundColor: '#F5F3FF',
+    borderColor: '#7C3AED',
+  },
+  heroPetImg: {
+    width: '85%',
+    height: '85%',
+  },
+  emptyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  emptyBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  emptyTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#111827',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  emptyDesc: {
+    fontSize: 12.5,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 8,
+    marginBottom: 20,
+    paddingHorizontal: 6,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  primaryAddBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  primaryAddBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
