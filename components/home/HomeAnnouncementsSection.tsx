@@ -19,8 +19,10 @@ import { supabase } from '@lib/supabase';
 import { haptic } from '@lib/haptics';
 import { Skeleton, SkeletonCircle } from '@components/ui/Skeleton';
 import {
+  extractOutreachOpId,
   isOutreachAnnouncement,
   parseOutreachDetails,
+  type FieldOperationRecord,
   type OutreachDetails,
   type OutreachRecordResult,
 } from '@services/outreach/outreachService';
@@ -50,6 +52,7 @@ export interface AnnouncementItem {
     last_name?: string | null;
     full_name?: string | null;
   } | null;
+  fieldOperation?: FieldOperationRecord | null;
 }
 
 export interface MaximizedImageInfo {
@@ -174,25 +177,50 @@ export function HomeAnnouncementsSection() {
   } = useQuery({
     queryKey: ['announcements'],
     queryFn: async (): Promise<AnnouncementItem[]> => {
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('*, author:users(id, avatar_url, first_name, last_name, full_name)')
-        .eq('is_active', true)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
+      const [annRes, fieldOpRes] = await Promise.all([
+        supabase
+          .from('announcements')
+          .select('*, author:users(id, avatar_url, first_name, last_name, full_name)')
+          .eq('is_active', true)
+          .order('is_pinned', { ascending: false })
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('field_operations')
+          .select('id, op_id, barangay, scheduled_date, status, notes, lead'),
+      ]);
 
-      if (error) {
-        throw new Error(error.message);
-      }
+        if (annRes.error) {
+          throw new Error(annRes.error.message);
+        }
 
-      // Filter out internal system configuration records (e.g. quota config)
-      return (data || []).filter(
-        (a: any) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
-      );
-    },
-    staleTime: 1000 * 60 * 3, // 3 minutes stale time
-    gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
-    refetchOnReconnect: true,
+        const fieldOpsByOpId = new Map<string, FieldOperationRecord>();
+        if (!fieldOpRes.error && Array.isArray(fieldOpRes.data)) {
+          for (const op of fieldOpRes.data as FieldOperationRecord[]) {
+            if (op.op_id) {
+              fieldOpsByOpId.set(op.op_id.toUpperCase(), op);
+            }
+          }
+        }
+
+        // Filter out internal system configuration records (e.g. quota config)
+      const visible = (annRes.data || []).filter(
+          (a: any) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
+        );
+
+        return visible.map((a: any) => {
+          const opId = extractOutreachOpId(a.content);
+          const fieldOperation = opId
+            ? fieldOpsByOpId.get(opId.toUpperCase()) ?? null
+            : null;
+          return {
+            ...a,
+            fieldOperation,
+          };
+        });
+      },
+      staleTime: 1000 * 60 * 3, // 3 minutes stale time
+        gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
+          refetchOnReconnect: true,
   });
 
   const filteredAnnouncements = useMemo(() => {
@@ -294,7 +322,11 @@ export function HomeAnnouncementsSection() {
             item={item}
             isFirst={index === 0}
             onImagePress={() => handleOpenImage(item)}
-            onScanOutreach={(details) => setScannerOutreach(details)}
+            onScanOutreach={(details) => {
+              if (details.canScanQr) {
+                setScannerOutreach(details);
+              }
+            }}
           />
         ))
       )}
@@ -378,7 +410,7 @@ function FacebookPostCard({
 
   // Outreach post detection & metadata
   const outreachDetails = useMemo(
-    () => (isOutreachAnnouncement(item) ? parseOutreachDetails(item) : null),
+    () => (isOutreachAnnouncement(item) ? parseOutreachDetails(item, item.fieldOperation) : null),
     [item],
   );
 

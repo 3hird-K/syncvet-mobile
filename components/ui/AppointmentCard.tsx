@@ -31,18 +31,21 @@ export function AppointmentCard({
   const isToday = appointment.date === today;
   const isOverdue =
     appointment.status === 'overdue' ||
-    (appointment.status === 'pending' && appointment.date < today);
+  appointment.status === 'missed' ||
+    ((appointment.status === 'pending' || appointment.status === 'confirmed') &&
+      appointment.date < today);
   const isQueued = appointment.status === 'queued' || appointment.status === 'checked_in';
   const isCalled = appointment.status === 'called' || appointment.status === 'serving';
   const isCompleted = appointment.status === 'completed';
+  const isCancelled = appointment.status === 'cancelled';
 
   const effectiveStatus = isOverdue
     ? 'overdue'
     : isCalled
-    ? 'called'
-    : isQueued
-    ? 'queued'
-    : appointment.status;
+      ? 'called'
+      : isQueued
+        ? 'queued'
+        : appointment.status;
 
   // Look up pet from data store for real avatar and species
   const localPets = useDataStore((state) => state.pets);
@@ -171,25 +174,25 @@ export function AppointmentCard({
                   {appointment.queueTicket?.ticketNumber || 'Q-001'}
                 </Text>
               </Pressable>
-            ) : isOverdue || isCompleted ? null : onScanPress ? (
-              /* Just an Icon for Scan QR Code! */
-              <Pressable
-                onPress={handleScanClick}
-                style={({ pressed }) => [
-                  styles.scanIconBtn,
-                  isToday && styles.scanIconBtnToday,
-                  pressed && { opacity: 0.8 },
-                ]}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Scan Clinic QR Code"
-              >
-                <MaterialCommunityIcons
-                  name="qrcode-scan"
-                  size={16}
-                  color={isToday ? '#FFFFFF' : '#0D9488'}
-                />
-              </Pressable>
+            ): !isToday || isOverdue || isCompleted || isCancelled ? null : onScanPress ? (
+            /* Just an Icon for Scan QR Code — only shown on the scheduled date for active appointments */
+            <Pressable
+              onPress={handleScanClick}
+              style={({ pressed }) => [
+                styles.scanIconBtn,
+                isToday && styles.scanIconBtnToday,
+                pressed && { opacity: 0.8 },
+              ]}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Scan Clinic QR Code"
+            >
+              <MaterialCommunityIcons
+                name="qrcode-scan"
+                size={16}
+                color={isToday ? '#FFFFFF' : '#0D9488'}
+              />
+            </Pressable>
             ) : null}
           </View>
         </View>

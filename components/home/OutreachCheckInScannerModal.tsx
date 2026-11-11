@@ -28,6 +28,7 @@ import { Button } from '@components/ui/Button';
 import {
   parseOutreachAdminQr,
   recordOutreachService,
+  validateOutreachQrForEvent,
   type OutreachDetails,
   type OutreachRecordResult,
   type OutreachServiceType,
@@ -112,51 +113,58 @@ export function OutreachCheckInScannerModal({
 
       try {
         const parsed = parseOutreachAdminQr(rawData);
+        const validation = validateOutreachQrForEvent(
+          parsed,
+          outreachInfo,
+          selectedService,
+        );
 
-        if (!parsed.valid) {
-          haptic.warning();
-          setErrorMessage('Scanned QR code is not a valid CVO Outreach Station QR.');
+          if (!validation.valid) {
+            haptic.warning();
+            setErrorMessage(validation.message);
+            setIsProcessing(false);
+            setTimeout(() => {
+              isScanningRef.current = true;
+            }, 1500);
+            return;
+          }
+
+          const effectiveService: OutreachServiceType = validation.service;
+
+          // Execute municipal service record registration
+          const recordResult = await recordOutreachService({
+            pet: activePet,
+            ownerId,
+            ownerName,
+            ownerPhone,
+            service: effectiveService,
+            outreachInfo: {
+              ...outreachInfo,
+              attendingVet: parsed.vetName || outreachInfo.attendingVet,
+              barangay: parsed.barangay || outreachInfo.barangay,
+              opId: parsed.opId || outreachInfo.opId,
+            },
+          });
+
+          // Trigger celebratory sound & haptics
+          playWebChime();
+          haptic.success();
+
+          toast.success(`Outreach Service Logged: ${recordResult.serviceTitle}`, {
+            description: `${activePet.name} has been officially recorded at Brgy. ${outreachInfo.barangay}.`,
+          });
+
+          onSuccess(recordResult);
+          onClose();
+        } catch (err: any) {
+          haptic.error();
+          console.error('Outreach record error:', err);
+          setErrorMessage(err?.message || 'Failed to record outreach visit. Please try again.');
           setIsProcessing(false);
           isScanningRef.current = true;
-          return;
         }
-
-        const effectiveService: OutreachServiceType = parsed.service || selectedService;
-
-        // Execute municipal service record registration
-        const recordResult = await recordOutreachService({
-          pet: activePet,
-          ownerId,
-          ownerName,
-          ownerPhone,
-          service: effectiveService,
-          outreachInfo: {
-            ...outreachInfo,
-            attendingVet: parsed.vetName || outreachInfo.attendingVet,
-            barangay: parsed.barangay || outreachInfo.barangay,
-            opId: parsed.opId || outreachInfo.opId,
-          },
-        });
-
-        // Trigger celebratory sound & haptics
-        playWebChime();
-        haptic.success();
-
-        toast.success(`Outreach Service Logged: ${recordResult.serviceTitle}`, {
-          description: `${activePet.name} has been officially recorded at Brgy. ${outreachInfo.barangay}.`,
-        });
-
-        onSuccess(recordResult);
-        onClose();
-      } catch (err: any) {
-        haptic.error();
-        console.error('Outreach record error:', err);
-        setErrorMessage(err?.message || 'Failed to record outreach visit. Please try again.');
-        setIsProcessing(false);
-        isScanningRef.current = true;
-      }
-    },
-    [activePet, onClose, onSuccess, outreachInfo, ownerId, ownerName, ownerPhone, selectedService],
+      },
+      [activePet, onClose, onSuccess, outreachInfo, ownerId, ownerName, ownerPhone, selectedService],
   );
 
   const handleBarcodeScanned = useCallback(
@@ -170,7 +178,7 @@ export function OutreachCheckInScannerModal({
   // Instant Test Simulator
   const handleSimulateAdminQr = () => {
     if (!outreachInfo) return;
-    const samplePayload = `https://veterinaryoffice-cdo.vercel.app/outreach-checkin?opId=${outreachInfo.opId}&barangay=${encodeURIComponent(outreachInfo.barangay)}&service=${selectedService}&vet=${encodeURIComponent(outreachInfo.attendingVet)}&token=cvo-outreach-valid`;
+    const samplePayload = `https://veterinaryoffice-cdo.vercel.app/outreach-checkin?opId=${encodeURIComponent(outreachInfo.opId)}&barangay=${encodeURIComponent(outreachInfo.barangay)}&date=${encodeURIComponent(outreachInfo.date)}&service=${encodeURIComponent(selectedService)}&vet=${encodeURIComponent(outreachInfo.attendingVet)}&token=cvo-outreach-valid`;
     processQrPayload(samplePayload);
   };
 
@@ -306,80 +314,41 @@ export function OutreachCheckInScannerModal({
               <View style={styles.serviceSelectorWrap}>
                 <Text style={styles.stepCardTitle}>2. SERVICE RECEIVED ON-SITE</Text>
                 <View style={styles.serviceButtonsRow}>
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setSelectedService('vaccination');
-                    }}
-                    style={[
-                      styles.serviceSelectBtn,
-                      selectedService === 'vaccination' && styles.serviceSelectBtnActive,
-                    ]}
-                  >
-                    <Ionicons
-                      name="shield-checkmark"
-                      size={13}
-                      color={selectedService === 'vaccination' ? '#FFFFFF' : '#94A3B8'}
-                    />
-                    <Text
-                      style={[
-                        styles.serviceSelectBtnText,
-                        selectedService === 'vaccination' && styles.serviceSelectBtnTextActive,
-                      ]}
-                    >
-                      Vaccine
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setSelectedService('consultation');
-                    }}
-                    style={[
-                      styles.serviceSelectBtn,
-                      selectedService === 'consultation' && styles.serviceSelectBtnActive,
-                    ]}
-                  >
-                    <Ionicons
-                      name="medical"
-                      size={13}
-                      color={selectedService === 'consultation' ? '#FFFFFF' : '#94A3B8'}
-                    />
-                    <Text
-                      style={[
-                        styles.serviceSelectBtnText,
-                        selectedService === 'consultation' && styles.serviceSelectBtnTextActive,
-                      ]}
-                    >
-                      Clinical Care
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setSelectedService('spay-neuter');
-                    }}
-                    style={[
-                      styles.serviceSelectBtn,
-                      selectedService === 'spay-neuter' && styles.serviceSelectBtnActive,
-                    ]}
-                  >
-                    <Ionicons
-                      name="cut"
-                      size={13}
-                      color={selectedService === 'spay-neuter' ? '#FFFFFF' : '#94A3B8'}
-                    />
-                    <Text
-                      style={[
-                        styles.serviceSelectBtnText,
-                        selectedService === 'spay-neuter' && styles.serviceSelectBtnTextActive,
-                      ]}
-                    >
-                      Kapon
-                    </Text>
-                  </Pressable>
+                  {(
+                    [
+                      { id: 'vaccination', label: 'Vaccine', icon: 'shield-checkmark' },
+                      { id: 'consultation', label: 'Clinical Care', icon: 'medical' },
+                      { id: 'spay-neuter', label: 'Kapon', icon: 'cut' },
+                    ] as const
+                  )
+                    .filter((opt) => outreachInfo.servicesOffered.includes(opt.id))
+                    .map((opt) => (
+                      <Pressable
+                        key={opt.id}
+                        onPress={() => {
+                          haptic.light();
+                          setSelectedService(opt.id);
+                        }}
+                        style={[
+                          styles.serviceSelectBtn,
+                          selectedService === opt.id && styles.serviceSelectBtnActive,
+                        ]}
+                      >
+                        <Ionicons
+                          name={opt.icon}
+                          size={13}
+                          color={selectedService === opt.id ? '#FFFFFF' : '#94A3B8'}
+                        />
+                        <Text
+                          style={[
+                            styles.serviceSelectBtnText,
+                            selectedService === opt.id && styles.serviceSelectBtnTextActive,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    ))}
                 </View>
               </View>
 
