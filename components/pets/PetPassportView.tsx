@@ -542,17 +542,6 @@ export function PetPassportView({
     );
   };
 
-  const handleClosePress = () => {
-    haptic.light();
-    if (onClose) {
-      onClose();
-    } else if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/pets' as never);
-    }
-  };
-
   // Switch Companion Pet
   const handleSelectPet = (targetPet: Pet) => {
     if (targetPet.id === pet.id) {
@@ -614,7 +603,7 @@ export function PetPassportView({
           </Svg>
         )}
 
-        {/* Top 6-Button Pill Action Toolbar */}
+        {/* Top Action Toolbar (QR, Stethoscope, Calendar, Switch Companion, Delete) */}
         <View style={styles.topToolbarRow}>
           {/* 1. QR Code / Passport Tab Button */}
           <Pressable
@@ -626,14 +615,14 @@ export function PetPassportView({
               styles.toolIconBtn,
               activeTab === 'passport' && styles.toolIconBtnActive,
             ]}
-            hitSlop={5}
+            hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Digital Passport"
           >
             <Ionicons
               name="qr-code-outline"
-              size={15}
-              color={activeTab === 'passport' ? '#FFFFFF' : 'rgba(255,255,255,0.85)'}
+              size={20}
+              color={activeTab === 'passport' ? '#FFFFFF' : 'rgba(255,255,255,0.9)'}
             />
           </Pressable>
 
@@ -647,14 +636,14 @@ export function PetPassportView({
               styles.toolIconBtn,
               activeTab === 'clinical' && styles.toolIconBtnActive,
             ]}
-            hitSlop={5}
+            hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Clinical Care"
           >
             <MaterialCommunityIcons
               name="stethoscope"
-              size={16}
-              color={activeTab === 'clinical' ? '#FFFFFF' : 'rgba(255,255,255,0.85)'}
+              size={21}
+              color={activeTab === 'clinical' ? '#FFFFFF' : 'rgba(255,255,255,0.9)'}
             />
           </Pressable>
 
@@ -668,18 +657,18 @@ export function PetPassportView({
               styles.toolIconBtn,
               activeTab === 'procedure' && styles.toolIconBtnActive,
             ]}
-            hitSlop={5}
+            hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Book Procedure Slot"
           >
             <Ionicons
               name="calendar-outline"
-              size={15}
-              color={activeTab === 'procedure' ? '#FFFFFF' : 'rgba(255,255,255,0.85)'}
+              size={20}
+              color={activeTab === 'procedure' ? '#FFFFFF' : 'rgba(255,255,255,0.9)'}
             />
           </Pressable>
 
-          {/* 4. Switch Pet Button (if 2+ pets) */}
+          {/* 4. Switch Companion Button (Single dedicated switch button in pet tab) */}
           {allPets.length > 1 && (
             <Pressable
               onPress={() => {
@@ -687,11 +676,11 @@ export function PetPassportView({
                 setSwitchPetModalVisible(true);
               }}
               style={styles.toolIconBtn}
-              hitSlop={5}
+              hitSlop={6}
               accessibilityRole="button"
-              accessibilityLabel="Switch Pet"
+              accessibilityLabel="Switch Companion"
             >
-              <Ionicons name="swap-horizontal" size={15} color="rgba(255,255,255,0.9)" />
+              <Ionicons name="swap-horizontal" size={21} color="rgba(255,255,255,0.95)" />
             </Pressable>
           )}
 
@@ -699,26 +688,15 @@ export function PetPassportView({
           <Pressable
             onPress={handleDeletePet}
             style={styles.toolIconBtn}
-            hitSlop={5}
+            hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel="Delete Pet"
           >
             {isDeleting ? (
               <ActivityIndicator size="small" color="#EF4444" />
             ) : (
-              <Ionicons name="trash-outline" size={15} color="rgba(255,255,255,0.85)" />
+              <Ionicons name="trash-outline" size={20} color="rgba(255,255,255,0.9)" />
             )}
-          </Pressable>
-
-          {/* 6. Close Modal Button */}
-          <Pressable
-            onPress={handleClosePress}
-            style={[styles.toolIconBtn, styles.closeToolBtn]}
-            hitSlop={5}
-            accessibilityRole="button"
-            accessibilityLabel="Close Dialog"
-          >
-            <Ionicons name="close" size={17} color="#FFFFFF" />
           </Pressable>
         </View>
 
@@ -735,27 +713,11 @@ export function PetPassportView({
 
           {/* Name, Subtitle, and Badges */}
           <View style={styles.petInfoCol}>
-            {/* Pet Name with Edit, Gallery, and Switch Buttons */}
+            {/* Pet Name with Edit and Gallery Buttons */}
             <View style={styles.petNameRow}>
-              <Pressable
-                onPress={() => {
-                  if (allPets.length > 1) {
-                    haptic.light();
-                    setSwitchPetModalVisible(true);
-                  }
-                }}
-                style={styles.petNamePressable}
-                hitSlop={5}
-                accessibilityRole="button"
-                accessibilityLabel="Switch Companion Pet"
-              >
-                <Text style={styles.petNameText} numberOfLines={1}>
-                  {pet.name}
-                </Text>
-                {allPets.length > 1 && (
-                  <Ionicons name="chevron-down-circle" size={15} color="rgba(255, 255, 255, 0.85)" />
-                )}
-              </Pressable>
+              <Text style={styles.petNameText} numberOfLines={1}>
+                {pet.name}
+              </Text>
 
               {/* Edit Pencil Icon Button */}
               <Pressable
@@ -784,23 +746,6 @@ export function PetPassportView({
               >
                 <Ionicons name="images-outline" size={13} color="#FFFFFF" />
               </Pressable>
-
-              {/* Switch Pet Button Pill */}
-              {allPets.length > 1 && (
-                <Pressable
-                  onPress={() => {
-                    haptic.light();
-                    setSwitchPetModalVisible(true);
-                  }}
-                  style={styles.switchPetPill}
-                  hitSlop={5}
-                  accessibilityRole="button"
-                  accessibilityLabel="Switch Pet"
-                >
-                  <Ionicons name="swap-horizontal" size={11} color="#FFFFFF" />
-                  <Text style={styles.switchPetPillText}>Switch</Text>
-                </Pressable>
-              )}
             </View>
 
             {/* Subtitle meta line */}
@@ -908,56 +853,43 @@ export function PetPassportView({
               </View>
             </View>
 
-            {/* Quick Companion Selector Section (if user has 2+ pets) */}
-            {allPets.length > 1 && (
-              <View style={styles.otherPetsSection}>
-                <View style={styles.otherPetsHeaderRow}>
-                  <Text style={styles.otherPetsSectionTitle}>
-                    SWITCH COMPANION ({allPets.length} REGISTERED)
-                  </Text>
-                  <Pressable
-                    onPress={() => {
-                      haptic.light();
-                      setSwitchPetModalVisible(true);
-                    }}
-                    hitSlop={5}
-                  >
-                    <Text style={styles.seeAllPetsLink}>View All ➔</Text>
-                  </Pressable>
+            {/* Companion Municipal Registry Summary Card */}
+            <View style={styles.registryCard}>
+              <View style={styles.registryCardHeader}>
+                <Ionicons name="shield-checkmark-outline" size={16} color="#0D9488" />
+                <Text style={styles.registryCardTitle}>Companion Registry Details</Text>
+                <View style={styles.registryTagBadge}>
+                  <Text style={styles.registryTagText}>#{formattedTagId}</Text>
                 </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.otherPetsScrollContent}
-                >
-                  {allPets.map((p) => {
-                    const isCurrent = p.id === pet.id;
-                    const pAvatar = getPetAvatarSource(p.avatarId, p.species, p.photoUrl, p.name);
-                    const pAge = p.birthYear ? ageFromBirthYear(p.birthYear) : 1;
-                    return (
-                      <Pressable
-                        key={p.id}
-                        onPress={() => handleSelectPet(p)}
-                        style={[
-                          styles.otherPetPillCard,
-                          isCurrent && styles.otherPetPillCardActive,
-                        ]}
-                      >
-                        <Image source={pAvatar} style={styles.otherPetAvatarImg} resizeMode="contain" />
-                        <View style={styles.otherPetTextCol}>
-                          <Text style={[styles.otherPetName, isCurrent && styles.otherPetNameActive]} numberOfLines={1}>
-                            {p.name}
-                          </Text>
-                          <Text style={styles.otherPetMeta} numberOfLines={1}>
-                            {p.species === 'cat' ? 'Cat' : 'Dog'} • {pAge} yrs{isCurrent ? ' (Active)' : ''}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
               </View>
-            )}
+
+              <View style={styles.registryGrid}>
+                <View style={styles.registryItem}>
+                  <Text style={styles.registryLabel}>Species &amp; Breed</Text>
+                  <Text style={styles.registryValue} numberOfLines={1}>
+                    {isDog ? 'Canine' : 'Feline'} • {pet.breed || 'Companion'}
+                  </Text>
+                </View>
+                <View style={styles.registryItem}>
+                  <Text style={styles.registryLabel}>Gender &amp; Age</Text>
+                  <Text style={styles.registryValue} numberOfLines={1}>
+                    {pet.gender === 'female' ? 'Female' : 'Male'} • {age} {age === 1 ? 'yr' : 'yrs'}
+                  </Text>
+                </View>
+                <View style={styles.registryItem}>
+                  <Text style={styles.registryLabel}>Weight Category</Text>
+                  <Text style={styles.registryValue} numberOfLines={1}>
+                    {weightDisplay}
+                  </Text>
+                </View>
+                <View style={styles.registryItem}>
+                  <Text style={styles.registryLabel}>Sterilization</Text>
+                  <Text style={styles.registryValue} numberOfLines={1}>
+                    {pet.isSpayedNeutered ? 'Spayed / Neutered' : 'Intact'}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
         )}
 
@@ -1936,20 +1868,6 @@ export function PetPassportView({
                 );
               })}
             </ScrollView>
-
-            {/* Bottom Register New Companion CTA */}
-            <View style={styles.switchModalFooter}>
-              <Pressable
-                onPress={() => {
-                  setSwitchPetModalVisible(false);
-                  router.push('/pets/add' as never);
-                }}
-                style={styles.addNewPetBtn}
-              >
-                <Ionicons name="add-circle-outline" size={17} color="#0D9488" />
-                <Text style={styles.addNewPetBtnText}>Register New Companion</Text>
-              </Pressable>
-            </View>
           </View>
         </View>
       </Modal>
@@ -1987,26 +1905,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     marginBottom: 14,
-    paddingRight: 10,
+    paddingRight: 6,
   },
   toolIconBtn: {
-    width: 29,
-    height: 29,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
   },
-  closeToolBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-  },
   toolIconBtnActive: {
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
   },
 
   /* Identity Row */
@@ -2039,11 +1954,6 @@ const styles = StyleSheet.create({
     gap: 6,
     flexWrap: 'wrap',
   },
-  petNamePressable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   petNameText: {
     fontSize: 21,
     fontWeight: '800',
@@ -2057,21 +1967,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  switchPetPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 10,
-    marginLeft: 2,
-  },
-  switchPetPillText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   metaSubtitle: {
     fontSize: 12,
@@ -2194,6 +2089,61 @@ const styles = StyleSheet.create({
   },
   vaxDueUrgent: {
     color: '#B45309',
+  },
+
+  /* Companion Registry Summary Card */
+  registryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 14,
+    gap: 12,
+  },
+  registryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  registryCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+  },
+  registryTagBadge: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  registryTagText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  registryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  registryItem: {
+    width: '47%',
+  },
+  registryLabel: {
+    fontSize: 10.5,
+    color: '#6B7280',
+  },
+  registryValue: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 2,
   },
 
   /* Tab Banner Header */
@@ -2926,68 +2876,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  /* Quick Other Pets Horizontal Strip */
-  otherPetsSection: {
-    marginTop: 14,
-    gap: 8,
-  },
-  otherPetsHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  otherPetsSectionTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#6B7280',
-    letterSpacing: 0.4,
-  },
-  seeAllPetsLink: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0D9488',
-  },
-  otherPetsScrollContent: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 2,
-  },
-  otherPetPillCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    gap: 8,
-  },
-  otherPetPillCardActive: {
-    borderColor: '#0D9488',
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1.5,
-  },
-  otherPetAvatarImg: {
-    width: 32,
-    height: 32,
-  },
-  otherPetTextCol: {
-    gap: 1,
-  },
-  otherPetName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  otherPetNameActive: {
-    color: '#0D9488',
-  },
-  otherPetMeta: {
-    fontSize: 10,
-    color: '#6B7280',
-  },
-
   /* Switch Pet Modal */
   modalOverlay: {
     flex: 1,
@@ -3171,28 +3059,6 @@ const styles = StyleSheet.create({
   },
   switchActionPillText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#0D9488',
-  },
-  switchModalFooter: {
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    backgroundColor: '#F9FAFB',
-  },
-  addNewPetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#0D9488',
-    backgroundColor: '#FFFFFF',
-  },
-  addNewPetBtnText: {
-    fontSize: 12.5,
     fontWeight: '700',
     color: '#0D9488',
   },

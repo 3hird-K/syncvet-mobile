@@ -420,13 +420,13 @@ export function PetsScreenSkeleton() {
       {/* Curved Emerald Top Header matching PetPassportView */}
       <View style={styles.petPassportHeader}>
         {/* Top Tools Bar */}
-        <View style={styles.petPassportToolsRow}>
-          <SkeletonCircle size={32} />
+        <View style={[styles.petPassportToolsRow, { justifyContent: 'flex-end' }]}>
           <View style={styles.row}>
-            <SkeletonCircle size={32} />
-            <SkeletonCircle size={32} />
-            <SkeletonCircle size={32} />
-            <SkeletonCircle size={32} />
+            <SkeletonCircle size={36} />
+            <SkeletonCircle size={36} />
+            <SkeletonCircle size={36} />
+            <SkeletonCircle size={36} />
+            <SkeletonCircle size={36} />
           </View>
         </View>
 
@@ -474,12 +474,31 @@ export function PetsScreenSkeleton() {
           </View>
         </View>
 
-        {/* Switch Companion Row */}
-        <View style={{ marginTop: 14 }}>
-          <Skeleton width={150} height={12} borderRadius={radius.pill} style={{ marginBottom: 8 }} />
-          <View style={styles.row}>
-            <Skeleton width={130} height={44} borderRadius={radius.pill} />
-            <Skeleton width={130} height={44} borderRadius={radius.pill} />
+        {/* Companion Registry Details Card Skeleton */}
+        <View style={[styles.card, shadows.sm, { marginTop: 13 }]}>
+          <View style={styles.rowBetween}>
+            <Skeleton width={160} height={14} borderRadius={4} />
+            <Skeleton width={82} height={20} borderRadius={6} />
+          </View>
+          <View style={styles.vaxDatesGridSkeleton}>
+            <View style={styles.vaxDateBox}>
+              <Skeleton width={90} height={11} borderRadius={3} />
+              <Skeleton width={120} height={13} borderRadius={4} style={{ marginTop: 4 }} />
+            </View>
+            <View style={styles.vaxDateBox}>
+              <Skeleton width={90} height={11} borderRadius={3} />
+              <Skeleton width={110} height={13} borderRadius={4} style={{ marginTop: 4 }} />
+            </View>
+          </View>
+          <View style={[styles.vaxDatesGridSkeleton, { borderTopWidth: 0, paddingTop: 6 }]}>
+            <View style={styles.vaxDateBox}>
+              <Skeleton width={90} height={11} borderRadius={3} />
+              <Skeleton width={80} height={13} borderRadius={4} style={{ marginTop: 4 }} />
+            </View>
+            <View style={styles.vaxDateBox}>
+              <Skeleton width={90} height={11} borderRadius={3} />
+              <Skeleton width={100} height={13} borderRadius={4} style={{ marginTop: 4 }} />
+            </View>
           </View>
         </View>
       </View>
