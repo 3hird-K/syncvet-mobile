@@ -18,6 +18,15 @@ import { colors, typography } from '@theme';
 import { supabase } from '@lib/supabase';
 import { haptic } from '@lib/haptics';
 import { Skeleton, SkeletonCircle } from '@components/ui/Skeleton';
+import {
+  isOutreachAnnouncement,
+  parseOutreachDetails,
+  type OutreachDetails,
+  type OutreachRecordResult,
+} from '@services/outreach/outreachService';
+import { OutreachPostAction } from './OutreachPostAction';
+import { OutreachCheckInScannerModal } from './OutreachCheckInScannerModal';
+import { OutreachSuccessReceiptModal } from './OutreachSuccessReceiptModal';
 
 export interface AnnouncementItem {
   id: string;
@@ -153,6 +162,8 @@ function formatRelativeTime(dateString: string): string {
 export function HomeAnnouncementsSection() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [maximizedImage, setMaximizedImage] = useState<MaximizedImageInfo | null>(null);
+  const [scannerOutreach, setScannerOutreach] = useState<OutreachDetails | null>(null);
+  const [receiptResult, setReceiptResult] = useState<OutreachRecordResult | null>(null);
 
   // TanStack Query for caching, revalidation, and background sync
   const {
@@ -283,6 +294,7 @@ export function HomeAnnouncementsSection() {
             item={item}
             isFirst={index === 0}
             onImagePress={() => handleOpenImage(item)}
+            onScanOutreach={(details) => setScannerOutreach(details)}
           />
         ))
       )}
@@ -291,6 +303,24 @@ export function HomeAnnouncementsSection() {
       <FacebookImageViewerModal
         imageInfo={maximizedImage}
         onClose={handleCloseImage}
+      />
+
+      {/* Outreach QR Check-in & Record Scanner Modal */}
+      <OutreachCheckInScannerModal
+        visible={Boolean(scannerOutreach)}
+        outreachInfo={scannerOutreach}
+        onClose={() => setScannerOutreach(null)}
+        onSuccess={(result) => {
+          setScannerOutreach(null);
+          setReceiptResult(result);
+        }}
+      />
+
+      {/* Official CVO Outreach Receipt / Certificate Modal */}
+      <OutreachSuccessReceiptModal
+        visible={Boolean(receiptResult)}
+        result={receiptResult}
+        onClose={() => setReceiptResult(null)}
       />
     </Animated.View>
   );
@@ -336,13 +366,21 @@ function FacebookPostCard({
   item,
   isFirst,
   onImagePress,
+  onScanOutreach,
 }: {
   item: AnnouncementItem;
   isFirst: boolean;
   onImagePress: () => void;
+  onScanOutreach: (details: OutreachDetails) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [imageError, setImageError] = useState(false);
+
+  // Outreach post detection & metadata
+  const outreachDetails = useMemo(
+    () => (isOutreachAnnouncement(item) ? parseOutreachDetails(item) : null),
+    [item],
+  );
 
   const avatarUrl = useMemo(() => getAuthorAvatarUrl(item), [item]);
   const initials = useMemo(() => getAuthorInitials(item), [item]);
@@ -476,6 +514,14 @@ function FacebookPostCard({
               resizeMode="cover"
             />
           </Pressable>
+        ) : null}
+
+        {/* Barangay Outreach Station Action Card */}
+        {outreachDetails ? (
+          <OutreachPostAction
+            outreachInfo={outreachDetails}
+            onScanPress={() => onScanOutreach(outreachDetails)}
+          />
         ) : null}
 
         {/* No reactions per user explicit instruction */}

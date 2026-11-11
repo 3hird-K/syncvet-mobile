@@ -8,7 +8,7 @@ let audioCtx: any = null;
 /**
  * Synthesizes an audible clinic queue chime using Web Audio API when available.
  */
-function playWebChime() {
+export function playWebChime() {
   if (Platform.OS !== 'web' && typeof window === 'undefined') return;
 
   try {

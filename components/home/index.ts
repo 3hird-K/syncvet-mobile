@@ -7,3 +7,6 @@ export { HomeQuickActions } from './HomeQuickActions';
 export { HomeServicesSection } from './HomeServicesSection';
 export { HomeHealthInsight } from './HomeHealthInsight';
 export { HomeClinicStrip } from './HomeClinicStrip';
+export { OutreachPostAction } from './OutreachPostAction';
+export { OutreachCheckInScannerModal } from './OutreachCheckInScannerModal';
+export { OutreachSuccessReceiptModal } from './OutreachSuccessReceiptModal';
