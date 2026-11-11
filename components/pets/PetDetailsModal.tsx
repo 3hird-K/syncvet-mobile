@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { shadows } from '@theme';
 import { PetPassportView } from './PetPassportView';
 import type { Pet } from '@services/data';
@@ -19,9 +19,13 @@ export function PetDetailsModal({ pet, visible, onClose, onSelectPet }: PetDetai
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.modalOverlay}
+      >
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={styles.cardContainer}>
           <PetPassportView
@@ -31,7 +35,7 @@ export function PetDetailsModal({ pet, visible, onClose, onSelectPet }: PetDetai
             onSelectPet={onSelectPet}
           />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

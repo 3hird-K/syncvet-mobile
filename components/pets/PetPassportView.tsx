@@ -1,8 +1,9 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -11,6 +12,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -83,19 +85,19 @@ const CLINICAL_SERVICES = [
 
 function getNextWeekdayISO(): string {
   const d = new Date();
-  const isMorningNow = d.getHours() < 12;
+  const isSameDayOpen = d.getHours() < 16;
   const day = d.getDay();
   const isWeekend = day === 0 || day === 6;
 
-  // If today is a weekday and it's morning (before 12 PM), today is available for selection
-  if (!isWeekend && isMorningNow) {
+  // If today is a weekday and before 4:00 PM (an hour before 5 PM closing), today is available for selection
+  if (!isWeekend && isSameDayOpen) {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // If weekend or afternoon (12 PM or later), advance to next weekday morning
+  // If weekend or after 4:00 PM cutoff, advance to next weekday morning
   d.setDate(d.getDate() + 1);
   while (d.getDay() === 0 || d.getDay() === 6) {
     d.setDate(d.getDate() + 1);
@@ -118,7 +120,7 @@ function formatShadcnDate(iso: string): string {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const formatted = `${months[mm]} ${dd}, ${yyyy}`;
     if (iso === todayISO) {
-      return `${formatted} (Today • Morning Walk-In)`;
+      return `${formatted} (Today • Same-Day Walk-In)`;
     }
     return formatted;
   }
@@ -138,6 +140,28 @@ export function PetPassportView({
   const allPets = useDataStore((state) => state.pets) || [];
   const ownerId = authUser?.id || pet?.ownerId || '';
   const qrRef = useRef<any>(null);
+  const scrollBodyRef = useRef<any>(null);
+  const editScrollRef = useRef<any>(null);
+
+  const { height: windowHeight } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const [activeTab, setActiveTab] = useState<PetDetailTab>('overview');
   const [isEditing, setIsEditing] = useState(false);
@@ -228,7 +252,7 @@ export function PetPassportView({
       isDisabled: boolean;
     }[] = [];
     const now = new Date();
-    const isMorning = now.getHours() < 12;
+    const isSameDayOpen = now.getHours() < 16;
 
     for (let offset = 0; offset <= 8 && options.length < 3; offset++) {
       const d = new Date();
@@ -252,8 +276,8 @@ export function PetPassportView({
         ? `Today (${monthShort} ${d.getDate()})`
         : `${weekdayShort}, ${monthShort} ${d.getDate()}`;
 
-      // Today's date is strictly disabled if already afternoon (12 PM cutoff)
-      const isDisabled = isToday && !isMorning;
+      // Today's date is strictly disabled if already 4:00 PM or later (1 hour before 5 PM closing)
+      const isDisabled = isToday && !isSameDayOpen;
 
       options.push({
         iso,
@@ -271,7 +295,7 @@ export function PetPassportView({
     if (!clinicalDate) return false;
     const now = new Date();
     const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (clinicalDate === todayISO && now.getHours() >= 12) return false;
+    if (clinicalDate === todayISO && now.getHours() >= 16) return false;
     if (!clinicalSymptoms.trim()) return false;
     return true;
   }, [selectedServices, clinicalDate, clinicalSymptoms]);
@@ -282,7 +306,7 @@ export function PetPassportView({
     if (!procedureDate) return false;
     const now = new Date();
     const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (procedureDate === todayISO && now.getHours() >= 12) return false;
+    if (procedureDate === todayISO && now.getHours() >= 16) return false;
     if (!prepConfirmed) return false;
     return true;
   }, [selectedProcedure, procedureDate, prepConfirmed]);
@@ -808,12 +832,25 @@ export function PetPassportView({
 
       {/* ===================== BODY CONTENT AREA ===================== */}
       <ScrollView
+        ref={scrollBodyRef}
         style={styles.scrollBody}
         contentContainerStyle={[
           styles.scrollBodyContent,
-          !isCard && { paddingBottom: Math.max(insets.bottom, 20) + 140 },
+          !isCard && {
+            paddingBottom:
+              keyboardHeight > 0
+                ? keyboardHeight + 80
+                : Math.max(insets.bottom, 20) + 140,
+          },
+          isCard &&
+            keyboardHeight > 0 && {
+              paddingBottom: keyboardHeight + 40,
+            },
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       >
         {/* ----------------- TAB 0: OVERVIEW ----------------- */}
         {activeTab === 'overview' && (
@@ -1114,9 +1151,9 @@ export function PetPassportView({
                     onPress={() => {
                       if (opt.isDisabled) {
                         haptic.warning();
-                        toast.warning('Afternoon queue closed', {
+                        toast.warning('Same-day queue closed', {
                           description:
-                            'Same-day bookings must be chosen in the morning (before 12:00 PM). Please select an upcoming weekday.',
+                            'Same-day bookings close at 4:00 PM (1 hour before 5:00 PM closing). Please select an upcoming weekday.',
                         });
                         return;
                       }
@@ -1134,7 +1171,7 @@ export function PetPassportView({
                       <View style={styles.disabledDateTag}>
                         <Ionicons name="lock-closed" size={12} color="#9CA3AF" />
                         <Text style={styles.quickDateTextDisabled}>
-                          Today (Afternoon Closed)
+                          Today (Closed after 4 PM)
                         </Text>
                       </View>
                     ) : (
@@ -1186,7 +1223,7 @@ export function PetPassportView({
             <View style={styles.operatingHoursCard}>
               <Text style={styles.operatingHoursTitle}>Walk-in Clinical Operating Hours</Text>
               <Text style={styles.operatingHoursDesc}>
-                Open Monday through Friday, 8:00 AM to 5:00 PM. Same-day bookings must be chosen in the morning (before 12:00 PM). Weekend consultations are unavailable. Walk in to scan the QR to be in a queue.
+                Open Monday through Friday, 8:00 AM to 5:00 PM. Same-day bookings are open until 4:00 PM (an hour before 5:00 PM closing). Weekend consultations are unavailable. Walk in to scan the QR to be in a queue.
               </Text>
             </View>
 
@@ -1209,6 +1246,11 @@ export function PetPassportView({
                 numberOfLines={3}
                 style={styles.multilineInput}
                 textAlignVertical="top"
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollBodyRef.current?.scrollToEnd({ animated: true });
+                  }, 120);
+                }}
               />
             </View>
           </View>
@@ -1347,9 +1389,9 @@ export function PetPassportView({
                     onPress={() => {
                       if (opt.isDisabled) {
                         haptic.warning();
-                        toast.warning('Afternoon booking closed', {
+                        toast.warning('Same-day booking closed', {
                           description:
-                            'Same-day bookings must be chosen in the morning (before 12:00 PM). Please select an upcoming weekday.',
+                            'Same-day bookings close at 4:00 PM (1 hour before 5:00 PM closing). Please select an upcoming weekday.',
                         });
                         return;
                       }
@@ -1367,7 +1409,7 @@ export function PetPassportView({
                       <View style={styles.disabledDateTag}>
                         <Ionicons name="lock-closed" size={12} color="#9CA3AF" />
                         <Text style={styles.quickDateTextDisabled}>
-                          Today (Afternoon Closed)
+                          Today (Closed after 4 PM)
                         </Text>
                       </View>
                     ) : (
@@ -1473,6 +1515,11 @@ export function PetPassportView({
                 numberOfLines={3}
                 style={styles.multilineInput}
                 textAlignVertical="top"
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollBodyRef.current?.scrollToEnd({ animated: true });
+                  }, 120);
+                }}
               />
             </View>
           </View>
@@ -1480,15 +1527,40 @@ export function PetPassportView({
       </ScrollView>
 
       {/* ===================== SUB-DIALOG: EDIT PET DETAILS ===================== */}
-      {isEditing && (
-        <View style={styles.editSubDialogOverlay}>
+      <Modal
+        visible={isEditing}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setIsEditing(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[
+            styles.editSubDialogOverlay,
+            keyboardHeight > 0 && {
+              justifyContent: 'flex-end',
+              paddingBottom: Platform.OS === 'android' ? keyboardHeight + 10 : 20,
+            },
+          ]}
+        >
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => setIsEditing(false)}
+            onPress={() => {
+              Keyboard.dismiss();
+              setIsEditing(false);
+            }}
           />
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.editSubDialogCard}
+          <View
+            style={[
+              styles.editSubDialogCard,
+              keyboardHeight > 0 && {
+                maxHeight: Math.max(
+                  280,
+                  windowHeight - keyboardHeight - (Platform.OS === 'ios' ? 44 : 64),
+                ),
+              },
+            ]}
           >
             {/* Header */}
             <View style={styles.editHeaderRow}>
@@ -1500,7 +1572,10 @@ export function PetPassportView({
                 <Text style={styles.editSubtitle}>Update basic info for {pet.name}</Text>
               </View>
               <Pressable
-                onPress={() => setIsEditing(false)}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setIsEditing(false);
+                }}
                 style={styles.editCloseBtn}
                 hitSlop={8}
               >
@@ -1508,7 +1583,16 @@ export function PetPassportView({
               </Pressable>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+            <ScrollView
+              ref={editScrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={{
+                paddingBottom: keyboardHeight > 0 ? 80 : 16,
+              }}
+              style={{ maxHeight: 380 }}
+            >
               {/* Field 1: Pet Name * */}
               <View style={styles.formField}>
                 <Text style={styles.formLabel}>Pet Name *</Text>
@@ -1518,6 +1602,13 @@ export function PetPassportView({
                   placeholder="e.g. Cadmus"
                   placeholderTextColor="#9CA3AF"
                   style={styles.formInput}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  onFocus={() => {
+                    setTimeout(() => {
+                      editScrollRef.current?.scrollTo({ y: 0, animated: true });
+                    }, 120);
+                  }}
                 />
               </View>
 
@@ -1592,6 +1683,12 @@ export function PetPassportView({
                     placeholder="e.g. 15"
                     placeholderTextColor="#9CA3AF"
                     style={styles.weightInput}
+                    returnKeyType="done"
+                    onFocus={() => {
+                      setTimeout(() => {
+                        editScrollRef.current?.scrollToEnd({ animated: true });
+                      }, 120);
+                    }}
                   />
                   <Text style={styles.weightSuffix}>kg</Text>
                 </View>
@@ -1624,7 +1721,10 @@ export function PetPassportView({
             {/* Bottom Action Buttons */}
             <View style={styles.editBottomActions}>
               <Pressable
-                onPress={() => setIsEditing(false)}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setIsEditing(false);
+                }}
                 style={styles.editCancelBtn}
               >
                 <Text style={styles.editCancelBtnText}>Cancel</Text>
@@ -1645,9 +1745,9 @@ export function PetPassportView({
                 )}
               </Pressable>
             </View>
-          </KeyboardAvoidingView>
-        </View>
-      )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* ===================== SHADCN CALENDAR MODALS ===================== */}
       {/* 1. Clinical Consultation Date Picker */}
@@ -2553,16 +2653,11 @@ const styles = StyleSheet.create({
 
   /* ===================== SUB-DIALOG EDIT STYLES ===================== */
   editSubDialogOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    zIndex: 999,
   },
   editSubDialogCard: {
     width: '100%',

@@ -29,4 +29,5 @@ export const queryKeys = {
   appointments: (ownerId: string) => ['appointments', ownerId] as const,
   transactions: (ownerId: string) => ['transactions', ownerId] as const,
   activities: (ownerId: string) => ['transactions', ownerId] as const,
+  unreadMessagesCount: (ownerId: string) => ['unreadMessagesCount', ownerId] as const,
 } as const;

@@ -184,6 +184,68 @@ export class ChatService {
   }
 
   /**
+   * Get unread messages count for a resident across all their chats
+   */
+  async getUnreadMessagesCount(ownerId: string): Promise<number> {
+    if (!ownerId) return 0;
+    try {
+      // 1. Get all chat IDs belonging to this resident
+      const { data: chats, error: chatErr } = await supabase
+        .from('chats')
+        .select('id')
+        .eq('owner_id', ownerId);
+
+      if (chatErr) {
+        console.warn('Error fetching chats for unread count:', chatErr.message);
+        return 0;
+      }
+
+      if (!chats || chats.length === 0) return 0;
+
+      const chatIds = chats.map((c) => c.id);
+
+      // 2. Count unread messages not sent by Pet Owner
+      const { count, error: msgErr } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .in('chat_id', chatIds)
+        .neq('sender_role', 'Pet Owner')
+        .eq('is_read', false);
+
+      if (msgErr) {
+        console.warn('Error counting unread messages:', msgErr.message);
+        return 0;
+      }
+
+      return count ?? 0;
+    } catch (err) {
+      console.warn('Error in getUnreadMessagesCount:', err);
+      return 0;
+    }
+  }
+
+  /**
+   * Mark all unread incoming messages in a chat as read
+   */
+  async markMessagesAsRead(chatId: string): Promise<void> {
+    if (!chatId) return;
+    try {
+      const { error } = await supabase
+        .from('chat_messages')
+        .update({ is_read: true })
+        .eq('chat_id', chatId)
+        .neq('sender_role', 'Pet Owner')
+        .eq('is_read', false);
+
+      if (error) {
+        console.warn('Error marking messages as read in Supabase:', error.message);
+      }
+    } catch (err) {
+      console.warn('Error in markMessagesAsRead:', err);
+    }
+  }
+
+  /**
    * Send a message from resident
    */
   async sendMessage(
@@ -315,7 +377,7 @@ export class ChatService {
 
     // CVO Admin
     if (lower.includes('hour') || lower.includes('open') || lower.includes('time') || lower.includes('sched')) {
-      return 'The City Veterinary Office (CVO) main clinic is open Monday through Friday, 8:00 AM to 5:00 PM. Same-day bookings must be chosen in the morning (before 12:00 PM cutoff). We are closed on weekends and public holidays.';
+      return 'The City Veterinary Office (CVO) main clinic is open Monday through Friday, 8:00 AM to 5:00 PM. Same-day bookings are open until 4:00 PM (an hour before 5:00 PM closing). We are closed on weekends and public holidays.';
     }
     if (lower.includes('outreach') || lower.includes('barangay') || lower.includes('brgy') || lower.includes('mission')) {
       return 'Our mobile veterinary team deploys to different barangays across Cagayan de Oro weekly for free mass anti-rabies drives. Check the Announcements section on your Home tab for this week’s deployment schedule!';

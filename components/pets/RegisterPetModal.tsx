@@ -399,7 +399,7 @@ export function RegisterPetModal({
             keyboardDismissMode="on-drag"
             contentContainerStyle={[
               styles.formScrollContent,
-              keyboardHeight > 0 && { paddingBottom: 60 },
+              keyboardHeight > 0 && { paddingBottom: 160 },
             ]}
           >
             {/* Profile Picture Box */}
@@ -665,7 +665,7 @@ export function RegisterPetModal({
 
                 {/* Breed Sheet */}
                 {activeSheet === 'breed' && (
-                  <View style={{ maxHeight: 380 }}>
+                  <View style={{ maxHeight: keyboardHeight > 0 ? 260 : 380 }}>
                     <View style={styles.sheetHeader}>
                       <Text style={styles.sheetTitle}>
                         Select {species === 'dog' ? 'Canine' : 'Feline'} Breed
@@ -689,6 +689,8 @@ export function RegisterPetModal({
                       data={breedsList}
                       keyExtractor={(item) => item}
                       keyboardShouldPersistTaps="handled"
+                      keyboardDismissMode="on-drag"
+                      style={{ maxHeight: keyboardHeight > 0 ? 150 : 260 }}
                       renderItem={({ item }) => {
                         const isSelected = breed === item;
                         return (

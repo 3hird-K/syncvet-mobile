@@ -66,7 +66,7 @@ export function ShadcnCalendarModal({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const isMorningNow = new Date().getHours() < 12;
+  const isSameDayOpenNow = new Date().getHours() < 16;
 
   // Month navigation
   const handlePrevMonth = () => {
@@ -129,13 +129,13 @@ export function ShadcnCalendarModal({
       return;
     }
 
-    // Today check: only allowed if currently morning (before 12 PM)
+    // Today check: only allowed until 4:00 PM (1 hour before 5 PM closing)
     const isToday =
       candidate.getFullYear() === today.getFullYear() &&
       candidate.getMonth() === today.getMonth() &&
       candidate.getDate() === today.getDate();
 
-    if (isToday && !isMorningNow) {
+    if (isToday && !isSameDayOpenNow) {
       haptic.warning();
       return;
     }
@@ -229,9 +229,9 @@ export function ShadcnCalendarModal({
                 cellDate.getMonth() === today.getMonth() &&
                 cellDate.getDate() === today.getDate();
 
-              // If today, only enable if currently morning (before 12:00 PM)
-              const isTodayAfternoonBlocked = isTodayDate && !isMorningNow;
-              const isDisabled = isWeekend || isPast || isTodayAfternoonBlocked;
+              // If today, enable until 4:00 PM (1 hour before 5:00 PM closing)
+              const isTodayCutoffBlocked = isTodayDate && !isSameDayOpenNow;
+              const isDisabled = isWeekend || isPast || isTodayCutoffBlocked;
 
               return (
                 <Pressable
@@ -245,11 +245,11 @@ export function ShadcnCalendarModal({
                       styles.dayCellSelected,
                       { backgroundColor: themeColor },
                     ],
-                    !isSelected && isTodayDate && !isTodayAfternoonBlocked && [
+                    !isSelected && isTodayDate && !isTodayCutoffBlocked && [
                       styles.dayCellToday,
                       { borderColor: themeColor },
                     ],
-                    isTodayAfternoonBlocked && styles.dayCellAfternoonBlocked,
+                    isTodayCutoffBlocked && styles.dayCellAfternoonBlocked,
                   ]}
                 >
                   <Text
@@ -257,9 +257,9 @@ export function ShadcnCalendarModal({
                       styles.dayText,
                       isWeekend && styles.dayTextWeekend,
                       isDisabled && styles.dayTextDisabled,
-                      isTodayAfternoonBlocked && styles.dayTextAfternoonBlocked,
+                      isTodayCutoffBlocked && styles.dayTextAfternoonBlocked,
                       isSelected && styles.dayTextSelected,
-                      !isSelected && isTodayDate && !isTodayAfternoonBlocked && { color: themeColor, fontWeight: '700' },
+                      !isSelected && isTodayDate && !isTodayCutoffBlocked && { color: themeColor, fontWeight: '700' },
                     ]}
                   >
                     {item.dayNum}
@@ -278,9 +278,9 @@ export function ShadcnCalendarModal({
               </Text>
             </View>
             <Text style={styles.noticeBody}>
-              {isMorningNow
-                ? 'Today is available for morning walk-in queueing. After 12:00 PM, same-day scheduling closes and only future weekdays can be booked.'
-                : 'Same-day queue scheduling closes at 12:00 PM. Please select an upcoming weekday morning/day.'}
+              {isSameDayOpenNow
+                ? 'Today is available for same-day walk-in scheduling until 4:00 PM (1 hour before 5:00 PM closing). Afterwards, only upcoming weekdays can be scheduled.'
+                : 'Same-day queue scheduling closes at 4:00 PM (an hour before 5:00 PM closing). Please select an upcoming weekday.'}
             </Text>
           </View>
         </View>

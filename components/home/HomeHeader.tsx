@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -13,8 +13,9 @@ interface HomeHeaderProps {
   displayName: string;
   displayPhoto?: string | null;
   petsCount: number;
-  hasUpcomingAppointments: boolean;
+  hasUpcomingAppointments?: boolean;
   notificationCount?: number;
+  unreadMessageCount?: number;
   onScanPress?: () => void;
 }
 
@@ -22,9 +23,7 @@ export function HomeHeader({
   displayName,
   displayPhoto,
   petsCount,
-  hasUpcomingAppointments,
-  notificationCount = 0,
-  onScanPress,
+  unreadMessageCount = 0,
 }: HomeHeaderProps) {
   const router = useRouter();
   const firstName = getFirstName(displayName) || 'Resident';
@@ -60,30 +59,11 @@ export function HomeHeader({
         </Text>
       </View>
 
-      {/* 3. Right: Action Buttons (Scan + Notifications) */}
+      {/* 3. Right: Action Buttons (CVO Telemedicine Messenger) */}
       <View style={styles.rightActionsRow}>
-        {onScanPress ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Scan Pet Tag"
-            onPress={() => {
-              haptic.light();
-              onScanPress();
-            }}
-            style={({ pressed }) => [
-              styles.iconBtn,
-              shadows.sm,
-              pressed && styles.iconBtnPressed,
-            ]}
-            hitSlop={6}
-          >
-            <Ionicons name="scan-outline" size={19} color={colors.primaryDark} />
-          </Pressable>
-        ) : null}
-
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open CVO Telemedicine Messenger"
+          accessibilityLabel={`Open CVO Telemedicine Messenger${unreadMessageCount > 0 ? `, ${unreadMessageCount} new messages` : ''}`}
           onPress={() => {
             haptic.light();
             router.push('/messages' as never);
@@ -96,31 +76,12 @@ export function HomeHeader({
           hitSlop={6}
         >
           <MaterialCommunityIcons name="facebook-messenger" size={20} color="#111827" />
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="View Notifications & Service Transactions"
-          onPress={() => {
-            haptic.light();
-            router.push('/notifications' as never);
-          }}
-          style={({ pressed }) => [
-            styles.iconBtn,
-            shadows.sm,
-            pressed && styles.iconBtnPressed,
-          ]}
-          hitSlop={6}
-        >
-          <Ionicons name="notifications-outline" size={19} color={colors.textPrimary} />
-          {notificationCount > 0 ? (
+          {unreadMessageCount > 0 ? (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {notificationCount > 99 ? '99+' : notificationCount}
+                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
               </Text>
             </View>
-          ) : hasUpcomingAppointments ? (
-            <View style={styles.notifDot} />
           ) : null}
         </Pressable>
       </View>
@@ -178,15 +139,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     transform: [{ scale: 0.96 }],
   },
-  notifDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primaryDark,
-  },
   badge: {
     position: 'absolute',
     top: -4,
@@ -194,17 +146,17 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.error,
+    backgroundColor: '#EF4444',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
     borderWidth: 1.5,
-    borderColor: colors.surface,
+    borderColor: '#FFFFFF',
   },
   badgeText: {
     color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
     lineHeight: 12,
   },
 });

@@ -25,6 +25,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/expo';
 import * as ImagePicker from 'expo-image-picker';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@lib/queryClient';
 
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
@@ -245,6 +247,7 @@ export default function ChatConversationScreen() {
 
   const flatListRef = useRef<FlatList>(null);
   const textInputRef = useRef<any>(null);
+  const queryClient = useQueryClient();
 
   // Load chat and messages
   const loadChat = useCallback(async () => {
@@ -259,12 +262,18 @@ export default function ChatConversationScreen() {
       );
       setChat(activeChat);
       setMessages(msgList);
+
+      // Mark unread incoming messages as read in Supabase & invalidate TanStack unread query
+      await chatService.markMessagesAsRead(activeChat.id);
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.unreadMessagesCount(ownerId),
+      });
     } catch (err) {
       console.warn('Error loading chat:', err);
     } finally {
       setLoading(false);
     }
-  }, [ownerId, contactId]);
+  }, [ownerId, contactId, queryClient]);
 
   useEffect(() => {
     loadChat();
@@ -274,6 +283,14 @@ export default function ChatConversationScreen() {
   useEffect(() => {
     if (!chat?.id) return;
     const unsubscribe = chatService.subscribeToChat(chat.id, (newMsg) => {
+      // Mark as read in real-time if resident is actively inside this chat room
+      if (newMsg.sender_role !== 'Pet Owner') {
+        chatService.markMessagesAsRead(chat.id);
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadMessagesCount(ownerId),
+        });
+      }
+
       setMessages((prev) => {
         // If updating an existing message (e.g. edited, reacted, or unsent)
         const existingIdx = prev.findIndex((m) => m.id === newMsg.id);
@@ -306,8 +323,14 @@ export default function ChatConversationScreen() {
 
     return () => {
       unsubscribe();
+      if (chat?.id) {
+        chatService.markMessagesAsRead(chat.id);
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.unreadMessagesCount(ownerId),
+        });
+      }
     };
-  }, [chat?.id]);
+  }, [chat?.id, ownerId, queryClient]);
 
   // Android Keyboard height management & layout animation
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);

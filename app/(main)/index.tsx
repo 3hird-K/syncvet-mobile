@@ -7,10 +7,10 @@ import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useNotificationStore } from '@store/useNotificationStore';
 import { useResidentData } from '@hooks/useResidentData';
+import { useUnreadMessagesQuery } from '@hooks/queries';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { HomeScreenSkeleton } from '@components/ui/Skeleton';
-import { PetQrScannerModal } from '@components/ui/PetQrScannerModal';
 import {
   HomeHeader,
   HomePetsSection,
@@ -34,20 +34,14 @@ export default function HomeScreen() {
   } = useResidentData();
 
   const ownerId = clerkUser?.id || user?.id || '';
-  const [scannerVisible, setScannerVisible] = React.useState(false);
+  const { data: unreadMessageCount = 0 } = useUnreadMessagesQuery(ownerId);
   const loadReadIds = useNotificationStore((state) => state.loadReadIds);
-  const getUnreadCount = useNotificationStore((state) => state.getUnreadCount);
-  const readIds = useNotificationStore((state) => state.readIds);
 
   useEffect(() => {
     if (ownerId) {
       loadReadIds(ownerId);
     }
   }, [ownerId, loadReadIds]);
-
-  const unreadNotificationCount = useMemo(() => {
-    return getUnreadCount(transactions || []);
-  }, [getUnreadCount, transactions, readIds]);
 
   const displayName =
     clerkUser?.fullName ||
@@ -105,14 +99,12 @@ export default function HomeScreen() {
         onRefresh={handleRefresh}
         contentContainerStyle={styles.screenContent}
       >
-        {/* 1. Senior Executive Municipal Top Header with Scan Button */}
+        {/* 1. Senior Executive Municipal Top Header */}
         <HomeHeader
           displayName={displayName}
           displayPhoto={displayPhoto}
           petsCount={allPets.length}
-          hasUpcomingAppointments={upcomingAppointments.length > 0}
-          notificationCount={unreadNotificationCount}
-          onScanPress={() => setScannerVisible(true)}
+          unreadMessageCount={unreadMessageCount}
         />
 
         {/* 2. Official CVO Pet Registry Section (Facebook Stories style) */}
@@ -132,12 +124,6 @@ export default function HomeScreen() {
         {/* 5. Live Community Announcements Feed from Supabase */}
         <HomeAnnouncementsSection />
       </Screen>
-
-      {/* Pet Tag Scanner Camera Modal */}
-      <PetQrScannerModal
-        visible={scannerVisible}
-        onClose={() => setScannerVisible(false)}
-      />
     </AnimatedScreen>
   );
 }
