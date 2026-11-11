@@ -19,10 +19,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { colors, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 
@@ -47,8 +47,9 @@ type IoniconName = keyof typeof Ionicons.glyphMap;
 export interface TabRouteConfig {
   name: string;
   label: string;
-  inactiveIcon: IoniconName;
-  activeIcon: IoniconName;
+  inactiveIcon: string;
+  activeIcon: string;
+  iconFamily?: 'Ionicons' | 'MaterialCommunityIcons';
 }
 
 const TAB_CONFIGS: Record<string, TabRouteConfig> = {
@@ -57,18 +58,28 @@ const TAB_CONFIGS: Record<string, TabRouteConfig> = {
     label: 'Home',
     inactiveIcon: 'home-outline',
     activeIcon: 'home',
+    iconFamily: 'Ionicons',
+  },
+  messages: {
+    name: 'messages',
+    label: 'Messenger',
+    inactiveIcon: 'facebook-messenger',
+    activeIcon: 'facebook-messenger',
+    iconFamily: 'MaterialCommunityIcons',
   },
   services: {
-    name: 'services',
-    label: 'Services',
-    inactiveIcon: 'grid-outline',
-    activeIcon: 'grid',
+    name: 'messages',
+    label: 'Messenger',
+    inactiveIcon: 'facebook-messenger',
+    activeIcon: 'facebook-messenger',
+    iconFamily: 'MaterialCommunityIcons',
   },
   pets: {
     name: 'pets',
     label: 'Pets',
     inactiveIcon: 'paw-outline',
     activeIcon: 'paw',
+    iconFamily: 'Ionicons',
   },
   appointments: {
     name: 'appointments',
@@ -86,7 +97,8 @@ const TAB_CONFIGS: Record<string, TabRouteConfig> = {
 
 const TAB_ROOT_PATHS: Record<string, string> = {
   index: '/',
-  services: '/services',
+  messages: '/messages',
+  services: '/messages',
   pets: '/pets',
   appointments: '/appointments',
   profile: '/profile',
@@ -242,12 +254,20 @@ function TabItem({
         <Animated.View style={[styles.iconContainer, animatedIconWrapperStyle as any]}>
           {/* Active (White) Icon */}
           <Animated.View style={[styles.iconAbsolute, animatedActiveIconStyle as any]}>
-            <Ionicons name={config.activeIcon} size={22} color={colors.white} />
+            {config.iconFamily === 'MaterialCommunityIcons' ? (
+              <MaterialCommunityIcons name={config.activeIcon as any} size={23} color={colors.white} />
+            ) : (
+              <Ionicons name={config.activeIcon as any} size={22} color={colors.white} />
+            )}
           </Animated.View>
 
           {/* Inactive (Muted) Icon */}
           <Animated.View style={[styles.iconAbsolute, animatedInactiveIconStyle as any]}>
-            <Ionicons name={config.inactiveIcon} size={22} color={colors.textMuted} />
+            {config.iconFamily === 'MaterialCommunityIcons' ? (
+              <MaterialCommunityIcons name={config.inactiveIcon as any} size={23} color={colors.textMuted} />
+            ) : (
+              <Ionicons name={config.inactiveIcon as any} size={22} color={colors.textMuted} />
+            )}
           </Animated.View>
         </Animated.View>
 
@@ -280,6 +300,7 @@ export function MeltingBallTabBar(props: MeltingBallTabBarProps) {
     insets,
   } = props;
   const router = useRouter();
+  const pathname = usePathname();
   const { width: windowWidth } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
 
@@ -326,8 +347,13 @@ export function MeltingBallTabBar(props: MeltingBallTabBarProps) {
   const isExplicitlyHidden = tabBarStyle?.display === 'none';
 
   const currentChildName = getNestedRouteName(activeRoute);
-  // Full-screen wizards and sub-creation flows should not show the bottom dock
-  const isFullScreenFlow = currentChildName === 'add' || currentChildName === 'new';
+  // Full-screen wizards, sub-creation flows, and chat conversations should not show the bottom dock
+  const isChatConversation = pathname ? (pathname.startsWith('/messages/') && pathname !== '/messages') : false;
+  const isFullScreenFlow =
+    currentChildName === 'add' ||
+    currentChildName === 'new' ||
+    (activeRoute?.name === 'messages' && currentChildName !== 'index') ||
+    isChatConversation;
 
   // Synchronize badgeX on tab changes or screen resize
   useEffect(() => {

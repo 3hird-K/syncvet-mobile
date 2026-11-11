@@ -41,9 +41,9 @@ export default function MainLayout() {
         }}
       />
       <Tabs.Screen
-        name="services"
+        name="messages"
         options={{
-          title: 'Services',
+          title: 'Messenger',
         }}
       />
       <Tabs.Screen
@@ -62,6 +62,12 @@ export default function MainLayout() {
         name="profile"
         options={{
           title: 'Profile',
+        }}
+      />
+      <Tabs.Screen
+        name="services"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

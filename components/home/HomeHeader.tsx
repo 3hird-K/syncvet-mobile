@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
@@ -80,6 +80,23 @@ export function HomeHeader({
             <Ionicons name="scan-outline" size={19} color={colors.primaryDark} />
           </Pressable>
         ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open CVO Telemedicine Messenger"
+          onPress={() => {
+            haptic.light();
+            router.push('/messages' as never);
+          }}
+          style={({ pressed }) => [
+            styles.iconBtn,
+            shadows.sm,
+            pressed && styles.iconBtnPressed,
+          ]}
+          hitSlop={6}
+        >
+          <MaterialCommunityIcons name="facebook-messenger" size={20} color="#111827" />
+        </Pressable>
 
         <Pressable
           accessibilityRole="button"
