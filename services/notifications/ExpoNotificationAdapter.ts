@@ -127,12 +127,14 @@ export const ExpoNotificationAdapter = {
   }): Promise<string> {
     if (nativeNotifications && !isExpoGoAndroid) {
       try {
+        const { channelId, ...nativeContent } = request.content;
         return await nativeNotifications.scheduleNotificationAsync({
           identifier: request.identifier,
-          content: request.content,
+          content: nativeContent,
           trigger: {
             type: nativeNotifications.SchedulableTriggerInputTypes.DATE,
             date: request.trigger.date,
+            ...(Platform.OS === 'android' && channelId ? { channelId } : {}),
           },
         });
       } catch (e) {

@@ -4,6 +4,7 @@ import {
   Alert,
   BackHandler,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -206,14 +207,22 @@ export function OutreachCheckInScannerModal({
                 <Button variant="secondary" title="Cancel" onPress={onClose} style={{ flex: 1 }} />
                 <Button
                   variant="primary"
-                  title="Enable Camera"
-                  onPress={requestPermission}
+                  title={
+                    permission && !permission.canAskAgain ? 'Open Settings' : 'Enable Camera'
+                  }
+                  onPress={
+                    permission && !permission.canAskAgain
+                      ? () => Linking.openSettings()
+                      : requestPermission
+                  }
                   style={{ flex: 1, backgroundColor: '#0D9488' }}
                 />
               </View>
-              <Pressable onPress={handleSimulateAdminQr} style={styles.simulateLink}>
-                <Text style={styles.simulateLinkText}>⚡ Test / Simulate Admin QR (No Camera)</Text>
-              </Pressable>
+              {__DEV__ && (
+                <Pressable onPress={handleSimulateAdminQr} style={styles.simulateLink}>
+                  <Text style={styles.simulateLinkText}>⚡ Test / Simulate Admin QR (No Camera)</Text>
+                </Pressable>
+              )}
             </View>
           </SafeAreaView>
         ) : (
@@ -384,24 +393,26 @@ export function OutreachCheckInScannerModal({
                 </View>
               )}
 
-              {/* Bottom Test / Simulator Button */}
-              <View style={styles.bottomActions}>
-                <Pressable
-                  onPress={handleSimulateAdminQr}
-                  disabled={isProcessing}
-                  style={({ pressed }) => [
-                    styles.simulateBtn,
-                    pressed && { opacity: 0.8 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Simulate Admin QR"
-                >
-                  <MaterialCommunityIcons name="qrcode-scan" size={16} color="#FFFFFF" />
-                  <Text style={styles.simulateBtnText}>
-                    ⚡ Test Scan Admin QR (Simulate On-Site Record)
-                  </Text>
-                </Pressable>
-              </View>
+              {/* Bottom Test / Simulator Button (Development only) */}
+              {__DEV__ && (
+                <View style={styles.bottomActions}>
+                  <Pressable
+                    onPress={handleSimulateAdminQr}
+                    disabled={isProcessing}
+                    style={({ pressed }) => [
+                      styles.simulateBtn,
+                      pressed && { opacity: 0.8 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Simulate Admin QR"
+                  >
+                    <MaterialCommunityIcons name="qrcode-scan" size={16} color="#FFFFFF" />
+                    <Text style={styles.simulateBtnText}>
+                      ⚡ Test Scan Admin QR (Simulate On-Site Record)
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
             </SafeAreaView>
           </View>
         )}

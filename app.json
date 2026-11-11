@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.syncvet.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0A6E64",
         "foregroundImage": "./assets/android-icon-foreground.png"
@@ -21,11 +22,6 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0F7B6E"
     },
     "plugins": [
       "expo-router",
@@ -47,7 +43,25 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow SyncVet to access your camera to scan pet tag QR codes."
+          "cameraPermission": "Allow SyncVet to access your camera to scan pet tags, clinic queue, and barangay outreach QR codes.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SyncVet to access your photos to attach pet consultation photos and update your profile picture.",
+          "cameraPermission": "Allow SyncVet to take photos of your pet during consultations.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0F7B6E",
+          "defaultChannel": "appointments",
+          "enableRemoteNotifications": false
         }
       ],
       "expo-status-bar"

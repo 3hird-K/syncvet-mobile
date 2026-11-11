@@ -7,8 +7,14 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ufkhazeuphhirffopeim.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_qda13c10uDZglpSEH5bFtw_RZYc7Jd1",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_d29ya2FibGUtY3Jhd2RhZC0yMy5jbGVyay5hY2NvdW50cy5kZXYk"
       }
     },
     "preview": {
@@ -17,16 +23,23 @@
         "buildType": "apk"
       },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ufkhazeuphhirffopeim.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_qda13c10uDZglpSEH5bFtw_RZYc7Jd1",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_d29ya2FibGUtY3Jhd2RhZC0yMy5jbGVyay5hY2NvdW50cy5kZXYk"
       }
     },
     "production": {
       "autoIncrement": true,
+      "distribution": "internal",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk"
       },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ufkhazeuphhirffopeim.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_qda13c10uDZglpSEH5bFtw_RZYc7Jd1",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_d29ya2FibGUtY3Jhd2RhZC0yMy5jbGVyay5hY2NvdW50cy5kZXYk"
       }
     }
   },

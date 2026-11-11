@@ -158,9 +158,17 @@ export function PetQrScannerModal({ visible, onClose }: PetQrScannerModalProps) 
 
               <View style={styles.permissionActions}>
                 <Button
-                  title="Allow Camera Access"
+                  title={
+                    permission && !permission.canAskAgain
+                      ? 'Open Camera Settings'
+                      : 'Allow Camera Access'
+                  }
                   variant="primary"
-                  onPress={requestPermission}
+                  onPress={
+                    permission && !permission.canAskAgain
+                      ? () => Linking.openSettings()
+                      : requestPermission
+                  }
                   fullWidth
                 />
                 <Button

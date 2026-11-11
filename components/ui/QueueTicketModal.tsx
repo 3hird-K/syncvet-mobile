@@ -171,40 +171,42 @@ export function QueueTicketModal({
               <Text style={styles.doneBtnText}>Keep In Queue</Text>
             </Pressable>
 
-            {/* Test Simulation Controls */}
-            <View style={styles.testBtnRow}>
-              {onSimulateCall && (
-                <Pressable
-                  onPress={() => {
-                    haptic.medium();
-                    onClose();
-                    onSimulateCall();
-                  }}
-                  style={styles.testCallBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Test Call and Ring"
-                >
-                  <MaterialCommunityIcons name="bell-ring" size={15} color="#EA580C" />
-                  <Text style={styles.testCallBtnText}>Test Call Pet (Ring)</Text>
-                </Pressable>
-              )}
+            {/* Test Simulation Controls (Development only) */}
+            {__DEV__ && (onSimulateCall || onCompleteVisit) && (
+              <View style={styles.testBtnRow}>
+                {onSimulateCall && (
+                  <Pressable
+                    onPress={() => {
+                      haptic.medium();
+                      onClose();
+                      onSimulateCall();
+                    }}
+                    style={styles.testCallBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Test Call and Ring"
+                  >
+                    <MaterialCommunityIcons name="bell-ring" size={15} color="#EA580C" />
+                    <Text style={styles.testCallBtnText}>Test Call Pet (Ring)</Text>
+                  </Pressable>
+                )}
 
-              {onCompleteVisit && (
-                <Pressable
-                  onPress={() => {
-                    haptic.success();
-                    onClose();
-                    onCompleteVisit();
-                  }}
-                  style={styles.testCompleteBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Mark Done and Move to History"
-                >
-                  <Ionicons name="checkmark-done" size={15} color="#0D9488" />
-                  <Text style={styles.testCompleteBtnText}>Mark Done (Put in History)</Text>
-                </Pressable>
-              )}
-            </View>
+                {onCompleteVisit && (
+                  <Pressable
+                    onPress={() => {
+                      haptic.success();
+                      onClose();
+                      onCompleteVisit();
+                    }}
+                    style={styles.testCompleteBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Mark Done and Move to History"
+                  >
+                    <Ionicons name="checkmark-done" size={15} color="#0D9488" />
+                    <Text style={styles.testCompleteBtnText}>Mark Done (Put in History)</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
           </ScrollView>
         </View>
       </View>

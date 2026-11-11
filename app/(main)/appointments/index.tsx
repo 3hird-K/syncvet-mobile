@@ -493,11 +493,15 @@ export default function AppointmentsScreen() {
               ticket: null,
             })
           }
-          onSimulateCall={() => {
-            if (ticketModalData.appointment) {
-              handleSimulateCall(ticketModalData.appointment, ticketModalData.ticket);
-            }
-          }}
+          onSimulateCall={
+            __DEV__
+              ? () => {
+                  if (ticketModalData.appointment) {
+                    handleSimulateCall(ticketModalData.appointment, ticketModalData.ticket);
+                  }
+                }
+              : undefined
+          }
           onCompleteVisit={() => {
             if (ticketModalData.appointment) {
               handleCompleteVisit(ticketModalData.appointment, ticketModalData.ticket);

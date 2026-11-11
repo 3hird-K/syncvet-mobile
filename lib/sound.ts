@@ -55,21 +55,25 @@ export function playWebChime() {
 }
 
 /**
- * Triggers an immediate native notification with audible alert sound.
+ * Triggers an immediate native notification with audible alert sound on the appointments channel.
  */
 async function triggerAudioNotification(petName: string, ticketNumber: string, room: string) {
   try {
+    if (Platform.OS === 'web') return;
+    const perms = await Notifications.getPermissionsAsync();
+    if (perms.status !== 'granted') return;
+
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `🔔 NOW CALLING: ${petName}!`,
+        title: `NOW CALLING: ${petName}!`,
         body: `Ticket ${ticketNumber} is now being called! Please proceed to ${room || 'Consultation Desk 1'}.`,
-        sound: true,
+        sound: 'default',
         priority: Notifications.AndroidNotificationPriority.MAX,
       },
-      trigger: null,
+      trigger: Platform.OS === 'android' ? { channelId: 'appointments' } : null,
     });
   } catch {
-    // Ignore notification errors in dev
+    // Ignore notification errors in restricted runtimes
   }
 }
 
