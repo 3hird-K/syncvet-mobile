@@ -5,6 +5,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -16,7 +17,7 @@ import {
   View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Svg, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useUser } from '@clerk/expo';
 import { useRouter } from 'expo-router';
@@ -415,6 +416,23 @@ export function PetPassportView({
     }
   };
 
+  // Open live verification web page
+  const handleOpenWebsite = async () => {
+    haptic.light();
+    try {
+      const supported = await Linking.canOpenURL(qrString);
+      if (supported) {
+        await Linking.openURL(qrString);
+      } else {
+        toast.error('Unable to open URL', { description: qrString });
+      }
+    } catch (err: any) {
+      toast.error('Could not open web registry', {
+        description: err?.message || 'Please check your internet connection.',
+      });
+    }
+  };
+
   // 5. Submit Clinical Care Request
   const handleSubmitClinical = async () => {
     if (selectedServices.length === 0) {
@@ -563,7 +581,7 @@ export function PetPassportView({
           isCard
             ? styles.cardHeaderRadius
             : {
-              paddingTop: Math.max(insets.top, 16) + 6,
+              paddingTop: Math.max(insets.top, 16) + 16,
               overflow: 'visible',
             },
         ]}
@@ -633,9 +651,9 @@ export function PetPassportView({
             accessibilityRole="button"
             accessibilityLabel="Clinical Care"
           >
-            <Ionicons
-              name="medical-outline"
-              size={15}
+            <MaterialCommunityIcons
+              name="stethoscope"
+              size={16}
               color={activeTab === 'clinical' ? '#FFFFFF' : 'rgba(255,255,255,0.85)'}
             />
           </Pressable>
@@ -677,22 +695,7 @@ export function PetPassportView({
             </Pressable>
           )}
 
-          {/* 5. Save / Download Icon */}
-          <Pressable
-            onPress={handleDownloadQr}
-            style={styles.toolIconBtn}
-            hitSlop={5}
-            accessibilityRole="button"
-            accessibilityLabel="Save / Download Tag"
-          >
-            {downloadingTag ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="save-outline" size={15} color="rgba(255,255,255,0.85)" />
-            )}
-          </Pressable>
-
-          {/* 6. Delete Pet Button */}
+          {/* 5. Delete Pet Button */}
           <Pressable
             onPress={handleDeletePet}
             style={styles.toolIconBtn}
@@ -707,7 +710,7 @@ export function PetPassportView({
             )}
           </Pressable>
 
-          {/* 7. Close Modal Button */}
+          {/* 6. Close Modal Button */}
           <Pressable
             onPress={handleClosePress}
             style={[styles.toolIconBtn, styles.closeToolBtn]}
@@ -980,6 +983,17 @@ export function PetPassportView({
             <View style={styles.bannerActionsRow}>
               <View style={styles.actionButtonsLeft}>
                 <Pressable
+                  onPress={handleOpenWebsite}
+                  style={[styles.iconOutlineBtn, styles.webActionBtn]}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Pet Verification on Website"
+                >
+                  <Ionicons name="globe-outline" size={15} color="#0D9488" />
+                  <Text style={styles.webActionBtnText}>Open Web Registry</Text>
+                </Pressable>
+
+                <Pressable
                   onPress={handleDownloadQr}
                   style={styles.iconOutlineBtn}
                   hitSlop={6}
@@ -1012,7 +1026,15 @@ export function PetPassportView({
             </View>
 
             {/* QR Code Container Card */}
-            <View style={styles.qrContainerCard}>
+            <Pressable
+              onPress={handleOpenWebsite}
+              style={({ pressed }) => [
+                styles.qrContainerCard,
+                pressed && { opacity: 0.95 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Tap to open official pet verification in browser"
+            >
               <View style={styles.qrWrapper}>
                 <QRCode
                   value={qrString}
@@ -1033,10 +1055,16 @@ export function PetPassportView({
               <Text style={styles.qrMetaInfo}>
                 Category: {isDog ? 'Canine' : 'Feline'} • {pet.breed || 'Companion'}
               </Text>
+
+              <View style={styles.webLinkRow}>
+                <Ionicons name="open-outline" size={13} color="#0D9488" />
+                <Text style={styles.webLinkText}>Tap QR to view on veterinaryoffice-cdo.vercel.app</Text>
+              </View>
+
               <Text style={styles.qrOfficialNotice}>
                 Official Cagayan de Oro City Veterinary Office Collar Record
               </Text>
-            </View>
+            </Pressable>
           </View>
         )}
 
@@ -1046,7 +1074,7 @@ export function PetPassportView({
             {/* Banner */}
             <View style={styles.tabBannerHeader}>
               <View style={[styles.bannerIconSquare, { backgroundColor: '#CCFBF1' }]}>
-                <Ionicons name="medical-outline" size={18} color="#0D9488" />
+                <MaterialCommunityIcons name="stethoscope" size={20} color="#0D9488" />
               </View>
               <View style={styles.bannerTextCol}>
                 <Text style={styles.bannerTitle} numberOfLines={1}>
@@ -1945,12 +1973,12 @@ const styles = StyleSheet.create({
   cardHeaderRadius: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 14,
+    paddingTop: 22,
   },
 
   /* Gradient Header */
   gradientHeader: {
-    paddingBottom: 16,
+    paddingBottom: 26,
     paddingHorizontal: 16,
     position: 'relative',
     overflow: 'hidden',
@@ -1960,7 +1988,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
+    marginBottom: 14,
     paddingRight: 10,
   },
   toolIconBtn: {
@@ -2216,6 +2244,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  webActionBtn: {
+    width: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 5,
+    borderColor: '#CCFBF1',
+    backgroundColor: '#F0FDFA',
+  },
+  webActionBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0D9488',
+  },
   backToOverviewBtn: {
     paddingVertical: 8,
     paddingHorizontal: 8,
@@ -2281,6 +2323,22 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontWeight: '600',
     marginTop: 2,
+  },
+  webLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F0FDFA',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+  },
+  webLinkText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0D9488',
   },
   qrOfficialNotice: {
     fontSize: 10.5,

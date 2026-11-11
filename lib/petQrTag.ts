@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import type { Pet } from '@services/data';
+import { getAvatarPath } from './petAvatars';
 
 export interface PetTagOwner {
   id?: string;
@@ -42,6 +43,23 @@ export const CVO_OFFICE_NAME = 'Cagayan de Oro City Veterinary Office';
 export const PET_TAG_DESCRIPTION =
   'An official digital collar tag for lost pet identification and owner contact.';
 
+export const VERCEL_VERIFY_BASE_URL = 'https://veterinaryoffice-cdo.vercel.app/verify/pet';
+
+/**
+ * Generates or retrieves the 9-digit municipal pet microchip tag number (e.g. "pet-493355620").
+ */
+export function getPetTagCode(pet: Pet): string {
+  if (pet.microchipNumber) return pet.microchipNumber;
+  let hash = 0;
+  const str = pet.id || pet.name || 'syncvet';
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const positive = (Math.abs(hash) % 900000000) + 100000000;
+  return `pet-${positive}`;
+}
+
 /**
  * Generates an official tag ID string from pet ID.
  */
@@ -51,57 +69,107 @@ export function generateTagId(petId: string): string {
 }
 
 /**
- * Builds the structured JSON string to encode inside the QR code.
+ * Builds the official live verification website URL for the companion animal.
+ * Matches: https://veterinaryoffice-cdo.vercel.app/verify/pet/:petId?...
+ */
+export function buildPetVerificationUrl(
+  pet: Pet,
+  owner: { id?: string; fullName?: string; mobileNumber?: string; address?: string },
+): string {
+  const speciesFormatted = pet.species?.toLowerCase() === 'cat' ? 'Cat' : 'Dog';
+  const tagCode = getPetTagCode(pet);
+  const avatarRelPath = pet.photoUrl?.startsWith('/assets/')
+    ? pet.photoUrl
+    : (pet.avatarId ? getAvatarPath(pet.avatarId, pet.species) : getAvatarPath(undefined, pet.species));
+
+  const params = new URLSearchParams({
+    name: pet.name || '',
+    species: speciesFormatted,
+    breed: pet.breed || '',
+    tag: tagCode,
+    owner: owner.fullName || 'SyncVet Resident',
+    contact: owner.mobileNumber || '',
+    bgy: owner.address || 'Cagayan de Oro City',
+    vax: pet.isVaccinated ? '1' : '0',
+    lastVax: pet.lastVaccinationDate || '',
+    nextVax: pet.nextVaccinationDate || '',
+    photo: avatarRelPath,
+  });
+
+  return `${VERCEL_VERIFY_BASE_URL}/${pet.id}?${params.toString()}`;
+}
+
+/**
+ * Builds the verification string to encode inside the QR code.
+ * Encodes the live website URL so any camera scanner opens the official verification page directly.
  */
 export function buildPetTagString(
   pet: Pet,
   owner: { id?: string; fullName?: string; mobileNumber?: string; address?: string },
 ): string {
-  const tagId = generateTagId(pet.id);
-  const payload: PetTagPayload = {
-    protocol: 'syncvet-tag-v1',
-    tagId,
-    description: PET_TAG_DESCRIPTION,
-    issuedAt: new Date().toISOString().split('T')[0],
-    pet: {
-      id: pet.id,
-      name: pet.name,
-      species: pet.species,
-      breed: pet.breed || 'Unknown',
-      gender: pet.gender || 'unknown',
-      birthYear: pet.birthYear,
-      isVaccinated: Boolean(pet.isVaccinated),
-      isSpayedNeutered: Boolean(pet.isSpayedNeutered),
-      notes: pet.notes || '',
-      avatarId: pet.avatarId,
-      photoUrl: pet.photoUrl,
-    },
-    owner: {
-      id: owner.id,
-      name: owner.fullName || 'SyncVet Resident',
-      phone: owner.mobileNumber || 'N/A',
-      address: owner.address || 'Cagayan de Oro City',
-    },
-    cvo: {
-      office: CVO_OFFICE_NAME,
-      hotline: CVO_HOTLINE,
-      city: 'Cagayan de Oro City',
-    },
-  };
-
-  return JSON.stringify(payload);
+  return buildPetVerificationUrl(pet, owner);
 }
 
 /**
  * Parses a scanned QR string into a structured PetTagPayload,
- * with fallbacks for legacy/plain text formats.
+ * supporting the official verification URL, JSON, and legacy formats.
  */
 export function parsePetTagPayload(rawText: string): PetTagPayload | null {
   if (!rawText || typeof rawText !== 'string') return null;
 
   const trimmed = rawText.trim();
 
-  // 1. Try parsing JSON
+  // 1. Try parsing official Verification URL (e.g. https://veterinaryoffice-cdo.vercel.app/verify/pet/:id?...)
+  if (trimmed.includes('/verify/pet/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const qIdx = trimmed.indexOf('?');
+      const urlPath = qIdx !== -1 ? trimmed.slice(0, qIdx) : trimmed;
+      const queryStr = qIdx !== -1 ? trimmed.slice(qIdx + 1) : '';
+
+      const pathSegments = urlPath.split('/').filter(Boolean);
+      const petIdIdx = pathSegments.indexOf('pet');
+      const petId = petIdIdx !== -1 && pathSegments[petIdIdx + 1] ? pathSegments[petIdIdx + 1] : 'UNKNOWN';
+
+      const searchParams = new URLSearchParams(queryStr);
+      const name = searchParams.get('name') || 'Unknown Pet';
+      const species = (searchParams.get('species')?.toLowerCase() || 'dog') as 'dog' | 'cat';
+      const breed = searchParams.get('breed') || undefined;
+      const tag = searchParams.get('tag') || `CVO-TAG-${petId.slice(0, 8).toUpperCase()}`;
+      const ownerName = searchParams.get('owner') || 'SyncVet Resident';
+      const contact = searchParams.get('contact') || '';
+      const bgy = searchParams.get('bgy') || 'Cagayan de Oro City';
+      const vax = searchParams.get('vax') === '1';
+      const photo = searchParams.get('photo') || undefined;
+
+      return {
+        protocol: 'syncvet-tag-v1',
+        tagId: tag,
+        issuedAt: new Date().toISOString().split('T')[0],
+        pet: {
+          id: petId,
+          name,
+          species,
+          breed,
+          isVaccinated: vax,
+          photoUrl: photo,
+        },
+        owner: {
+          name: ownerName,
+          phone: contact,
+          address: bgy,
+        },
+        cvo: {
+          office: CVO_OFFICE_NAME,
+          hotline: CVO_HOTLINE,
+          city: 'Cagayan de Oro City',
+        },
+      };
+    } catch {
+      // Fall through to JSON
+    }
+  }
+
+  // 2. Try parsing JSON
   try {
     const parsed = JSON.parse(trimmed);
     if (parsed && (parsed.protocol === 'syncvet-tag-v1' || parsed.pet)) {

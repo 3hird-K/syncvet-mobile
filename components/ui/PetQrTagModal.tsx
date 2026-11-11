@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   BackHandler,
   Dimensions,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -78,6 +79,22 @@ export function PetQrTagModal({
       toast.error('Could not save tag', { description: err?.message || 'Try again.' });
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleOpenWebsite = async () => {
+    haptic.light();
+    try {
+      const supported = await Linking.canOpenURL(qrString);
+      if (supported) {
+        await Linking.openURL(qrString);
+      } else {
+        toast.error('Unable to open URL', { description: qrString });
+      }
+    } catch (err: any) {
+      toast.error('Could not open web verification', {
+        description: err?.message || 'Please check your internet connection.',
+      });
     }
   };
 
@@ -171,7 +188,12 @@ export function PetQrTagModal({
             </View>
 
             {/* QR Code Canvas */}
-            <View style={styles.qrCanvasWrap}>
+            <Pressable
+              onPress={handleOpenWebsite}
+              style={styles.qrCanvasWrap}
+              accessibilityRole="button"
+              accessibilityLabel="Tap to open pet verification in browser"
+            >
               <QRCode
                 value={qrString}
                 size={185}
@@ -180,9 +202,9 @@ export function PetQrTagModal({
                 getRef={(c) => (qrRef.current = c)}
               />
               <Text style={styles.scanHint}>
-                Scan to identify pet and contact owner
+                Scan to open verification • Tap to view website
               </Text>
-            </View>
+            </Pressable>
 
             {/* Thin Divider */}
             <View style={styles.divider} />

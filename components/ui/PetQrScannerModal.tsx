@@ -34,6 +34,7 @@ export function PetQrScannerModal({ visible, onClose }: PetQrScannerModalProps) 
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const [scannedRecord, setScannedRecord] = useState<PetTagPayload | null>(null);
+  const [scannedRawUrl, setScannedRawUrl] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const isScanningRef = useRef(true);
 
@@ -41,6 +42,7 @@ export function PetQrScannerModal({ visible, onClose }: PetQrScannerModalProps) 
   useEffect(() => {
     if (visible) {
       setScannedRecord(null);
+      setScannedRawUrl(null);
       setScanError(null);
       setTorch(false);
       isScanningRef.current = true;
@@ -68,6 +70,11 @@ export function PetQrScannerModal({ visible, onClose }: PetQrScannerModalProps) 
       if (parsed) {
         haptic.success();
         setScannedRecord(parsed);
+        if (data.startsWith('http://') || data.startsWith('https://')) {
+          setScannedRawUrl(data);
+        } else {
+          setScannedRawUrl(null);
+        }
         setScanError(null);
       } else {
         haptic.warning();
@@ -80,6 +87,7 @@ export function PetQrScannerModal({ visible, onClose }: PetQrScannerModalProps) 
   const handleScanAgain = () => {
     haptic.light();
     setScannedRecord(null);
+    setScannedRawUrl(null);
     setScanError(null);
     isScanningRef.current = true;
   };
@@ -348,6 +356,25 @@ export function PetQrScannerModal({ visible, onClose }: PetQrScannerModalProps) 
                         Call CVO
                       </Text>
                     </Pressable>
+
+                    {scannedRawUrl ? (
+                      <Pressable
+                        style={[
+                          styles.contactBtn,
+                          {
+                            backgroundColor: '#F0FDFA',
+                            borderColor: '#CCFBF1',
+                            borderWidth: 1,
+                          },
+                        ]}
+                        onPress={() => Linking.openURL(scannedRawUrl)}
+                      >
+                        <Ionicons name="globe-outline" size={15} color="#0D9488" />
+                        <Text style={[styles.contactBtnText, { color: '#0D9488' }]}>
+                          Open Web Verification
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
 
                   {/* Scan Another Button */}
