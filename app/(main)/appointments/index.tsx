@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   NativeScrollEvent,
@@ -37,7 +37,11 @@ import { AppointmentCard } from '@components/ui/AppointmentCard';
 import { AppointmentDetailModal } from '@components/ui/AppointmentDetailModal';
 import { ClinicQueueScannerModal } from '@components/ui/ClinicQueueScannerModal';
 import { QueueTicketModal } from '@components/ui/QueueTicketModal';
+import { PetCalledRingModal } from '@components/ui/PetCalledRingModal';
 import { AppointmentsScreenSkeleton } from '@components/ui/Skeleton';
+import { toast } from '@components/ui/Sonner';
+import { supabase } from '@lib/supabase';
+import { callQueueAppointment, completeQueueAppointment } from '@services/queue/queueService';
 import type { Appointment, QueueTicketInfo } from '@services/data';
 
 const TAB_PAGES: AppointmentTab[] = ['upcoming', 'past'];
@@ -93,7 +97,15 @@ export default function AppointmentsScreen() {
     appointment: Appointment | null;
     ticket: QueueTicketInfo | null;
   }>({ visible: false, appointment: null, ticket: null });
+  const [calledModalData, setCalledModalData] = useState<{
+    visible: boolean;
+    appointment: Appointment | null;
+    ticket: QueueTicketInfo | null;
+  }>({ visible: false, appointment: null, ticket: null });
   const [refreshing, setRefreshing] = useState(false);
+
+  const ownerId = clerkUser?.id || '';
+  const updateAppointmentStatus = useDataStore((state) => state.updateAppointmentStatus);
 
   const handleRefresh = useCallback(async () => {
     haptic.light();
@@ -106,6 +118,123 @@ export default function AppointmentsScreen() {
       setRefreshing(false);
     }
   }, [syncNow]);
+
+  const handleCompleteVisit = useCallback(
+    async (appointment: Appointment, ticket?: QueueTicketInfo | null) => {
+      haptic.success();
+      try {
+        await completeQueueAppointment(
+          appointment.id,
+          ticket?.ticketNumber || appointment.queueTicket?.ticketNumber,
+        );
+        await updateAppointmentStatus(ownerId, appointment.id, 'completed');
+        setCalledModalData({ visible: false, appointment: null, ticket: null });
+        setTicketModalData({ visible: false, appointment: null, ticket: null });
+        toast.success('Consultation Completed', {
+          description: `${appointment.petName}'s visit has been placed in History.`,
+        });
+        // Switch tab to History
+        setActiveTab('past');
+        listRef.current?.scrollToIndex({ index: 1, animated: true });
+      } catch (err: any) {
+        toast.error('Could not complete visit', { description: err?.message });
+      }
+    },
+    [ownerId, updateAppointmentStatus],
+  );
+
+  const handleSimulateCall = useCallback(
+    async (appointment: Appointment, ticket?: QueueTicketInfo | null) => {
+      haptic.medium();
+      const ticketInfo = ticket || appointment.queueTicket || {
+        id: `ticket_${appointment.id}`,
+        ticketNumber: 'Q-001',
+        queueSequence: 1,
+        status: 'called',
+        consultationRoom: 'Consultation Desk 1',
+        servingVet: 'Dr. Helen Ann P. Tacandong, DVM',
+      };
+
+      await callQueueAppointment(appointment.id, ticketInfo.ticketNumber);
+      await updateAppointmentStatus(ownerId, appointment.id, 'called', ticketInfo);
+
+      setCalledModalData({
+        visible: true,
+        appointment: { ...appointment, status: 'called', queueTicket: ticketInfo },
+        ticket: ticketInfo,
+      });
+    },
+    [ownerId, updateAppointmentStatus],
+  );
+
+  // Supabase Realtime Listener on queue_tickets and appointments
+  useEffect(() => {
+    if (!ownerId) return;
+
+    const channelName = `realtime-queue-${ownerId}-${Math.random().toString(36).slice(2, 7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'queue_tickets',
+        },
+        async (payload: any) => {
+          const row = payload.new;
+          if (!row) return;
+
+          const matchedAppt = storeAppointments?.find(
+            (a) => a.id === row.appointment_id || a.petName === row.pet_name,
+          );
+          if (!matchedAppt) return;
+
+          if (row.status === 'called' || row.status === 'serving') {
+            const ticketInfo: QueueTicketInfo = {
+              id: row.id,
+              ticketNumber: row.ticket_number,
+              queueSequence: row.queue_sequence,
+              status: row.status,
+              consultationRoom: row.consultation_room || 'Consultation Desk 1',
+              servingVet: row.serving_vet || 'Dr. Helen Ann P. Tacandong, DVM',
+            };
+            await updateAppointmentStatus(ownerId, matchedAppt.id, 'called', ticketInfo);
+            setCalledModalData({
+              visible: true,
+              appointment: { ...matchedAppt, status: 'called', queueTicket: ticketInfo },
+              ticket: ticketInfo,
+            });
+          } else if (row.status === 'completed') {
+            await updateAppointmentStatus(ownerId, matchedAppt.id, 'completed');
+            setCalledModalData({ visible: false, appointment: null, ticket: null });
+            toast.success('Visit Completed', {
+              description: `${matchedAppt.petName}'s visit was completed and placed in History.`,
+            });
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'appointments',
+        },
+        async (payload: any) => {
+          const row = payload.new;
+          if (!row) return;
+          if (row.status === 'completed' && row.owner_id === ownerId) {
+            await updateAppointmentStatus(ownerId, row.id, 'completed');
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [ownerId, storeAppointments, updateAppointmentStatus]);
 
   const listRef = useRef<FlatList<AppointmentTab>>(null);
   const scrollX = useSharedValue(0);
@@ -245,27 +374,9 @@ export default function AppointmentsScreen() {
 
                 <Text style={styles.emptySub}>
                   {isUpcoming
-                    ? 'Schedule a veterinary checkup or vaccine visit for your pet.'
+                    ? 'Your scheduled clinic visits and queuing tickets will appear here.'
                     : 'Completed or cancelled visits will appear here.'}
                 </Text>
-
-                {isUpcoming && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Schedule a visit"
-                    onPress={() => {
-                      haptic.light();
-                      router.push('/appointments/new' as never);
-                    }}
-                    style={({ pressed }) => [
-                      styles.scheduleBtn,
-                      pressed && styles.scheduleBtnPressed,
-                    ]}
-                  >
-                    <Ionicons name="calendar-outline" size={15} color={colors.white} />
-                    <Text style={styles.scheduleBtnText}>Schedule a Visit</Text>
-                  </Pressable>
-                )}
               </View>
             ) : (
               <View style={styles.cardList}>
@@ -300,7 +411,7 @@ export default function AppointmentsScreen() {
     [upcoming, past, scrollX, width, router, refreshing, handleRefresh],
   );
 
-  if (loading && !loaded && userPets.length === 0) {
+  if (loading && !loaded && upcoming.length === 0 && past.length === 0) {
     return (
       <AnimatedScreen animation="zoom">
         <AppointmentsScreenSkeleton />
@@ -311,7 +422,7 @@ export default function AppointmentsScreen() {
   return (
     <AnimatedScreen animation="zoom">
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* 1. Header - Title on Left & "+ Book Visit" Pill on Right */}
+        {/* 1. Header - Clean Full-Width Title matching Home/Messages/Profile */}
         <View style={styles.topHeader}>
           <View style={styles.titleCol}>
             <Text style={styles.heroTitle}>Appointments</Text>
@@ -319,23 +430,6 @@ export default function AppointmentsScreen() {
               Official clinic visit reservations & veterinary schedule
             </Text>
           </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Book new visit"
-            onPress={() => {
-              haptic.light();
-              router.push('/appointments/new' as never);
-            }}
-            hitSlop={6}
-            style={({ pressed }) => [
-              styles.bookHeaderBtn,
-              pressed && styles.bookHeaderBtnPressed,
-            ]}
-          >
-            <Ionicons name="add" size={16} color={colors.white} />
-            <Text style={styles.bookHeaderBtnText}>Book Visit</Text>
-          </Pressable>
         </View>
 
         {/* 2. Dual-Pill Capsule Switch with Smooth Physics */}
@@ -399,6 +493,35 @@ export default function AppointmentsScreen() {
               ticket: null,
             })
           }
+          onSimulateCall={() => {
+            if (ticketModalData.appointment) {
+              handleSimulateCall(ticketModalData.appointment, ticketModalData.ticket);
+            }
+          }}
+          onCompleteVisit={() => {
+            if (ticketModalData.appointment) {
+              handleCompleteVisit(ticketModalData.appointment, ticketModalData.ticket);
+            }
+          }}
+        />
+
+        {/* Ringing Calling Dialog when pet is called */}
+        <PetCalledRingModal
+          visible={calledModalData.visible}
+          appointment={calledModalData.appointment}
+          ticket={calledModalData.ticket}
+          onAcknowledge={() =>
+            setCalledModalData({
+              visible: false,
+              appointment: null,
+              ticket: null,
+            })
+          }
+          onCompleteVisit={() => {
+            if (calledModalData.appointment) {
+              handleCompleteVisit(calledModalData.appointment, calledModalData.ticket);
+            }
+          }}
         />
       </SafeAreaView>
     </AnimatedScreen>
@@ -408,58 +531,32 @@ export default function AppointmentsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#FFFFFF',
   },
   topHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    marginBottom: spacing.md,
-    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    marginBottom: 14,
   },
   titleCol: {
-    flex: 1,
-    gap: 2,
+    gap: 3,
   },
   heroTitle: {
-    ...typography.heading2,
-    color: colors.textPrimary,
-    fontSize: 22,
-    fontFamily: typography.font.bold,
-    letterSpacing: -0.4,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.6,
   },
   heroSubtitle: {
-    ...typography.small,
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500',
-    lineHeight: 16,
-  },
-  bookHeaderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primaryDark,
-    paddingHorizontal: 12,
-    paddingVertical: 7.5,
-    borderRadius: radius.pill,
-    ...shadows.sm,
-  },
-  bookHeaderBtnPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.97 }],
-  },
-  bookHeaderBtnText: {
-    ...typography.captionBold,
-    color: colors.white,
-    fontSize: 12.5,
-    fontFamily: typography.font.bold,
+    fontSize: 13.5,
+    color: '#64748B',
+    marginTop: 2,
+    fontWeight: '400',
+    lineHeight: 18,
   },
   switchWrapper: {
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
+    paddingHorizontal: 16,
+    marginBottom: 10,
   },
   flatList: {
     flex: 1,
@@ -468,80 +565,56 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabScrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    paddingBottom: 85,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 90,
   },
   tabContextRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: spacing.md,
-    paddingHorizontal: 2,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   tabContextText: {
-    ...typography.small,
-    color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#64748B',
   },
   // Empty State
   emptyCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: radius.xl,
     padding: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(10, 110, 100, 0.10)',
+    borderColor: '#E2E8F0',
     gap: 6,
   },
   emptyIconCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(10, 110, 100, 0.08)',
+    backgroundColor: 'rgba(13, 148, 136, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
   emptyTitle: {
-    ...typography.heading3,
     fontSize: 16,
-    fontFamily: typography.font.bold,
-    color: colors.textPrimary,
+    fontWeight: '700',
+    color: '#0F172A',
     textAlign: 'center',
   },
   emptySub: {
-    ...typography.small,
     fontSize: 12.5,
-    color: colors.textMuted,
+    color: '#64748B',
     textAlign: 'center',
     lineHeight: 17,
     maxWidth: 280,
-    marginBottom: 6,
-  },
-  scheduleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: colors.primaryDark,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: radius.pill,
-    alignSelf: 'stretch',
-  },
-  scheduleBtnPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.99 }],
-  },
-  scheduleBtnText: {
-    ...typography.captionBold,
-    fontSize: 13,
-    fontFamily: typography.font.bold,
-    color: colors.white,
   },
   cardList: {
-    gap: spacing.md,
+    gap: 10,
   },
 });

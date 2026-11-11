@@ -33,6 +33,7 @@ import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { TypingIndicator } from '@components/messages';
+import { ChatMessageListSkeleton } from '@components/ui/Skeleton';
 import {
   chatService,
   OFFICIAL_CONTACTS,
@@ -244,10 +245,56 @@ export default function ChatConversationScreen() {
   const [selectedPhoto, setSelectedPhoto] = useState<{ uri: string; base64?: string } | null>(null);
   const [showPhotoPickerModal, setShowPhotoPickerModal] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<{ url: string; message: ChatMessage } | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const textInputRef = useRef<any>(null);
   const queryClient = useQueryClient();
+
+  const handleScrollToRepliedMessage = useCallback(
+    (targetId?: string, fallbackSnippet?: string) => {
+      if (!targetId && !fallbackSnippet) return;
+      haptic.light();
+
+      let targetIndex = -1;
+      if (targetId) {
+        targetIndex = messages.findIndex((m) => m.id === targetId);
+      }
+      if (targetIndex === -1 && fallbackSnippet) {
+        const snippetClean = fallbackSnippet.trim().toLowerCase();
+        targetIndex = messages.findIndex(
+          (m) =>
+            m.message_text &&
+            (m.message_text.toLowerCase().includes(snippetClean) ||
+              snippetClean.includes(m.message_text.toLowerCase())),
+        );
+      }
+
+      if (targetIndex !== -1 && flatListRef.current) {
+        try {
+          flatListRef.current.scrollToIndex({
+            index: targetIndex,
+            animated: true,
+            viewPosition: 0.35,
+          });
+        } catch {
+          flatListRef.current.scrollToOffset({
+            offset: Math.max(0, targetIndex * 70),
+            animated: true,
+          });
+        }
+
+        const matchedMsg = messages[targetIndex];
+        if (matchedMsg) {
+          setHighlightedMessageId(matchedMsg.id);
+          setTimeout(() => {
+            setHighlightedMessageId((curr) => (curr === matchedMsg.id ? null : curr));
+          }, 2200);
+        }
+      }
+    },
+    [messages],
+  );
 
   // Load chat and messages
   const loadChat = useCallback(async () => {
@@ -757,12 +804,9 @@ const handleThumbsUp = () => {
           </View>
         </View>
 
-        {/* Loading State */}
+        {/* Loading State with Realistic Shimmering Chat Skeleton */}
         {loading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="small" color="#059669" />
-            <Text style={styles.loadingSub}>Loading conversation...</Text>
-          </View>
+          <ChatMessageListSkeleton />
         ) : (
           <KeyboardAvoidingView
             style={[
@@ -780,7 +824,17 @@ const handleThumbsUp = () => {
               contentContainerStyle={styles.messagesListContent}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+              onContentSizeChange={() => {
+                if (!highlightedMessageId) {
+                  flatListRef.current?.scrollToEnd({ animated: false });
+                }
+              }}
+              onScrollToIndexFailed={(info) => {
+                flatListRef.current?.scrollToOffset({
+                  offset: Math.max(0, info.index * 65),
+                  animated: true,
+                });
+              }}
               showsVerticalScrollIndicator={false}
               ListHeaderComponent={
                 <View style={styles.profileIntroCard}>
@@ -909,12 +963,22 @@ const handleThumbsUp = () => {
                           style={[
                             styles.residentRow,
                             { marginBottom: isLastInGroup ? 8 : 2 },
+                            highlightedMessageId === item.id && styles.highlightedRow,
                           ]}
                         >
                           <View style={styles.residentBubbleCol}>
-                            {/* Reply Quote Badge */}
+                            {/* Reply Quote Badge - Tap to scroll up to replied message */}
                             {replyTo ? (
-                              <View style={styles.replyQuoteWrap}>
+                              <Pressable
+                                onPress={() => handleScrollToRepliedMessage(replyTo.id, replyTo.text)}
+                                style={({ pressed }) => [
+                                  styles.replyQuoteWrap,
+                                  pressed && styles.replyQuoteWrapPressed,
+                                ]}
+                                hitSlop={6}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Jump to replied message: ${replyTo.text}`}
+                              >
                                 <Text style={styles.replyToLabel}>
                                   You replied to {replyTo.senderName || 'Staff'} →
                                 </Text>
@@ -923,7 +987,7 @@ const handleThumbsUp = () => {
                                     {replyTo.text}
                                   </Text>
                                 </View>
-                              </View>
+                              </Pressable>
                             ) : null}
 
                             {imageUrl ? (
@@ -993,6 +1057,7 @@ const handleThumbsUp = () => {
                                     styles.residentBubble,
                                     residentCornerStyle,
                                     imageUrl ? styles.residentBubbleWithImage : null,
+                                    highlightedMessageId === item.id && styles.highlightedBubbleResident,
                                   ]}
                                 >
                                   <Text style={styles.residentText}>{item.message_text}</Text>
@@ -1031,6 +1096,7 @@ const handleThumbsUp = () => {
                           style={[
                             styles.staffRow,
                             { marginBottom: isLastInGroup ? 8 : 2 },
+                            highlightedMessageId === item.id && styles.highlightedRow,
                           ]}
                         >
                           {/* Avatar only on the last message of cluster; empty spacer on earlier to maintain alignment */}
@@ -1061,9 +1127,18 @@ const handleThumbsUp = () => {
                               </View>
                             ) : null}
 
-                            {/* Reply Quote Badge */}
+                            {/* Reply Quote Badge - Tap to scroll up to replied message */}
                             {replyTo ? (
-                              <View style={styles.replyQuoteWrapStaff}>
+                              <Pressable
+                                onPress={() => handleScrollToRepliedMessage(replyTo.id, replyTo.text)}
+                                style={({ pressed }) => [
+                                  styles.replyQuoteWrapStaff,
+                                  pressed && styles.replyQuoteWrapPressed,
+                                ]}
+                                hitSlop={6}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Jump to replied message: ${replyTo.text}`}
+                              >
                                 <Text style={styles.replyToLabel}>
                                   Replied to {replyTo.senderName || 'You'} →
                                 </Text>
@@ -1072,7 +1147,7 @@ const handleThumbsUp = () => {
                                     {replyTo.text}
                                   </Text>
                                 </View>
-                              </View>
+                              </Pressable>
                             ) : null}
 
                             {imageUrl ? (
@@ -1142,6 +1217,7 @@ const handleThumbsUp = () => {
                                     styles.staffBubble,
                                     staffCornerStyle,
                                     imageUrl ? styles.staffBubbleWithImage : null,
+                                    highlightedMessageId === item.id && styles.highlightedBubbleStaff,
                                   ]}
                                 >
                                   <Text style={styles.staffText}>{item.message_text}</Text>
@@ -1935,6 +2011,27 @@ const styles = StyleSheet.create({
   replyQuoteWrapStaff: {
     alignItems: 'flex-start',
     marginBottom: 3,
+  },
+  replyQuoteWrapPressed: {
+    opacity: 0.65,
+    transform: [{ scale: 0.98 }],
+  },
+  highlightedRow: {
+    backgroundColor: 'rgba(13, 148, 136, 0.14)',
+    borderRadius: 14,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  highlightedBubbleResident: {
+    borderWidth: 2,
+    borderColor: '#047857',
+    transform: [{ scale: 1.02 }],
+  },
+  highlightedBubbleStaff: {
+    borderWidth: 2,
+    borderColor: '#0D9488',
+    backgroundColor: '#E6FFFA',
+    transform: [{ scale: 1.02 }],
   },
   replyToLabel: {
     fontSize: 10.5,

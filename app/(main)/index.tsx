@@ -1,8 +1,7 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { StyleSheet } from 'react-native';
 import { useUser } from '@clerk/expo';
 
-import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useNotificationStore } from '@store/useNotificationStore';
@@ -14,11 +13,8 @@ import { HomeScreenSkeleton } from '@components/ui/Skeleton';
 import {
   HomeHeader,
   HomePetsSection,
-  HomeCareActionCards,
   HomeAnnouncementsSection,
-  HomeNextUpSection,
 } from '@components/home';
-import { colors, radius, spacing } from '@theme';
 import type { Pet } from '@services/data';
 
 export default function HomeScreen() {
@@ -26,8 +22,6 @@ export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const {
     pets: storePets,
-    appointments: storeAppointments,
-    transactions,
     loading,
     loaded,
     syncNow,
@@ -52,27 +46,6 @@ export default function HomeScreen() {
 
   // Pure Supabase source of truth
   const allPets: Pet[] = storePets || [];
-
-  const upcomingAppointments = useMemo(() => {
-    const today = todayISO();
-    const validPetIds = new Set(allPets.map((p) => p.id));
-    const validPetNames = new Set(allPets.map((p) => p.name?.toLowerCase().trim()));
-
-    return (storeAppointments || [])
-      .filter((a) => {
-        if (!a) return false;
-        const matchesId = a.petId ? validPetIds.has(a.petId) : false;
-        const matchesName = a.petName ? validPetNames.has(a.petName.toLowerCase().trim()) : false;
-        return (
-          (matchesId || matchesName) &&
-          (a.status === 'pending' || a.status === 'confirmed') &&
-          a.date >= today
-        );
-      })
-      .sort((a, b) => (a.date === b.date ? a.timeSlot.localeCompare(b.timeSlot) : a.date.localeCompare(b.date)));
-  }, [allPets, storeAppointments]);
-
-  const nextAppointment = upcomingAppointments[0];
 
   const handleRefresh = useCallback(async () => {
     haptic.light();
@@ -110,18 +83,7 @@ export default function HomeScreen() {
         {/* 2. Official CVO Pet Registry Section (Facebook Stories style) */}
         <HomePetsSection pets={allPets} userPhotoUrl={displayPhoto} />
 
-        {/* 3. Municipal Care Action Cards (Clinical Care & Procedure) */}
-        <HomeCareActionCards />
-
-        {/* 4. Upcoming Active Appointment (if scheduled) */}
-        {nextAppointment ? (
-          <HomeNextUpSection
-            nextAppointment={nextAppointment}
-            totalAppointmentsCount={upcomingAppointments.length}
-          />
-        ) : null}
-
-        {/* 5. Live Community Announcements Feed from Supabase */}
+        {/* 3. Live Community Announcements Feed from Supabase */}
         <HomeAnnouncementsSection />
       </Screen>
     </AnimatedScreen>

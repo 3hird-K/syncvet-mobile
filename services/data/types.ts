@@ -36,7 +36,9 @@ export type AppointmentStatus =
   | 'overdue'
   | 'missed'
   | 'queued'
-  | 'checked_in';
+  | 'checked_in'
+  | 'called'
+  | 'serving';
 
 export interface QueueTicketInfo {
   id: string;

@@ -20,6 +20,8 @@ interface QueueTicketModalProps {
   appointment: Appointment | null;
   ticket?: QueueTicketInfo | null;
   onClose: () => void;
+  onSimulateCall?: () => void;
+  onCompleteVisit?: () => void;
 }
 
 export function QueueTicketModal({
@@ -27,6 +29,8 @@ export function QueueTicketModal({
   appointment,
   ticket,
   onClose,
+  onSimulateCall,
+  onCompleteVisit,
 }: QueueTicketModalProps) {
   if (!visible || !appointment) return null;
 
@@ -166,6 +170,41 @@ export function QueueTicketModal({
             >
               <Text style={styles.doneBtnText}>Keep In Queue</Text>
             </Pressable>
+
+            {/* Test Simulation Controls */}
+            <View style={styles.testBtnRow}>
+              {onSimulateCall && (
+                <Pressable
+                  onPress={() => {
+                    haptic.medium();
+                    onClose();
+                    onSimulateCall();
+                  }}
+                  style={styles.testCallBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Test Call and Ring"
+                >
+                  <MaterialCommunityIcons name="bell-ring" size={15} color="#EA580C" />
+                  <Text style={styles.testCallBtnText}>Test Call Pet (Ring)</Text>
+                </Pressable>
+              )}
+
+              {onCompleteVisit && (
+                <Pressable
+                  onPress={() => {
+                    haptic.success();
+                    onClose();
+                    onCompleteVisit();
+                  }}
+                  style={styles.testCompleteBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mark Done and Move to History"
+                >
+                  <Ionicons name="checkmark-done" size={15} color="#0D9488" />
+                  <Text style={styles.testCompleteBtnText}>Mark Done (Put in History)</Text>
+                </Pressable>
+              )}
+            </View>
           </ScrollView>
         </View>
       </View>
@@ -385,5 +424,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: typography.font.bold,
     color: '#FFFFFF',
+  },
+  testBtnRow: {
+    gap: 8,
+    marginTop: 6,
+  },
+  testCallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FFEDD5',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    borderRadius: radius.pill,
+    paddingVertical: 10,
+  },
+  testCallBtnText: {
+    ...typography.captionBold,
+    fontSize: 12,
+    color: '#C2410C',
+  },
+  testCompleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#CCFBF1',
+    borderRadius: radius.pill,
+    paddingVertical: 10,
+  },
+  testCompleteBtnText: {
+    ...typography.captionBold,
+    fontSize: 12,
+    color: '#0D9488',
   },
 });

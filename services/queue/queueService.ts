@@ -274,3 +274,67 @@ export async function markAppointmentOverdue(appointmentId: string): Promise<voi
   }
 }
 
+/**
+ * Marks an appointment and its queue ticket as completed, moving it into visit history.
+ */
+export async function completeQueueAppointment(
+  appointmentId: string,
+  ticketNumber?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  try {
+    await supabase
+      .from('appointments')
+      .update({
+        status: 'completed',
+        updated_at: now,
+      })
+      .eq('id', appointmentId);
+
+    if (ticketNumber) {
+      await supabase
+        .from('queue_tickets')
+        .update({
+          status: 'completed',
+          completed_at: now,
+          updated_at: now,
+        })
+        .eq('ticket_number', ticketNumber);
+    }
+  } catch (err) {
+    console.warn('Error completing appointment in Supabase:', err);
+  }
+}
+
+/**
+ * Updates status of queue ticket to 'called' in Supabase.
+ */
+export async function callQueueAppointment(
+  appointmentId: string,
+  ticketNumber?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  try {
+    await supabase
+      .from('appointments')
+      .update({
+        status: 'called',
+        updated_at: now,
+      })
+      .eq('id', appointmentId);
+
+    if (ticketNumber) {
+      await supabase
+        .from('queue_tickets')
+        .update({
+          status: 'called',
+          called_at: now,
+          updated_at: now,
+        })
+        .eq('ticket_number', ticketNumber);
+    }
+  } catch (err) {
+    console.warn('Error calling appointment in Supabase:', err);
+  }
+}
+

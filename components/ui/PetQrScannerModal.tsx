@@ -20,6 +20,7 @@ import { Button } from '@components/ui/Button';
 import { Avatar } from '@components/ui/Avatar';
 import {
   parsePetTagPayload,
+  buildPetVerificationUrl,
   CVO_HOTLINE,
   CVO_HOTLINE_DISPLAY,
   type PetTagPayload,
@@ -70,11 +71,34 @@ export function PetQrScannerModal({ visible, onClose }: PetQrScannerModalProps) 
       if (parsed) {
         haptic.success();
         setScannedRecord(parsed);
+
+        // Determine official website URL to open
+        let targetUrl = '';
         if (data.startsWith('http://') || data.startsWith('https://')) {
-          setScannedRawUrl(data);
+          targetUrl = data;
         } else {
-          setScannedRawUrl(null);
+          targetUrl = buildPetVerificationUrl(parsed.pet as any, {
+            fullName: parsed.owner.name,
+            mobileNumber: parsed.owner.phone,
+            address: parsed.owner.address,
+          });
         }
+
+        setScannedRawUrl(targetUrl);
+
+        // Open official website verification page in browser directly
+        if (targetUrl) {
+          Linking.canOpenURL(targetUrl)
+            .then((supported) => {
+              if (supported) {
+                Linking.openURL(targetUrl).catch((err) => {
+                  console.warn('Could not auto-open verification website:', err);
+                });
+              }
+            })
+            .catch(() => {});
+        }
+
         setScanError(null);
       } else {
         haptic.warning();

@@ -24,6 +24,8 @@ export interface PetTagPayload {
     gender?: string;
     birthYear?: number;
     isVaccinated: boolean;
+    lastVaccinationDate?: string;
+    nextVaccinationDate?: string;
     isSpayedNeutered?: boolean;
     notes?: string;
     avatarId?: string;
@@ -43,7 +45,8 @@ export const CVO_OFFICE_NAME = 'Cagayan de Oro City Veterinary Office';
 export const PET_TAG_DESCRIPTION =
   'An official digital collar tag for lost pet identification and owner contact.';
 
-export const VERCEL_VERIFY_BASE_URL = 'https://veterinaryoffice-cdo.vercel.app/verify/pet';
+export const VERCEL_DOMAIN = 'veterinaryoffice-cdo.vercel.app';
+export const VERCEL_VERIFY_BASE_URL = `https://${VERCEL_DOMAIN}/verify/pet`;
 
 /**
  * Generates or retrieves the 9-digit municipal pet microchip tag number (e.g. "pet-493355620").
@@ -70,7 +73,8 @@ export function generateTagId(petId: string): string {
 
 /**
  * Builds the official live verification website URL for the companion animal.
- * Matches: https://veterinaryoffice-cdo.vercel.app/verify/pet/:petId?...
+ * Format:
+ * https://veterinaryoffice-cdo.vercel.app/verify/pet/{pet.id}?name={name}&species={species}&breed={breed}&tag={tagId}&owner={ownerName}&contact={phone}&bgy={barangay}&vax={isVax}&lastVax={date}&nextVax={date}&photo={photoUrl}
  */
 export function buildPetVerificationUrl(
   pet: Pet,
@@ -78,7 +82,7 @@ export function buildPetVerificationUrl(
 ): string {
   const speciesFormatted = pet.species?.toLowerCase() === 'cat' ? 'Cat' : 'Dog';
   const tagCode = getPetTagCode(pet);
-  const avatarRelPath = pet.photoUrl?.startsWith('/assets/')
+  const avatarRelPath = pet.photoUrl?.startsWith('/assets/') || pet.photoUrl?.startsWith('http')
     ? pet.photoUrl
     : (pet.avatarId ? getAvatarPath(pet.avatarId, pet.species) : getAvatarPath(undefined, pet.species));
 
@@ -87,9 +91,9 @@ export function buildPetVerificationUrl(
     species: speciesFormatted,
     breed: pet.breed || '',
     tag: tagCode,
-    owner: owner.fullName || 'SyncVet Resident',
+    owner: owner.fullName || 'Apollo Artemis',
     contact: owner.mobileNumber || '',
-    bgy: owner.address || 'Cagayan de Oro City',
+    bgy: owner.address || 'Hakhot, Patag, Cagayan de Oro City, Misamis Oriental',
     vax: pet.isVaccinated ? '1' : '0',
     lastVax: pet.lastVaccinationDate || '',
     nextVax: pet.nextVaccinationDate || '',
@@ -139,6 +143,8 @@ export function parsePetTagPayload(rawText: string): PetTagPayload | null {
       const contact = searchParams.get('contact') || '';
       const bgy = searchParams.get('bgy') || 'Cagayan de Oro City';
       const vax = searchParams.get('vax') === '1';
+      const lastVax = searchParams.get('lastVax') || undefined;
+      const nextVax = searchParams.get('nextVax') || undefined;
       const photo = searchParams.get('photo') || undefined;
 
       return {
@@ -151,6 +157,8 @@ export function parsePetTagPayload(rawText: string): PetTagPayload | null {
           species,
           breed,
           isVaccinated: vax,
+          lastVaccinationDate: lastVax,
+          nextVaccinationDate: nextVax,
           photoUrl: photo,
         },
         owner: {

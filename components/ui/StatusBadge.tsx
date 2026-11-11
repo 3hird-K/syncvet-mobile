@@ -16,6 +16,8 @@ const STATUS_META: Record<
   missed: { label: 'Missed', color: '#DC2626', bg: '#FEE2E2' },
   queued: { label: 'In Queue', color: '#0D9488', bg: '#CCFBF1' },
   checked_in: { label: 'In Queue', color: '#0D9488', bg: '#CCFBF1' },
+  called: { label: 'Now Calling!', color: '#EA580C', bg: '#FFEDD5' },
+  serving: { label: 'Serving', color: '#0D9488', bg: '#CCFBF1' },
 };
 
 interface StatusBadgeProps {

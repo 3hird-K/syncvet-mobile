@@ -17,6 +17,7 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
+import { MessagesScreenSkeleton } from '@components/ui/Skeleton';
 import {
   chatService,
   OFFICIAL_CONTACTS,
@@ -72,6 +73,14 @@ export default function MessagesIndexScreen() {
     router.push(`/messages/${contactId}` as never);
   };
 
+  if (loading && !refreshing) {
+    return (
+      <AnimatedScreen animation="zoom">
+        <MessagesScreenSkeleton />
+      </AnimatedScreen>
+    );
+  }
+
   return (
     <AnimatedScreen animation="zoom">
       <View style={[styles.root, { paddingTop: Math.max(insets.top, 16) + 6 }]}>
@@ -88,7 +97,7 @@ export default function MessagesIndexScreen() {
           <Text style={styles.sectionHeaderText}>OFFICIAL CVO CHANNELS</Text>
         </View>
 
-        {/* Channels List */}
+        {/* Channels List - Edge-to-Edge Messenger Style */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
@@ -103,91 +112,88 @@ export default function MessagesIndexScreen() {
             />
           }
         >
-          {loading && !refreshing ? (
-            <View style={styles.loadingWrap}>
-              <ActivityIndicator size="small" color="#059669" />
-              <Text style={styles.loadingText}>Connecting to municipal channels...</Text>
-            </View>
-          ) : (
-            <View style={styles.channelsList}>
-              {/* Channel 1: Dr. Helen Ann P. Tacandong */}
-              <Pressable
-                onPress={() => handleOpenChat('vet-hellen')}
-                style={({ pressed }) => [
-                  styles.card,
-                  styles.vetCard,
-                  pressed && styles.cardPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Chat with Dr. Helen Ann P. Tacandong"
-              >
-                <View style={styles.avatarWrap}>
-                  <Image
-                    source={require('@assets/dr-helen-avatar.jpg')}
-                    style={styles.avatarImage}
-                  />
-                  <View style={styles.activeDot} />
+          <View style={styles.channelsList}>
+            {/* Channel 1: Dr. Helen Ann P. Tacandong */}
+            <Pressable
+              onPress={() => handleOpenChat('vet-hellen')}
+              style={({ pressed }) => [
+                styles.channelRow,
+                pressed && styles.channelRowPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Chat with Dr. Helen Ann P. Tacandong"
+            >
+              <View style={styles.avatarWrap}>
+                <Image
+                  source={require('@assets/dr-helen-avatar.jpg')}
+                  style={styles.avatarImage}
+                />
+                <View style={styles.activeDot} />
+              </View>
+
+              <View style={styles.channelRowContent}>
+                <View style={styles.channelTopRow}>
+                  <Text style={styles.channelName} numberOfLines={1}>
+                    Dr. Helen Ann P. Tacandong
+                  </Text>
+                  <Text style={styles.channelTime}>Active</Text>
                 </View>
 
-                <View style={styles.cardContent}>
-                  <View style={styles.cardTopRow}>
-                    <Text style={styles.cardName} numberOfLines={1}>
-                      Dr. Helen Ann P. Tacandong
-                    </Text>
-                    <View style={styles.telemedicineBadge}>
-                      <Text style={styles.telemedicineBadgeText}>Telemedicine</Text>
-                    </View>
+                <View style={styles.channelBottomRow}>
+                  <Text style={styles.channelSnippet} numberOfLines={1}>
+                    Clinical advice, symptoms & rabies protocols
+                  </Text>
+                  <View style={styles.telemedicineBadge}>
+                    <Text style={styles.telemedicineBadgeText}>Telemedicine</Text>
                   </View>
-
-                  <Text style={styles.cardRole} numberOfLines={1}>
-                    City Veterinarian • CVO
-                  </Text>
-                  <Text style={styles.cardDesc} numberOfLines={1}>
-                    Clinical advice & rabies protocols
-                  </Text>
                 </View>
-              </Pressable>
+              </View>
+            </Pressable>
 
-              {/* Channel 2: CVO Inquiry & Admin Desk */}
-              <Pressable
-                onPress={() => handleOpenChat('cvo-admin')}
-                style={({ pressed }) => [
-                  styles.card,
-                  styles.adminCard,
-                  pressed && styles.cardPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Chat with CVO Inquiry and Admin Desk"
-              >
-                <View style={styles.avatarWrap}>
-                  <Image
-                    source={require('@assets/cvo-seal.png')}
-                    style={[styles.avatarImage, styles.sealAvatar]}
-                    resizeMode="contain"
-                  />
-                  <View style={styles.activeDot} />
+            {/* Inset Divider (Messenger / iOS Style) */}
+            <View style={styles.insetDivider} />
+
+            {/* Channel 2: CVO Inquiry & Admin Desk */}
+            <Pressable
+              onPress={() => handleOpenChat('cvo-admin')}
+              style={({ pressed }) => [
+                styles.channelRow,
+                pressed && styles.channelRowPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Chat with CVO Inquiry and Admin Desk"
+            >
+              <View style={styles.avatarWrap}>
+                <Image
+                  source={require('@assets/cvo-seal.png')}
+                  style={[styles.avatarImage, styles.sealAvatar]}
+                  resizeMode="contain"
+                />
+                <View style={styles.activeDot} />
+              </View>
+
+              <View style={styles.channelRowContent}>
+                <View style={styles.channelTopRow}>
+                  <Text style={styles.channelName} numberOfLines={1}>
+                    CVO Inquiry & Admin Desk
+                  </Text>
+                  <Text style={styles.channelTime}>Active</Text>
                 </View>
 
-                <View style={styles.cardContent}>
-                  <View style={styles.cardTopRow}>
-                    <Text style={styles.cardName} numberOfLines={1}>
-                      CVO Inquiry & Admin Desk
-                    </Text>
-                    <View style={styles.publicDeskBadge}>
-                      <Text style={styles.publicDeskBadgeText}>Public Desk</Text>
-                    </View>
+                <View style={styles.channelBottomRow}>
+                  <Text style={styles.channelSnippet} numberOfLines={1}>
+                    Kapon reservations, anti-rabies & walk-ins
+                  </Text>
+                  <View style={styles.publicDeskBadge}>
+                    <Text style={styles.publicDeskBadgeText}>Public Desk</Text>
                   </View>
-
-                  <Text style={styles.cardRole} numberOfLines={1}>
-                    City Veterinary Office Admin
-                  </Text>
-                  <Text style={styles.cardDesc} numberOfLines={1}>
-                    Kapon schedules, anti-rabies & walk-ins
-                  </Text>
                 </View>
-              </Pressable>
-            </View>
-          )}
+              </View>
+            </Pressable>
+
+            {/* Inset Divider */}
+            <View style={styles.insetDivider} />
+          </View>
         </ScrollView>
       </View>
     </AnimatedScreen>
@@ -229,93 +235,94 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-  },
-  loadingWrap: {
-    paddingVertical: 50,
-    alignItems: 'center',
-    gap: 10,
-  },
-  loadingText: {
-    fontSize: 12.5,
-    color: '#64748B',
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   channelsList: {
-    gap: 12,
+    width: '100%',
   },
-  card: {
+  channelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  vetCard: {
-    backgroundColor: '#EBF8F2',
-    borderColor: '#A7F3D0',
-  },
-  adminCard: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
-    ...shadows.sm,
   },
-  cardPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.995 }],
+  channelRowPressed: {
+    backgroundColor: '#F8FAFC',
   },
   avatarWrap: {
     position: 'relative',
-    width: 48,
-    height: 48,
+    width: 56,
+    height: 56,
+    marginRight: 14,
   },
   avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#F1F5F9',
   },
   sealAvatar: {
     backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   activeDot: {
     position: 'absolute',
-    bottom: -1,
-    right: -1,
-    width: 13,
-    height: 13,
-    borderRadius: 6.5,
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: '#10B981',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#FFFFFF',
   },
-  cardContent: {
+  channelRowContent: {
     flex: 1,
-    marginLeft: 12,
     justifyContent: 'center',
   },
-  cardTopRow: {
+  channelTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
+    marginBottom: 4,
   },
-  cardName: {
-    fontSize: 15.5,
+  channelName: {
+    fontSize: 16,
     fontWeight: '700',
     color: '#0F172A',
     flex: 1,
+    letterSpacing: -0.2,
+  },
+  channelTime: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  channelBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  channelSnippet: {
+    fontSize: 13.5,
+    color: '#64748B',
+    flex: 1,
+    marginRight: 8,
   },
   telemedicineBadge: {
     backgroundColor: '#D1FAE5',
     borderWidth: 1,
     borderColor: '#A7F3D0',
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 6,
   },
   telemedicineBadgeText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     color: '#065F46',
   },
@@ -323,24 +330,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0F2FE',
     borderWidth: 1,
     borderColor: '#BAE6FD',
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 6,
   },
   publicDeskBadgeText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     color: '#0369A1',
   },
-  cardRole: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#059669',
-    marginTop: 2,
-  },
-  cardDesc: {
-    fontSize: 12.5,
-    color: '#475569',
-    marginTop: 2,
+  insetDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E2E8F0',
+    marginLeft: 86,
   },
 });

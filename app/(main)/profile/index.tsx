@@ -377,7 +377,7 @@ export default function ProfileScreen() {
     }
   }, [syncNow]);
 
-  if (loading && !loaded && !user && !clerkUser) {
+  if ((loading && !loaded && !user) || (!user && !clerkUser?.fullName)) {
     return (
       <AnimatedScreen animation="zoom">
         <ProfileScreenSkeleton />
