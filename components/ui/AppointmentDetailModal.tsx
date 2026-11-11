@@ -144,8 +144,8 @@ export function AppointmentDetailModal({
                       <Ionicons name="time-outline" size={16} color={colors.primary} />
                     </View>
                     <View style={styles.detailTextWrap}>
-                      <Text style={styles.detailLabel}>Assigned Time Slot</Text>
-                      <Text style={styles.detailValueHighlight}>{appointment.timeSlot}</Text>
+                      <Text style={styles.detailLabel}>Clinic Consultation Hours</Text>
+                      <Text style={styles.detailValueHighlight}>Mon – Fri · 8:00 AM – 5:00 PM</Text>
                     </View>
                   </View>
 

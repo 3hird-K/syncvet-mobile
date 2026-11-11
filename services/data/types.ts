@@ -28,7 +28,25 @@ export interface Pet {
   _pendingSync?: boolean;
 }
 
-export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
+export type AppointmentStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'completed'
+  | 'cancelled'
+  | 'overdue'
+  | 'missed'
+  | 'queued'
+  | 'checked_in';
+
+export interface QueueTicketInfo {
+  id: string;
+  ticketNumber: string;
+  queueSequence: number;
+  status: string;
+  consultationRoom?: string;
+  servingVet?: string;
+  checkInTime?: string;
+}
 
 export interface Appointment {
   id: string;
@@ -45,6 +63,7 @@ export interface Appointment {
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+  queueTicket?: QueueTicketInfo;
   /** True when changes are queued locally and pending remote sync */
   _pendingSync?: boolean;
 }

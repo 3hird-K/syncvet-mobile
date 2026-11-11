@@ -35,8 +35,10 @@ import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { AppointmentSwitch, AppointmentTab } from '@components/ui/AppointmentSwitch';
 import { AppointmentCard } from '@components/ui/AppointmentCard';
 import { AppointmentDetailModal } from '@components/ui/AppointmentDetailModal';
+import { ClinicQueueScannerModal } from '@components/ui/ClinicQueueScannerModal';
+import { QueueTicketModal } from '@components/ui/QueueTicketModal';
 import { AppointmentsScreenSkeleton } from '@components/ui/Skeleton';
-import type { Appointment } from '@services/data';
+import type { Appointment, QueueTicketInfo } from '@services/data';
 
 const TAB_PAGES: AppointmentTab[] = ['upcoming', 'past'];
 
@@ -85,6 +87,12 @@ export default function AppointmentsScreen() {
 
   const [activeTab, setActiveTab] = useState<AppointmentTab>('upcoming');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [scannerAppointment, setScannerAppointment] = useState<Appointment | null>(null);
+  const [ticketModalData, setTicketModalData] = useState<{
+    visible: boolean;
+    appointment: Appointment | null;
+    ticket: QueueTicketInfo | null;
+  }>({ visible: false, appointment: null, ticket: null });
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -122,20 +130,37 @@ export default function AppointmentsScreen() {
       return !a.petId || matchesId || matchesName || a.ownerId === clerkUser?.id;
     });
 
-    const upcomingList = filteredAppts
+    // Map overdue status: if scheduled date is prior to today and still pending/confirmed
+    const mappedAppts = filteredAppts.map((a) => {
+      const isPastDate = a.date < today;
+      const isPending = a.status === 'pending' || a.status === 'confirmed';
+      if (isPastDate && isPending) {
+        return { ...a, status: 'overdue' as const };
+      }
+      return a;
+    });
+
+    // Upcoming list includes active upcoming visits (today or future) + any overdue visits needing attention
+    const upcomingList = mappedAppts
       .filter(
         (a) =>
           a.status !== 'cancelled' &&
-          (a.date > today || (a.date === today && a.status !== 'completed')),
+          a.status !== 'completed' &&
+          (a.date >= today || a.status === 'overdue'),
       )
-      .sort((a, b) => `${a.date}${a.timeSlot}`.localeCompare(`${b.date}${b.timeSlot}`));
+      .sort((a, b) => {
+        // Prioritize overdue, then chronological date
+        if (a.status === 'overdue' && b.status !== 'overdue') return -1;
+        if (b.status === 'overdue' && a.status !== 'overdue') return 1;
+        return a.date.localeCompare(b.date);
+      });
 
-    const pastList = filteredAppts
-      .filter((a) => a.date < today || a.status === 'completed' || a.status === 'cancelled')
-      .sort((a, b) => `${b.date}${b.timeSlot}`.localeCompare(`${a.date}${a.timeSlot}`));
+    const pastList = mappedAppts
+      .filter((a) => a.status === 'completed' || a.status === 'cancelled' || (a.date < today && a.status !== 'overdue'))
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     return { upcoming: upcomingList, past: pastList };
-  }, [userPets, storeAppointments]);
+  }, [userPets, storeAppointments, clerkUser?.id]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -252,6 +277,18 @@ export default function AppointmentsScreen() {
                       haptic.light();
                       setSelectedAppointment(appointment);
                     }}
+                    onScanPress={() => {
+                      haptic.medium();
+                      setScannerAppointment(appointment);
+                    }}
+                    onViewTicketPress={() => {
+                      haptic.light();
+                      setTicketModalData({
+                        visible: true,
+                        appointment,
+                        ticket: appointment.queueTicket || null,
+                      });
+                    }}
                   />
                 ))}
               </View>
@@ -332,6 +369,36 @@ export default function AppointmentsScreen() {
           appointment={selectedAppointment}
           onClose={() => setSelectedAppointment(null)}
           onCancelled={() => setSelectedAppointment(null)}
+        />
+
+        {/* Clinic Queue QR Scanner Modal */}
+        <ClinicQueueScannerModal
+          visible={Boolean(scannerAppointment)}
+          appointment={scannerAppointment}
+          onClose={() => setScannerAppointment(null)}
+          onSuccess={(ticket) => {
+            if (scannerAppointment) {
+              setTicketModalData({
+                visible: true,
+                appointment: scannerAppointment,
+                ticket,
+              });
+            }
+          }}
+        />
+
+        {/* Boarding-Pass Style Queue Ticket Modal */}
+        <QueueTicketModal
+          visible={ticketModalData.visible}
+          appointment={ticketModalData.appointment}
+          ticket={ticketModalData.ticket}
+          onClose={() =>
+            setTicketModalData({
+              visible: false,
+              appointment: null,
+              ticket: null,
+            })
+          }
         />
       </SafeAreaView>
     </AnimatedScreen>

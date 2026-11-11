@@ -1,6 +1,7 @@
 import { supabase } from '@lib/supabase';
 import { generateMicrochipNumber, generateUUID } from '@lib/uuid';
 import { getAvatarPath } from '@lib/petAvatars';
+import { todayISO } from '@lib/format';
 import type { DataService } from './DataService';
 import type {
   Appointment,
@@ -37,19 +38,49 @@ export function toPetModel(row: any): Pet {
 
 export function toAppointmentModel(row: any): Appointment {
   const petName = row.pets?.name || row.pet_name || 'Companion';
+  let status = (row.status || 'pending') as any;
+  const today = todayISO();
+
+  // If status is still pending/confirmed but scheduled date has passed, it is overdue
+  if ((status === 'pending' || status === 'confirmed') && row.date && row.date < today) {
+    status = 'overdue';
+  }
+
+  // Parse queue ticket if present in notes
+  let queueTicket: any = undefined;
+  if (row.notes && row.notes.includes('[Checked in: Ticket ')) {
+    const match = row.notes.match(/\[Checked in: Ticket ([A-Z0-9-]+)\]/);
+    if (match && match[1]) {
+      const ticketNum = match[1];
+      const seq = parseInt(ticketNum.replace(/\D/g, ''), 10) || 1;
+      queueTicket = {
+        id: `ticket_${row.id}`,
+        ticketNumber: ticketNum,
+        queueSequence: seq,
+        status: status === 'completed' ? 'completed' : 'waiting',
+        consultationRoom: 'Consultation Desk 1',
+        servingVet: 'Dr. Helen Ann P. Tacandong, DVM',
+      };
+      if (status !== 'completed' && status !== 'cancelled' && status !== 'overdue') {
+        status = 'queued';
+      }
+    }
+  }
+
   return {
     id: row.id,
     ownerId: row.owner_id,
     petId: row.pet_id || '',
     petName,
     serviceId: row.service_id,
-    status: (row.status || 'pending') as any,
+    status,
     date: row.date,
     timeSlot: row.time_slot,
-    location: row.location || 'City Veterinary Office Main Clinic',
+    location: row.location || 'City Veterinary Office - Carmen Central Clinic',
     notes: row.notes || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    queueTicket,
   };
 }
 

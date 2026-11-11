@@ -6,6 +6,7 @@ import { syncEngine, syncQueue } from '@services/sync';
 import { reminderEngine } from '@services/notifications';
 import type {
   Appointment,
+  AppointmentStatus,
   BookingInput,
   Pet,
   PetInput,
@@ -32,6 +33,13 @@ interface DataState {
   deletePet: (ownerId: string, petId: string, clerkUser?: any) => Promise<void>;
   bookAppointment: (ownerId: string, input: BookingInput, clerkUser?: any) => Promise<Appointment>;
   cancelAppointment: (ownerId: string, appointmentId: string, clerkUser?: any) => Promise<void>;
+  updateAppointmentStatus: (
+    ownerId: string,
+    appointmentId: string,
+    status: AppointmentStatus,
+    queueTicket?: any,
+    notes?: string,
+  ) => Promise<void>;
   syncNow: (ownerId: string, clerkUser?: any) => Promise<void>;
   reset: () => void;
 }
@@ -366,6 +374,43 @@ export const useDataStore = create<DataState>((set, get) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
 
       syncEngine.sync(ownerId, clerkUser).catch(() => {});
+    },
+
+    updateAppointmentStatus: async (ownerId, appointmentId, status, queueTicket, notes) => {
+      set((state) => ({
+        appointments: state.appointments.map((a) =>
+          a.id === appointmentId
+            ? {
+                ...a,
+                status,
+                ...(queueTicket ? { queueTicket } : {}),
+                ...(notes ? { notes } : {}),
+              }
+            : a,
+        ),
+      }));
+
+      const currentPets = get().pets;
+      const currentAppts = get().appointments;
+      const currentAct = get().activity;
+      await AsyncStorage.setItem(
+        `syncvet.data.${ownerId}`,
+        JSON.stringify({ pets: currentPets, appointments: currentAppts, activity: currentAct }),
+      );
+
+      queryClient.setQueryData<Appointment[]>(queryKeys.appointments(ownerId), (old = []) => {
+        return old.map((a) =>
+          a.id === appointmentId
+            ? {
+                ...a,
+                status,
+                ...(queueTicket ? { queueTicket } : {}),
+                ...(notes ? { notes } : {}),
+              }
+            : a,
+        );
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
     },
 
     syncNow: async (ownerId, clerkUser) => {

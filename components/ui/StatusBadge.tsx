@@ -8,10 +8,14 @@ const STATUS_META: Record<
   AppointmentStatus,
   { label: string; color: string; bg: string }
 > = {
-  pending: { label: 'Pending', color: colors.warningDark, bg: colors.warningLight },
+  pending: { label: 'Upcoming', color: colors.warningDark, bg: colors.warningLight },
   confirmed: { label: 'Confirmed', color: colors.info, bg: colors.infoLight },
   completed: { label: 'Completed', color: colors.successDark, bg: colors.successLight },
   cancelled: { label: 'Cancelled', color: colors.textMuted, bg: colors.surfaceMuted },
+  overdue: { label: 'Overdue', color: '#DC2626', bg: '#FEE2E2' },
+  missed: { label: 'Missed', color: '#DC2626', bg: '#FEE2E2' },
+  queued: { label: 'In Queue', color: '#0D9488', bg: '#CCFBF1' },
+  checked_in: { label: 'In Queue', color: '#0D9488', bg: '#CCFBF1' },
 };
 
 interface StatusBadgeProps {
@@ -19,7 +23,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const meta = STATUS_META[status];
+  const meta = STATUS_META[status] || STATUS_META.pending;
   return (
     <View style={[styles.badge, { backgroundColor: meta.bg }]}>
       <View style={[styles.dot, { backgroundColor: meta.color }]} />
