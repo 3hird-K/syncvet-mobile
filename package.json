@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@clerk/expo": "^4.2.7",
-    "@clerk/expo-google-signin": "^1.0.0",
+    "@clerk/expo": "4.15.1",
+    "@clerk/expo-google-signin": "1.1.0",
     "@expo-google-fonts/caveat": "^0.4.2",
     "@expo-google-fonts/pacifico": "^0.4.1",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.0",
