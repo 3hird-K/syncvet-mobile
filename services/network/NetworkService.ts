@@ -12,6 +12,9 @@ class NetworkService {
 
   private listeners = new Set<NetworkStatusListener>();
   private checkInterval: ReturnType<typeof setInterval> | null = null;
+  private networkSubscription: { remove: () => void } | null = null;
+  private webOnlineHandler: (() => void) | null = null;
+  private webOfflineHandler: (() => void) | null = null;
   private isChecking = false;
   private isSyncing = false;
 
@@ -20,12 +23,31 @@ class NetworkService {
   }
 
   private async init() {
-    await this.checkNetwork();
-
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.addEventListener('online', () => this.handleWebStatusChange(true));
-      window.addEventListener('offline', () => this.handleWebStatusChange(false));
+      this.webOnlineHandler = () => this.handleWebStatusChange(true);
+      this.webOfflineHandler = () => this.handleWebStatusChange(false);
+      window.addEventListener('online', this.webOnlineHandler);
+      window.addEventListener('offline', this.webOfflineHandler);
+    } else {
+      // Native listener gives us near-instant connectivity transitions instead of
+      // relying only on the slower fallback heartbeat below.
+      try {
+        this.networkSubscription = Network.addNetworkStateListener((state) => {
+          const isConnected = state.isConnected ?? true;
+          const isInternetReachable = state.isInternetReachable ?? isConnected;
+          this.updateState({
+            isConnected,
+            isInternetReachable,
+            status: this.deriveStatus(isConnected, isInternetReachable),
+            lastCheckedAt: Date.now(),
+          });
+        });
+      } catch {
+        // Older runtimes may not expose the listener; periodic checks still work.
+      }
     }
+
+    await this.checkNetwork();
 
     // Periodic check every 15 seconds to ensure heartbeat liveness without excessive battery drain
     this.startPeriodicCheck(15000);
@@ -146,6 +168,16 @@ class NetworkService {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
     }
+    this.networkSubscription?.remove();
+    this.networkSubscription = null;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (this.webOnlineHandler) window.removeEventListener('online', this.webOnlineHandler);
+      if (this.webOfflineHandler) window.removeEventListener('offline', this.webOfflineHandler);
+    }
+    this.webOnlineHandler = null;
+    this.webOfflineHandler = null;
+
     this.listeners.clear();
   }
 }

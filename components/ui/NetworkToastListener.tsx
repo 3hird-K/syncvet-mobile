@@ -17,24 +17,18 @@ export function NetworkToastListener() {
       if (isFirstMount.current) {
         isFirstMount.current = false;
         wasOnlineRef.current = isOnline;
-        // If the app starts up already offline, give the resident a gentle heads up
-        if (!isOnline) {
-          toast.warning('You are currently offline', {
-            id: 'network-connectivity',
-            description: 'Changes will be saved locally and synced once reconnected.',
-            duration: 4000,
-          });
-        }
+        // Cold-start offline is a normal state here: cached screens render
+        // normally and only actions that need connectivity explain the limit.
         return;
       }
 
       // Transition: Online -> Offline
       if (wasOnlineRef.current === true && !isOnline) {
         wasOnlineRef.current = false;
-        toast.warning('You are currently offline', {
+        toast.info('Offline mode', {
           id: 'network-connectivity',
-          description: 'Changes will be saved locally and synced once reconnected.',
-          duration: 4000,
+          description: 'Changes are saved locally and synced when you reconnect.',
+          duration: 3500,
         });
       }
       // Transition: Offline -> Online

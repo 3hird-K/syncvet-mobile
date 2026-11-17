@@ -25,7 +25,8 @@ import { ONBOARDING_SLIDES } from '@lib/onboarding';
 import type { OnboardingSlideData } from '@lib/onboarding';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import { supabase } from '@lib/supabase';
+import { isRestrictedStaffRole } from '@services/auth/types';
+import { networkService } from '@services/network';
 import { ProgressIndicator } from '@components/ui/ProgressIndicator';
 import { OnboardingSlide } from '@components/ui/OnboardingSlide';
 import { Button } from '@components/ui/Button';
@@ -68,52 +69,70 @@ export default function OnboardingScreen() {
     }
   }, [googleError]);
 
-  // Seamlessly check existing authentication on initial mount (cold start)
+  // Seamlessly route returning users on cold start. Offline users are restored
+  // from the locally persisted session instead of waiting for Clerk/network.
   const coldStartCheckedRef = useRef(false);
   useEffect(() => {
-    if (coldStartCheckedRef.current) return;
-    if (clerkLoaded && isSignedIn && clerkUser && !connectingGoogle) {
-      coldStartCheckedRef.current = true;
-      setCheckingAuth(true);
-      try {
-        void WebBrowser.dismissAuthSession();
-        void WebBrowser.coolDownAsync();
-      } catch {}
+    if (coldStartCheckedRef.current || connectingGoogle) return;
 
-      useAuthStore.getState().syncUserFromClerk(clerkUser).then(async () => {
-        const currentUser = useAuthStore.getState().user;
-        const hasCompletedProfile = Boolean(
-          currentUser?.profileCompleted &&
-          currentUser?.mobileNumber &&
-          currentUser?.address
-        );
+    const localSession = useAuthStore.getState();
+    const hasLocalSession =
+      localSession.status === 'authenticated' && Boolean(localSession.user);
+    const offlineLocalSession = !networkService.isOnline() && hasLocalSession;
 
-        try {
-          void WebBrowser.dismissAuthSession();
-          void WebBrowser.coolDownAsync();
-        } catch {}
+    if (!isSignedIn && !offlineLocalSession) return;
+    // Clerk can report a signed-in state before the user resource is ready.
+    // Wait for it online; offline we can route from the persisted profile.
+    if (isSignedIn && !clerkUser && !offlineLocalSession) return;
 
-        if (hasCompletedProfile) {
-          router.replace('/(main)');
-        } else {
-          router.replace('/(register)/owner');
-        }
-      }).catch(() => {
-        router.replace('/(register)/owner');
-      });
+    coldStartCheckedRef.current = true;
+    setCheckingAuth(true);
+
+    try {
+      void WebBrowser.dismissAuthSession();
+      void WebBrowser.coolDownAsync();
+    } catch {}
+
+    const finishRouting = () => {
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser) {
+        setCheckingAuth(false);
+        return;
+      }
+
+      if (isRestrictedStaffRole(currentUser.role)) {
+        router.replace('/unauthorized-role');
+        return;
+      }
+
+      const hasCompletedProfile = Boolean(
+        currentUser.profileCompleted &&
+        (currentUser.mobileNumber || currentUser.address),
+      );
+
+      router.replace(hasCompletedProfile ? '/(main)' : '/(register)/owner');
+    };
+
+    if (isSignedIn && clerkUser) {
+      useAuthStore.getState().syncUserFromClerk(clerkUser)
+        .then(finishRouting)
+        .catch(finishRouting);
+    } else {
+      finishRouting();
     }
   }, [clerkLoaded, isSignedIn, clerkUser, connectingGoogle, router]);
 
   // Jump to specific slide if requested (e.g. after logout)
   useEffect(() => {
     if (slide === '3' || slide === 'last') {
+      setCompleted();
       setCurrent(3);
       const timer = setTimeout(() => {
         listRef.current?.scrollToIndex({ index: 3, animated: false });
       }, 80);
       return () => clearTimeout(timer);
     }
-  }, [slide]);
+  }, [slide, setCompleted]);
 
   const total = ONBOARDING_SLIDES.length;
   const isLast = current === total - 1;
@@ -126,26 +145,47 @@ export default function OnboardingScreen() {
 
   const skip = useCallback(() => {
     haptic.light();
+    setCompleted();
     setCurrent(total - 1);
     listRef.current?.scrollToIndex({ index: total - 1, animated: true });
-  }, [total]);
+  }, [total, setCompleted]);
 
   const onMomentumScrollEnd = useCallback(
     (e: ScrollEvent) => {
       const index = Math.round(e.nativeEvent.contentOffset.x / width);
-      setCurrent(Math.max(0, Math.min(total - 1, index)));
+      const clamped = Math.max(0, Math.min(total - 1, index));
+      setCurrent(clamped);
+      // Persist locally so onboarding is never replayed just because the device
+      // is offline on the next launch.
+      if (clamped === total - 1) {
+        setCompleted();
+      }
     },
-    [width, total],
+    [width, total, setCompleted],
   );
+
+  // Authentication genuinely requires connectivity. Explain that only when the
+  // user reaches the action, never as a blocking banner on the static slides.
+  const handleSignInPress = useCallback(async () => {
+    if (!networkService.isOnline()) {
+      haptic.light();
+      toast.info('You are offline', {
+        description: 'Connect to the internet to continue with Google sign-in.',
+        duration: 4000,
+      });
+      return;
+    }
+    await handleGoogleSignIn();
+  }, [handleGoogleSignIn]);
 
   const onScrollEndDrag = useCallback(
     (e: ScrollEvent) => {
       const velocityX = e.nativeEvent.velocity?.x ?? 0;
       if (isLast && velocityX < -0.5) {
-        handleGoogleSignIn();
+        handleSignInPress();
       }
     },
-    [isLast, handleGoogleSignIn],
+    [isLast, handleSignInPress],
   );
 
   const renderItem = useCallback(
@@ -174,7 +214,7 @@ export default function OnboardingScreen() {
                     <Button
                       title="Continue with Google"
                       size="lg"
-                      onPress={handleGoogleSignIn}
+                      onPress={handleSignInPress}
                       loading={connectingGoogle}
                       variant="primary"
                       style={styles.googleCtaButton}
@@ -199,7 +239,7 @@ export default function OnboardingScreen() {
         </View>
       );
     },
-    [width, scrollX, total, connectingGoogle, handleGoogleSignIn],
+    [width, scrollX, total, connectingGoogle, handleSignInPress],
   );
 
   const insets = useSafeAreaInsets();

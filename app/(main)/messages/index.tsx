@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   RefreshControl,
@@ -12,17 +11,15 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/expo';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { haptic } from '@lib/haptics';
+import { queryKeys } from '@lib/queryClient';
 import { useAuthStore } from '@store/useAuthStore';
+import { networkService } from '@services/network';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
-import { MessagesScreenSkeleton } from '@components/ui/Skeleton';
-import {
-  chatService,
-  OFFICIAL_CONTACTS,
-  type ChatThread,
-} from '@services/chat/chatService';
+import { toast } from '@components/ui/Sonner';
 
 export default function MessagesIndexScreen() {
   const router = useRouter();
@@ -31,55 +28,31 @@ export default function MessagesIndexScreen() {
   const authUser = useAuthStore((s) => s.user);
   const ownerId = authUser?.id || clerkUser?.id || '';
 
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
-  const [threads, setThreads] = useState<Record<string, ChatThread>>({});
 
-  const loadThreads = useCallback(async () => {
-    if (!ownerId) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const list = await chatService.getResidentChats(ownerId);
-      const map: Record<string, ChatThread> = {};
-      list.forEach((t) => {
-        if (t.assigned_vet_name?.includes('Helen') || t.subject?.includes('Telemedicine')) {
-          map['vet-hellen'] = t;
-        } else {
-          map['cvo-admin'] = t;
-        }
-      });
-      setThreads(map);
-    } catch (err) {
-      console.warn('Error loading threads:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [ownerId]);
-
-  useEffect(() => {
-    loadThreads();
-  }, [loadThreads]);
-
-  const handleRefresh = async () => {
+  // The two official channels and their imagery are bundled with the app, so
+  // this screen never needs to wait on Supabase just to render.
+  const handleRefresh = useCallback(async () => {
+    haptic.light();
     setRefreshing(true);
-    await loadThreads();
-  };
+    if (ownerId && networkService.isOnline()) {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.unreadMessagesCount(ownerId),
+      });
+    } else {
+      toast.info('Offline mode', {
+        description: 'Saved conversations are still available.',
+        duration: 2500,
+      });
+    }
+    setRefreshing(false);
+  }, [ownerId, queryClient]);
 
   const handleOpenChat = (contactId: 'vet-hellen' | 'cvo-admin') => {
     haptic.light();
     router.push(`/messages/${contactId}` as never);
   };
-
-  if (loading && !refreshing) {
-    return (
-      <AnimatedScreen animation="zoom">
-        <MessagesScreenSkeleton />
-      </AnimatedScreen>
-    );
-  }
 
   return (
     <AnimatedScreen animation="zoom">

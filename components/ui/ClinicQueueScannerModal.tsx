@@ -22,11 +22,11 @@ import { todayISO, formatDateWithYear } from '@lib/format';
 import { getService } from '@lib/services';
 import { useDataStore } from '@store/useDataStore';
 import { useAuthStore } from '@store/useAuthStore';
+import { networkService } from '@services/network';
 import {
   parseClinicQueueQr,
   validateCheckInEligibility,
   checkInAppointmentToQueue,
-  markAppointmentOverdue,
 } from '@services/queue/queueService';
 import type { Appointment, QueueTicketInfo } from '@services/data';
 import { toast } from '@components/ui/Sonner';
@@ -83,6 +83,19 @@ export function ClinicQueueScannerModal({
   const processQrData = useCallback(
     async (rawData: string) => {
       if (!appointment || !isScanningRef.current) return;
+
+      // Queue tickets are allocated by the clinic backend, so check-in cannot
+      // be honestly completed or faked while offline.
+      if (!networkService.isOnline()) {
+        haptic.warning();
+        toast.info('You are offline', {
+          description: 'Clinic check-in requires an internet connection.',
+          duration: 3500,
+        });
+        setErrorMessage('Connect to the internet to check in to the clinic queue.');
+        return;
+      }
+
       isScanningRef.current = false;
       setIsProcessing(true);
       setErrorMessage(null);
@@ -106,8 +119,7 @@ export function ClinicQueueScannerModal({
         if (!eligibility.eligible) {
           if (eligibility.reason === 'overdue') {
             haptic.error();
-            // Mark overdue in database and store
-            await markAppointmentOverdue(appointment.id);
+            // Queue the status change locally; SyncEngine updates the backend.
             await updateAppointmentStatus(ownerId, appointment.id, 'overdue');
             toast.error('Appointment Overdue', {
               description: eligibility.message,

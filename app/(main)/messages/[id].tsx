@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   Alert,
@@ -31,7 +32,10 @@ import { queryKeys } from '@lib/queryClient';
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
+import { useNetworkStatus } from '@hooks/useNetworkStatus';
+import { networkService } from '@services/network';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
+import { toast } from '@components/ui/Sonner';
 import { TypingIndicator } from '@components/messages';
 import { ChatMessageListSkeleton } from '@components/ui/Skeleton';
 import {
@@ -58,6 +62,31 @@ const SUGGESTIONS: Record<string, string[]> = {
     'Adoption & impound inquiry',
   ],
 };
+
+interface CachedConversation {
+  chat: ChatThread;
+  messages: ChatMessage[];
+}
+
+function conversationCacheKey(ownerId: string, contactId: string): string {
+  return `syncvet.chat.${ownerId}.${contactId}`;
+}
+
+async function readCachedConversation(
+  ownerId: string,
+  contactId: string,
+): Promise<CachedConversation | null> {
+  if (!ownerId) return null;
+  try {
+    const raw = await AsyncStorage.getItem(conversationCacheKey(ownerId, contactId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.chat?.id || !Array.isArray(parsed.messages)) return null;
+    return parsed as CachedConversation;
+  } catch {
+    return null;
+  }
+}
 
 interface SwipeableMessageProps {
   isResident: boolean;
@@ -232,6 +261,11 @@ export default function ChatConversationScreen() {
   const authUser = useAuthStore((s) => s.user);
   const ownerId = authUser?.id || clerkUser?.id || '';
   const senderName = authUser?.fullName || clerkUser?.fullName || 'Pet Owner';
+  const { isOnline } = useNetworkStatus();
+  const cacheKey = useMemo(
+    () => conversationCacheKey(ownerId, contactId),
+    [ownerId, contactId],
+  );
 
   const [loading, setLoading] = useState(true);
   const [chat, setChat] = useState<ChatThread | null>(null);
@@ -296,12 +330,25 @@ export default function ChatConversationScreen() {
     [messages],
   );
 
-  // Load chat and messages
+  // Load cached messages first, then refresh from Supabase when online.
   const loadChat = useCallback(async () => {
     if (!ownerId) {
       setLoading(false);
       return;
     }
+
+    const cached = await readCachedConversation(ownerId, contactId);
+    if (cached) {
+      setChat(cached.chat);
+      setMessages(cached.messages);
+      setLoading(false);
+    }
+
+    if (!networkService.isOnline()) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const { chat: activeChat, messages: msgList } = await chatService.getOrCreateChat(
         ownerId,
@@ -326,9 +373,18 @@ export default function ChatConversationScreen() {
     loadChat();
   }, [loadChat]);
 
-  // Subscribe to real-time messages with deduplication & optimistic replacement
+  // Keep the locally rendered conversation available on the next offline launch.
   useEffect(() => {
     if (!chat?.id) return;
+    AsyncStorage.setItem(
+      cacheKey,
+      JSON.stringify({ chat, messages } satisfies CachedConversation),
+    ).catch(() => {});
+  }, [cacheKey, chat, messages]);
+
+  // Subscribe to real-time messages with deduplication & optimistic replacement
+  useEffect(() => {
+    if (!isOnline || !chat?.id) return;
     const unsubscribe = chatService.subscribeToChat(chat.id, (newMsg) => {
       // Mark as read in real-time if resident is actively inside this chat room
       if (newMsg.sender_role !== 'Pet Owner') {
@@ -370,14 +426,14 @@ export default function ChatConversationScreen() {
 
     return () => {
       unsubscribe();
-      if (chat?.id) {
+      if (isOnline && chat?.id) {
         chatService.markMessagesAsRead(chat.id);
         queryClient.invalidateQueries({
           queryKey: queryKeys.unreadMessagesCount(ownerId),
         });
       }
     };
-  }, [chat?.id, ownerId, queryClient]);
+  }, [chat?.id, isOnline, ownerId, queryClient]);
 
   // Android Keyboard height management & layout animation
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
@@ -421,6 +477,18 @@ export default function ChatConversationScreen() {
     };
   }, []);
 
+  // Chat writes require immediate server delivery. Keep cached conversations
+  // readable offline, but never pretend a message was sent without a connection.
+  const requireOnline = useCallback(() => {
+    if (networkService.isOnline()) return true;
+    haptic.light();
+    toast.info('You are offline', {
+      description: 'Reconnect to send, edit, or react to messages.',
+      duration: 3500,
+    });
+    return false;
+  }, []);
+
   const handleSwipeReply = (message: ChatMessage) => {
     haptic.light();
     setReplyingTo(message);
@@ -434,6 +502,7 @@ export default function ChatConversationScreen() {
    * Toggle 🐾 Paw reaction on bubble click / tap
    */
   const handleToggleReaction = async (message: ChatMessage) => {
+    if (!requireOnline()) return;
     haptic.light();
     const { reactions, imageUrl, replyTo, isUnsent, isEdited } = parseAttachment(message.attachment_url);
     const hasPaw = reactions.includes('🐾');
@@ -476,6 +545,7 @@ export default function ChatConversationScreen() {
    * Unsend message
    */
   const handleUnsendMessage = async (message: ChatMessage) => {
+    if (!requireOnline()) return;
     haptic.medium();
     setSelectedMessageForAction(null);
 
@@ -509,6 +579,7 @@ export default function ChatConversationScreen() {
 
       if (!text && !directAttachmentUrl && !photo) return;
       if (!chat?.id) return;
+      if (!requireOnline()) return;
 
       haptic.light();
 
@@ -870,7 +941,29 @@ const handleThumbsUp = () => {
                         : 'Today'}
                     </Text>
                   </View>
+
+                  {!isOnline ? (
+                    <View style={styles.offlineChatNotice}>
+                      <Ionicons name="cloud-offline-outline" size={13} color={colors.textMuted} />
+                      <Text style={styles.offlineChatNoticeText}>
+                        Offline · showing saved messages
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
+              }
+              ListEmptyComponent={
+                !loading && !isOnline ? (
+                  <View style={styles.offlineChatEmpty}>
+                    <Ionicons name="chatbubble-outline" size={30} color={colors.textMuted} />
+                    <Text style={styles.offlineChatEmptyTitle}>
+                      No saved messages yet
+                    </Text>
+                    <Text style={styles.offlineChatEmptyText}>
+                      Reconnect once to load this conversation.
+                    </Text>
+                  </View>
+                ) : undefined
               }
               renderItem={({ item, index }) => {
                 const isResident = item.sender_role === 'Pet Owner';
@@ -1822,6 +1915,38 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: '#64748B',
     fontWeight: '600',
+  },
+  offlineChatNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 2,
+    paddingVertical: 5,
+  },
+  offlineChatNoticeText: {
+    fontFamily: typography.font.medium,
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  offlineChatEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+    gap: 6,
+  },
+  offlineChatEmptyTitle: {
+    fontFamily: typography.font.bold,
+    fontSize: 14,
+    color: colors.textPrimary,
+    marginTop: 4,
+  },
+  offlineChatEmptyText: {
+    fontFamily: typography.font.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   swipeableContainer: {
     position: 'relative',

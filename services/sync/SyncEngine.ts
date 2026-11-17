@@ -6,7 +6,14 @@ import { getDataService } from '@services/data';
 import { syncQueue } from './SyncQueue';
 import { ConflictResolver } from './ConflictResolver';
 import type { SyncEngineState, SyncOperation, SyncResult } from './types';
-import type { ActivityItem, Appointment, BookingInput, Pet, PetInput } from '@services/data/types';
+import type {
+  ActivityItem,
+  Appointment,
+  AppointmentStatus,
+  BookingInput,
+  Pet,
+  PetInput,
+} from '@services/data/types';
 import { queryClient, queryKeys } from '@lib/queryClient';
 
 function lastSyncKey(ownerId: string): string {
@@ -297,6 +304,46 @@ export class SyncEngine {
       case 'CANCEL_APPOINTMENT': {
         const apptId = op.entityId;
         await dataService.cancelAppointment(op.ownerId, apptId);
+        break;
+      }
+
+      case 'UPDATE_APPOINTMENT_STATUS': {
+        const payload = op.payload as {
+          status?: AppointmentStatus;
+          notes?: string | null;
+          queueTicket?: { ticketNumber?: string };
+        };
+        const nowISO = new Date().toISOString();
+        const { error } = await supabase
+          .from('appointments')
+          .update({
+            ...(payload.status ? { status: payload.status } : {}),
+            ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
+            updated_at: nowISO,
+          })
+          .eq('id', op.entityId);
+
+        if (error) throw error;
+
+        const ticketNumber = payload.queueTicket?.ticketNumber;
+        if (ticketNumber && payload.status) {
+          const { error: ticketError } = await supabase
+            .from('queue_tickets')
+            .update({
+              status: payload.status,
+              ...(payload.status === 'completed'
+                ? { completed_at: nowISO }
+                : payload.status === 'called'
+                  ? { called_at: nowISO }
+                  : {}),
+              updated_at: nowISO,
+            })
+            .eq('ticket_number', ticketNumber);
+
+          if (ticketError) {
+            console.warn('Queue ticket status sync note:', ticketError.message);
+          }
+        }
         break;
       }
 

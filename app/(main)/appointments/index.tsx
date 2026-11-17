@@ -30,6 +30,7 @@ import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
+import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { AppointmentSwitch, AppointmentTab } from '@components/ui/AppointmentSwitch';
@@ -41,7 +42,7 @@ import { PetCalledRingModal } from '@components/ui/PetCalledRingModal';
 import { AppointmentsScreenSkeleton } from '@components/ui/Skeleton';
 import { toast } from '@components/ui/Sonner';
 import { supabase } from '@lib/supabase';
-import { callQueueAppointment, completeQueueAppointment } from '@services/queue/queueService';
+import { networkService } from '@services/network';
 import type { Appointment, QueueTicketInfo } from '@services/data';
 
 const TAB_PAGES: AppointmentTab[] = ['upcoming', 'past'];
@@ -81,6 +82,7 @@ export default function AppointmentsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { user: clerkUser } = useUser();
+  const { isOnline } = useNetworkStatus();
   const {
     pets: storePets,
     appointments: storeAppointments,
@@ -123,21 +125,24 @@ export default function AppointmentsScreen() {
     async (appointment: Appointment, ticket?: QueueTicketInfo | null) => {
       haptic.success();
       try {
-        await completeQueueAppointment(
+        await updateAppointmentStatus(
+          ownerId,
           appointment.id,
-          ticket?.ticketNumber || appointment.queueTicket?.ticketNumber,
+          'completed',
+          ticket ?? appointment.queueTicket ?? undefined,
         );
-        await updateAppointmentStatus(ownerId, appointment.id, 'completed');
         setCalledModalData({ visible: false, appointment: null, ticket: null });
         setTicketModalData({ visible: false, appointment: null, ticket: null });
         toast.success('Consultation Completed', {
-          description: `${appointment.petName}'s visit has been placed in History.`,
+          description: networkService.isOnline()
+            ? `${appointment.petName}'s visit has been placed in History.`
+            : `${appointment.petName}'s visit was saved locally and will sync when you reconnect.`,
         });
         // Switch tab to History
         setActiveTab('past');
         listRef.current?.scrollToIndex({ index: 1, animated: true });
       } catch (err: any) {
-        toast.error('Could not complete visit', { description: err?.message });
+        toast.error('Could not update visit locally', { description: err?.message });
       }
     },
     [ownerId, updateAppointmentStatus],
@@ -155,7 +160,6 @@ export default function AppointmentsScreen() {
         servingVet: 'Dr. Helen Ann P. Tacandong, DVM',
       };
 
-      await callQueueAppointment(appointment.id, ticketInfo.ticketNumber);
       await updateAppointmentStatus(ownerId, appointment.id, 'called', ticketInfo);
 
       setCalledModalData({
@@ -169,7 +173,7 @@ export default function AppointmentsScreen() {
 
   // Supabase Realtime Listener on queue_tickets and appointments
   useEffect(() => {
-    if (!ownerId) return;
+    if (!ownerId || !isOnline) return;
 
     const channelName = `realtime-queue-${ownerId}-${Math.random().toString(36).slice(2, 7)}`;
     const channel = supabase
@@ -199,14 +203,18 @@ export default function AppointmentsScreen() {
               consultationRoom: row.consultation_room || 'Consultation Desk 1',
               servingVet: row.serving_vet || 'Dr. Helen Ann P. Tacandong, DVM',
             };
-            await updateAppointmentStatus(ownerId, matchedAppt.id, 'called', ticketInfo);
+            await updateAppointmentStatus(ownerId, matchedAppt.id, 'called', ticketInfo, undefined, {
+              queueForSync: false,
+            });
             setCalledModalData({
               visible: true,
               appointment: { ...matchedAppt, status: 'called', queueTicket: ticketInfo },
               ticket: ticketInfo,
             });
           } else if (row.status === 'completed') {
-            await updateAppointmentStatus(ownerId, matchedAppt.id, 'completed');
+            await updateAppointmentStatus(ownerId, matchedAppt.id, 'completed', undefined, undefined, {
+              queueForSync: false,
+            });
             setCalledModalData({ visible: false, appointment: null, ticket: null });
             toast.success('Visit Completed', {
               description: `${matchedAppt.petName}'s visit was completed and placed in History.`,
@@ -225,7 +233,9 @@ export default function AppointmentsScreen() {
           const row = payload.new;
           if (!row) return;
           if (row.status === 'completed' && row.owner_id === ownerId) {
-            await updateAppointmentStatus(ownerId, row.id, 'completed');
+            await updateAppointmentStatus(ownerId, row.id, 'completed', undefined, undefined, {
+              queueForSync: false,
+            });
           }
         },
       )
@@ -234,7 +244,7 @@ export default function AppointmentsScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [ownerId, storeAppointments, updateAppointmentStatus]);
+  }, [isOnline, ownerId, storeAppointments, updateAppointmentStatus]);
 
   const listRef = useRef<FlatList<AppointmentTab>>(null);
   const scrollX = useSharedValue(0);

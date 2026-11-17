@@ -111,26 +111,28 @@ export default function RootLayout() {
       tokenCache={tokenCache}
       __experimental_resourceCache={resourceCache}
     >
+      {/* Static screens (onboarding, welcome, error pages) must render even when
+          Clerk cannot initialize offline, so ClerkLoaded only guards the bridge. */}
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={styles.root}>
+          <SafeAreaProvider>
+            <StatusBar style="dark" />
+            {fontsLoaded || fontError ? (
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  animation: 'fade',
+                  contentStyle: { backgroundColor: colors.primaryLight },
+                }}
+              />
+            ) : null}
+            <Toaster />
+            <NetworkToastListener />
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
       <ClerkLoaded>
-        <QueryClientProvider client={queryClient}>
-          <SupabaseAuthBridge />
-          <GestureHandlerRootView style={styles.root}>
-            <SafeAreaProvider>
-              <StatusBar style="dark" />
-              {fontsLoaded || fontError ? (
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    animation: 'fade',
-                    contentStyle: { backgroundColor: colors.primaryLight },
-                  }}
-                />
-              ) : null}
-              <Toaster />
-              <NetworkToastListener />
-            </SafeAreaProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
+        <SupabaseAuthBridge />
       </ClerkLoaded>
     </ClerkProvider>
   );

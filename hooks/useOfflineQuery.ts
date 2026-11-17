@@ -44,6 +44,13 @@ export function useOfflineQuery<T>({
   const cacheKey = `syncvet.query_cache.${queryKey}`;
   const lastFetchTimeRef = useRef<number>(0);
 
+  // Keep the latest query function without making the revalidation effect
+  // re-run on every render (inline query functions are common at call sites).
+  const queryFnRef = useRef(queryFn);
+  useEffect(() => {
+    queryFnRef.current = queryFn;
+  }, [queryFn]);
+
   const loadFromCache = useCallback(async (): Promise<T | null> => {
     try {
       const raw = await AsyncStorage.getItem(cacheKey);
@@ -85,7 +92,7 @@ export function useOfflineQuery<T>({
     setIsRefreshing(true);
     setError(null);
     try {
-      const freshData = await queryFn();
+      const freshData = await queryFnRef.current();
       setData(freshData);
       lastFetchTimeRef.current = Date.now();
       await saveToCache(freshData);
@@ -95,7 +102,7 @@ export function useOfflineQuery<T>({
       setIsRefreshing(false);
       setIsLoading(false);
     }
-  }, [enabled, queryFn, saveToCache]);
+  }, [enabled, saveToCache]);
 
   useEffect(() => {
     if (!enabled) return;

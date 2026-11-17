@@ -15,7 +15,13 @@ export default function IndexScreen() {
   const { user: clerkUser } = useUser();
 
   useEffect(() => {
-    if (!isLoaded) return;
+    const localSession = useAuthStore.getState();
+    const hasLocalSession = localSession.status === 'authenticated' && !!localSession.user;
+
+    // When offline, Clerk may still be initializing (or resolve late). If we
+    // already have a persisted local session we can route immediately instead of
+    // blocking the user on a splash screen.
+    if (!isLoaded && !hasLocalSession) return;
 
     let isMounted = true;
 

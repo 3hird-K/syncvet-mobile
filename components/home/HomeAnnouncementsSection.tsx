@@ -12,11 +12,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { useQuery } from '@tanstack/react-query';
 
-import { colors, typography } from '@theme';
+import { colors, radius, typography } from '@theme';
 import { supabase } from '@lib/supabase';
 import { haptic } from '@lib/haptics';
+import { useOfflineQuery } from '@hooks/useOfflineQuery';
 import { Skeleton, SkeletonCircle } from '@components/ui/Skeleton';
 import {
   extractOutreachOpId,
@@ -168,14 +168,18 @@ export function HomeAnnouncementsSection() {
   const [scannerOutreach, setScannerOutreach] = useState<OutreachDetails | null>(null);
   const [receiptResult, setReceiptResult] = useState<OutreachRecordResult | null>(null);
 
-  // TanStack Query for caching, revalidation, and background sync
+  // Cached announcements render immediately; Supabase is only a background
+  // refresh source so this feed remains readable offline.
   const {
     data: announcements = [],
     isLoading,
-    isError,
+    isRefreshing,
+    isOffline,
+    error,
     refetch,
-  } = useQuery({
-    queryKey: ['announcements'],
+  } = useOfflineQuery<AnnouncementItem[]>({
+    queryKey: 'home.announcements.v1',
+    staleTimeMs: 1000 * 60 * 3,
     queryFn: async (): Promise<AnnouncementItem[]> => {
       const [annRes, fieldOpRes] = await Promise.all([
         supabase
@@ -189,38 +193,35 @@ export function HomeAnnouncementsSection() {
           .select('id, op_id, barangay, scheduled_date, status, notes, lead'),
       ]);
 
-        if (annRes.error) {
-          throw new Error(annRes.error.message);
-        }
+      if (annRes.error) {
+        throw new Error(annRes.error.message);
+      }
 
-        const fieldOpsByOpId = new Map<string, FieldOperationRecord>();
-        if (!fieldOpRes.error && Array.isArray(fieldOpRes.data)) {
-          for (const op of fieldOpRes.data as FieldOperationRecord[]) {
-            if (op.op_id) {
-              fieldOpsByOpId.set(op.op_id.toUpperCase(), op);
-            }
+      const fieldOpsByOpId = new Map<string, FieldOperationRecord>();
+      if (!fieldOpRes.error && Array.isArray(fieldOpRes.data)) {
+        for (const op of fieldOpRes.data as FieldOperationRecord[]) {
+          if (op.op_id) {
+            fieldOpsByOpId.set(op.op_id.toUpperCase(), op);
           }
         }
+      }
 
-        // Filter out internal system configuration records (e.g. quota config)
+      // Filter out internal system configuration records (e.g. quota config)
       const visible = (annRes.data || []).filter(
-          (a: any) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
-        );
+        (a: any) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
+      );
 
-        return visible.map((a: any) => {
-          const opId = extractOutreachOpId(a.content);
-          const fieldOperation = opId
-            ? fieldOpsByOpId.get(opId.toUpperCase()) ?? null
-            : null;
-          return {
-            ...a,
-            fieldOperation,
-          };
-        });
-      },
-      staleTime: 1000 * 60 * 3, // 3 minutes stale time
-        gcTime: 1000 * 60 * 30, // 30 minutes garbage collection
-          refetchOnReconnect: true,
+      return visible.map((a: any) => {
+        const opId = extractOutreachOpId(a.content);
+        const fieldOperation = opId
+          ? fieldOpsByOpId.get(opId.toUpperCase()) ?? null
+          : null;
+        return {
+          ...a,
+          fieldOperation,
+        };
+      });
+    },
   });
 
   const filteredAnnouncements = useMemo(() => {
@@ -286,14 +287,37 @@ export function HomeAnnouncementsSection() {
         </ScrollView>
       </View>
 
-      {/* Announcements Feed (Facebook Style Posts or Facebook Skeletons) */}
+      {(isOffline || isRefreshing) && announcements.length > 0 ? (
+        <View style={styles.cachedNotice}>
+          <Ionicons
+            name={isRefreshing ? 'sync-outline' : 'cloud-offline-outline'}
+            size={13}
+            color={colors.textMuted}
+          />
+          <Text style={styles.cachedNoticeText}>
+            {isRefreshing
+              ? 'Refreshing announcements…'
+              : 'Showing saved announcements'}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Announcements Feed (cached posts first, then a background refresh) */}
       {isLoading && announcements.length === 0 ? (
         <View style={styles.skeletonContainer}>
           <FacebookPostSkeleton hasImage />
           <FacebookPostSkeleton />
           <FacebookPostSkeleton hasImage />
         </View>
-      ) : isError ? (
+      ) : error && announcements.length === 0 && isOffline ? (
+        <View style={styles.emptyCard}>
+          <Ionicons name="cloud-offline-outline" size={30} color={colors.textMuted} />
+          <Text style={styles.emptyTitle}>No saved announcements</Text>
+          <Text style={styles.emptySubtitle}>
+            Connect to the internet once to download the latest updates.
+          </Text>
+        </View>
+      ) : error && announcements.length === 0 ? (
         <View style={styles.emptyCard}>
           <Ionicons name="alert-circle-outline" size={30} color={colors.warning} />
           <Text style={styles.emptyTitle}>Unable to load announcements</Text>
@@ -421,13 +445,24 @@ function FacebookPostCard({
     [item.author_name, initials],
   );
 
-  // Format internal brackets like [EVENT_DATE:2026-11-09] into clean human dates
+  // Outreach metadata is already presented in the redesigned action card, so hide raw tokens there.
   const cleanContent = useMemo(() => {
     let text = item.content || '';
+
+    if (outreachDetails) {
+      text = text
+        .replace(/\[EVENT_DATE:[^\]]+\]/gi, '')
+        .replace(/\[OP_ID:[^\]]+\]/gi, '')
+        .replace(/\[EXPIRES:[^\]]+\]/gi, '')
+        .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\n{3,}/g, '\n\n');
+      return text.trim();
+    }
+
     text = text.replace(/\[EVENT_DATE:([^\]]+)\]/g, '📅 Event Date: $1');
     text = text.replace(/\[OP_ID:([^\]]+)\]/g, '🔖 Reference: $1');
     return text.trim();
-  }, [item.content]);
+  }, [item.content, outreachDetails]);
 
   // Check if text is long enough to warrant "See more" / "See less"
   const isLong = cleanContent.length > 160 || cleanContent.split('\n').length > 3;
@@ -500,6 +535,13 @@ function FacebookPostCard({
 
         {/* Post Text & Title */}
         <View style={styles.fbTextWrap}>
+          {outreachDetails ? (
+            <View style={styles.outreachKicker}>
+              <Ionicons name="medical" size={12} color={colors.primary} />
+              <Text style={styles.outreachKickerText}>OFFICIAL OUTREACH VISIT</Text>
+            </View>
+          ) : null}
+
           {item.title ? (
             <Text style={styles.fbTitle}>{item.title}</Text>
           ) : null}
@@ -673,6 +715,19 @@ const styles = StyleSheet.create({
   filterChipTextUnselected: {
     color: '#475569',
   },
+  cachedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  cachedNoticeText: {
+    fontFamily: typography.font.medium,
+    fontSize: 11,
+    color: colors.textMuted,
+  },
 
   /* Skeleton Container */
   skeletonContainer: {
@@ -822,6 +877,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 2,
     paddingBottom: 10,
+  },
+  outreachKicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    backgroundColor: colors.primaryLighter,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    marginBottom: 7,
+  },
+  outreachKickerText: {
+    fontFamily: typography.font.bold,
+    fontSize: 9.5,
+    letterSpacing: 0.6,
+    color: colors.primaryStrong,
   },
   fbTitle: {
     fontFamily: typography.font.bold,

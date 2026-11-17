@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useAuth, useUser } from '@clerk/expo';
 import { setSupabaseTokenProvider, supabase } from '@lib/supabase';
 import { useAuthStore } from '@store/useAuthStore';
+import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { supabaseRealtimeService } from '@services/realtime/SupabaseRealtimeService';
 import { toast } from '@components/ui/Sonner';
 
@@ -20,19 +21,22 @@ import { toast } from '@components/ui/Sonner';
 export function SupabaseAuthBridge() {
   const { getToken, isSignedIn, isLoaded, signOut: clerkSignOut } = useAuth();
   const { user: clerkUser } = useUser();
+  const { isOnline } = useNetworkStatus();
   const syncUserFromClerk = useAuthStore((state) => state.syncUserFromClerk);
   const sessionInitializedRef = useRef<string | null>(null);
 
   // 1. If Clerk session is terminated or user is deleted in Clerk, clear local auth store
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
+    // Never turn a temporary loss of connectivity into a sign-out. The cached
+    // session stays usable offline; this is re-evaluated once we reconnect.
+    if (isOnline && isLoaded && !isSignedIn) {
       const authStatus = useAuthStore.getState().status;
       if (authStatus === 'authenticated') {
         console.log('[SupabaseAuthBridge] Clerk session ended/user deleted. Signing out of local store.');
         useAuthStore.getState().signOut().catch(() => {});
       }
     }
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, isOnline]);
 
   // 2. If local store becomes unauthenticated (e.g. Supabase account deletion), terminate Clerk session
   useEffect(() => {
@@ -74,7 +78,9 @@ export function SupabaseAuthBridge() {
 
   // 5. Verify account existence in Supabase public.users
   useEffect(() => {
-    if (clerkUser) {
+    // Online-only admin verification. Offline launches keep the locally cached
+    // profile and re-check after connectivity returns.
+    if (clerkUser && isOnline) {
       if (sessionInitializedRef.current === clerkUser.id) return;
       sessionInitializedRef.current = clerkUser.id;
       let isMounted = true;
@@ -173,11 +179,11 @@ export function SupabaseAuthBridge() {
         isMounted = false;
       };
     }
-  }, [clerkUser?.id, syncUserFromClerk, clerkSignOut]);
+  }, [clerkUser?.id, isOnline, syncUserFromClerk, clerkSignOut]);
 
   // 6. Active deletion heartbeat: Automatically logs out if admin deletes the user in the database
   useEffect(() => {
-    if (!clerkUser?.id || !isSignedIn) return;
+    if (!isOnline || !clerkUser?.id || !isSignedIn) return;
 
     let isMounted = true;
 
@@ -223,7 +229,7 @@ export function SupabaseAuthBridge() {
       clearInterval(intervalId);
       appStateSub.remove();
     };
-  }, [clerkUser?.id, isSignedIn, clerkSignOut]);
+  }, [clerkUser?.id, isSignedIn, isOnline, clerkSignOut]);
 
   // 7. Supabase JWT Token Provider
   useEffect(() => {

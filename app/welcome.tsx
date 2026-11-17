@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
-import { useAuthStore } from '@store/useAuthStore';
+import { useOnboardingStore } from '@store/useOnboardingStore';
 import { Logo } from '@components/ui/Logo';
 import { Button } from '@components/ui/Button';
 import { PhotoIllustration } from '@components/ui/PhotoIllustration';
@@ -17,6 +17,7 @@ export default function WelcomeScreen() {
 
   const handleGetStarted = () => {
     haptic.light();
+    useOnboardingStore.getState().setCompleted();
     router.replace({ pathname: '/onboarding', params: { slide: '3' } });
   };
 

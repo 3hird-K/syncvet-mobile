@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { getAuthService, AuthError } from '@services/auth';
 import { supabase } from '@lib/supabase';
+import { networkService } from '@services/network';
 import { useDataStore } from './useDataStore';
 import type {
   AuthUser,
@@ -81,24 +82,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!clerkUser) return;
     const currentUser = get().user;
 
-    // Fetch live resident record from Supabase public.users
+    // Only query Supabase when we actually have connectivity. A cold start while
+    // offline must reuse the last locally cached profile instead of blocking the
+    // router or mistaking a network failure for a deleted account.
+    const isOnline = networkService.isOnline();
     let dbUser: any = null;
     let dbError: any = null;
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', clerkUser.id)
-        .maybeSingle();
-      dbUser = data;
-      dbError = error;
-    } catch (err) {
-      dbError = err;
+    if (isOnline) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', clerkUser.id)
+          .maybeSingle();
+        dbUser = data;
+        dbError = error;
+      } catch (err) {
+        dbError = err;
+      }
     }
 
     // If resident completed their registration previously, but row in public.users is gone:
     // This signifies the account was deleted in Supabase. Sign out immediately!
-    if (!dbError && !dbUser && currentUser?.profileCompleted) {
+    if (isOnline && !dbError && !dbUser && currentUser?.profileCompleted) {
       console.warn('[useAuthStore] Resident profile was deleted from Supabase. Signing out.');
       await get().signOut();
       return;

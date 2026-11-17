@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import type { ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,8 +49,13 @@ export function Avatar({
 }: AvatarProps) {
   const rawSource = photoUrl ?? photo;
   const palette = AVATAR_PALETTE[hashString(name) % AVATAR_PALETTE.length];
+  const [imageFailed, setImageFailed] = useState(false);
 
-  if (rawSource) {
+  useEffect(() => {
+    setImageFailed(false);
+  }, [rawSource]);
+
+  if (rawSource && !imageFailed) {
     const imageSource = typeof rawSource === 'string' ? { uri: rawSource } : rawSource;
     return (
       <View style={[styles.wrap, { width: size, height: size, borderRadius: size / 2 }]}>
@@ -59,6 +64,7 @@ export function Avatar({
           style={styles.image}
           resizeMode="cover"
           accessibilityRole="image"
+          onError={() => setImageFailed(true)}
         />
       </View>
     );

@@ -12,8 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { colors, radius, shadows, typography } from '@theme';
-import { useNetworkStatus } from '@hooks/useNetworkStatus';
-import { useResidentData } from '@hooks/useResidentData';
+import { useSyncStatus } from '@hooks/useSyncStatus';
 import { haptic } from '@lib/haptics';
 
 interface SyncStatusBarProps {
@@ -24,8 +23,7 @@ interface SyncStatusBarProps {
 }
 
 export function SyncStatusBar({ style, compact = false }: SyncStatusBarProps) {
-  const { isOnline, status: networkStatus } = useNetworkStatus();
-  const { isSyncing, pendingCount, lastSyncedAt, syncNow } = useResidentData();
+  const { isSyncing, pendingCount, lastSyncedAt, isOnline, syncNow } = useSyncStatus();
 
   const [showSyncedSuccess, setShowSyncedSuccess] = useState(false);
   const prevSyncingRef = React.useRef(isSyncing);
@@ -47,14 +45,16 @@ export function SyncStatusBar({ style, compact = false }: SyncStatusBarProps) {
 
   // Flash "Synced just now" when sync finishes successfully
   useEffect(() => {
-    if (prevSyncingRef.current && !isSyncing && isOnline && pendingCount === 0) {
+    const wasSyncing = prevSyncingRef.current;
+    prevSyncingRef.current = isSyncing;
+
+    if (wasSyncing && !isSyncing && isOnline && pendingCount === 0) {
       setShowSyncedSuccess(true);
       const timer = setTimeout(() => {
         setShowSyncedSuccess(false);
       }, 2400);
       return () => clearTimeout(timer);
     }
-    prevSyncingRef.current = isSyncing;
   }, [isSyncing, isOnline, pendingCount]);
 
   const spinAnimatedStyle = useAnimatedStyle(() => ({
@@ -73,7 +73,7 @@ export function SyncStatusBar({ style, compact = false }: SyncStatusBarProps) {
     return null;
   }
 
-  const formatLastSync = (iso: string | null): string => {
+  const formatLastSync = (iso: string | null | undefined): string => {
     if (!iso) return 'Not synced yet';
     try {
       const diffMs = Date.now() - new Date(iso).getTime();

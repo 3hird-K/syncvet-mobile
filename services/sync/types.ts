@@ -4,6 +4,7 @@ export type SyncOperationType =
   | 'DELETE_PET'
   | 'BOOK_APPOINTMENT'
   | 'CANCEL_APPOINTMENT'
+  | 'UPDATE_APPOINTMENT_STATUS'
   | 'UPDATE_PROFILE';
 
 export type SyncOperationStatus = 'pending' | 'syncing' | 'completed' | 'failed';

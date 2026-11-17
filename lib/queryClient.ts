@@ -4,7 +4,11 @@ import { networkService } from '@services/network';
 // Connect TanStack Query online manager to SyncVet networkService
 onlineManager.setEventListener((setOnline) => {
   return networkService.subscribe((state) => {
-    setOnline(state.status === 'online');
+    // `syncing` is still an online state; pausing queries while syncing would
+    // stall the app with cached data that never refreshes.
+    setOnline(
+      state.status !== 'offline' && state.isConnected && state.isInternetReachable,
+    );
   });
 });
 

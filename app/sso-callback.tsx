@@ -6,7 +6,7 @@ import { useAuth, useUser } from '@clerk/expo';
 
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import { supabase } from '@lib/supabase';
+import { networkService } from '@services/network';
 import { isRestrictedStaffRole } from '@services/auth/types';
 import { PawFootprintLoader } from '@components/ui/PawLoading';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
@@ -28,10 +28,57 @@ export default function SSOCallbackScreen() {
   }, []);
 
   useEffect(() => {
-    if (!isLoaded || routed.current) return;
+    if (routed.current) return;
+
+    const finishRouting = (delay = false) => {
+      if (routed.current) return;
+      routed.current = true;
+
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser) {
+        router.replace({ pathname: '/onboarding', params: { slide: '3' } });
+        return;
+      }
+
+      // Redirect Veterinarians and Administrators away from pet owner mobile app
+      if (isRestrictedStaffRole(currentUser.role)) {
+        router.replace('/unauthorized-role');
+        return;
+      }
+
+      const hasCompletedProfile = Boolean(
+        currentUser.profileCompleted &&
+        currentUser.mobileNumber &&
+        currentUser.address
+      );
+
+      const navigate = () => {
+        router.replace(hasCompletedProfile ? '/(main)' : '/(register)/owner');
+      };
+
+      if (delay) {
+        setTimeout(navigate, 800);
+      } else {
+        navigate();
+      }
+    };
+
+    const authState = useAuthStore.getState();
+    const hasLocalSession =
+      authState.status === 'authenticated' && Boolean(authState.user);
+    const isOffline = !networkService.isOnline();
+
+    // An existing local session is authoritative on a cold start while offline.
+    // Clerk may still be initializing, and waiting for it can strand the user
+    // on this callback screen or send them back to online-only authentication.
+    if (isOffline && hasLocalSession) {
+      finishRouting();
+      return;
+    }
+
+    if (!isLoaded) return;
 
     if (isSignedIn && clerkUser) {
-      routed.current = true;
       useOnboardingStore.getState().setCompleted();
 
       useAuthStore.getState().googleSignIn({
@@ -40,28 +87,10 @@ export default function SSOCallbackScreen() {
         photoUrl: clerkUser.imageUrl,
       }).then(async () => {
         await useAuthStore.getState().syncUserFromClerk(clerkUser);
-        const currentUser = useAuthStore.getState().user;
-
-        // Redirect Veterinarians and Administrators away from pet owner mobile app
-        if (isRestrictedStaffRole(currentUser?.role)) {
-          router.replace('/unauthorized-role');
-          return;
-        }
-
-        const hasCompletedProfile = Boolean(
-          currentUser?.profileCompleted &&
-          currentUser?.mobileNumber &&
-          currentUser?.address
-        );
-
-        await new Promise((res) => setTimeout(res, 800));
-        if (hasCompletedProfile) {
-          router.replace('/(main)');
-        } else {
-          router.replace('/(register)/owner');
-        }
+        finishRouting(true);
       }).catch(() => {
-        router.replace('/(register)/owner');
+        // A failed network lookup must not undo a usable local session.
+        finishRouting();
       });
     } else if (!isSignedIn) {
       routed.current = true;
