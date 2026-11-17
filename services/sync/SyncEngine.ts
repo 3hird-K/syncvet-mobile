@@ -290,6 +290,7 @@ export class SyncEngine {
       case 'BOOK_APPOINTMENT': {
         const newAppt = op.payload as Appointment;
         await dataService.bookAppointment(op.ownerId, {
+          id: newAppt.id,
           petId: newAppt.petId,
           petName: newAppt.petName,
           serviceId: newAppt.serviceId,

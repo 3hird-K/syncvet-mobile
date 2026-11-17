@@ -445,24 +445,13 @@ function FacebookPostCard({
     [item.author_name, initials],
   );
 
-  // Outreach metadata is already presented in the redesigned action card, so hide raw tokens there.
+  // Format internal brackets like [EVENT_DATE:2026-11-09] into clean human dates.
   const cleanContent = useMemo(() => {
     let text = item.content || '';
-
-    if (outreachDetails) {
-      text = text
-        .replace(/\[EVENT_DATE:[^\]]+\]/gi, '')
-        .replace(/\[OP_ID:[^\]]+\]/gi, '')
-        .replace(/\[EXPIRES:[^\]]+\]/gi, '')
-        .replace(/[ \t]{2,}/g, ' ')
-        .replace(/\n{3,}/g, '\n\n');
-      return text.trim();
-    }
-
     text = text.replace(/\[EVENT_DATE:([^\]]+)\]/g, '📅 Event Date: $1');
     text = text.replace(/\[OP_ID:([^\]]+)\]/g, '🔖 Reference: $1');
     return text.trim();
-  }, [item.content, outreachDetails]);
+  }, [item.content]);
 
   // Check if text is long enough to warrant "See more" / "See less"
   const isLong = cleanContent.length > 160 || cleanContent.split('\n').length > 3;
@@ -533,8 +522,8 @@ function FacebookPostCard({
           </View>
         </View>
 
-        {/* Post Text & Title */}
-        <View style={styles.fbTextWrap}>
+        {/* Post Text & Title. Outreach details are shown once in the structured section below. */}
+        <View style={[styles.fbTextWrap, outreachDetails && styles.fbTextWrapOutreach]}>
           {outreachDetails ? (
             <View style={styles.outreachKicker}>
               <Ionicons name="medical" size={12} color={colors.primary} />
@@ -546,29 +535,33 @@ function FacebookPostCard({
             <Text style={styles.fbTitle}>{item.title}</Text>
           ) : null}
 
-          {item.target_barangay ? (
-            <View style={styles.fbBarangayPill}>
-              <Ionicons name="location-sharp" size={11} color="#059669" />
-              <Text style={styles.fbBarangayText}>{item.target_barangay}</Text>
-            </View>
-          ) : null}
+          {!outreachDetails ? (
+            <>
+              {item.target_barangay ? (
+                <View style={styles.fbBarangayPill}>
+                  <Ionicons name="location-sharp" size={11} color="#059669" />
+                  <Text style={styles.fbBarangayText}>{item.target_barangay}</Text>
+                </View>
+              ) : null}
 
-          {/* Text with "See more" / "See less" */}
-          <Text style={styles.fbBodyText}>
-            {displayText}
-            {isLong && !expanded ? '... ' : ' '}
-            {isLong && (
-              <Text
-                onPress={() => {
-                  haptic.light();
-                  setExpanded(!expanded);
-                }}
-                style={styles.seeMoreBtn}
-              >
-                {expanded ? 'See less' : 'See more'}
+              {/* Text with "See more" / "See less" */}
+              <Text style={styles.fbBodyText}>
+                {displayText}
+                {isLong && !expanded ? '... ' : ' '}
+                {isLong && (
+                  <Text
+                    onPress={() => {
+                      haptic.light();
+                      setExpanded(!expanded);
+                    }}
+                    style={styles.seeMoreBtn}
+                  >
+                    {expanded ? 'See less' : 'See more'}
+                  </Text>
+                )}
               </Text>
-            )}
-          </Text>
+            </>
+          ) : null}
         </View>
 
         {/* Full Width Edge-to-Edge Media: Tap to Maximize in Fullscreen */}
@@ -590,7 +583,7 @@ function FacebookPostCard({
           </Pressable>
         ) : null}
 
-        {/* Barangay Outreach Station Action Card */}
+        {/* Barangay Outreach Station QR Action */}
         {outreachDetails ? (
           <OutreachPostAction
             outreachInfo={outreachDetails}
@@ -877,6 +870,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 2,
     paddingBottom: 10,
+  },
+  fbTextWrapOutreach: {
+    paddingBottom: 4,
   },
   outreachKicker: {
     flexDirection: 'row',

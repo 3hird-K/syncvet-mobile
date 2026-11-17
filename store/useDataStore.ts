@@ -215,10 +215,11 @@ function mergePendingLocalState(
     if (!pet._pendingSync) continue;
     const index = pets.findIndex((candidate) => candidate.id === pet.id);
     if (index >= 0) {
-      pets[index] = pet;
-    } else {
-      pets.unshift(pet);
+      // The server (or the still-pending queue entry) already has this record.
+      // Keep the refreshed version so the local pending flag is cleared.
+      continue;
     }
+    pets.unshift(pet);
   }
 
   for (const appointment of current.appointments) {
@@ -227,10 +228,11 @@ function mergePendingLocalState(
       (candidate) => candidate.id === appointment.id,
     );
     if (index >= 0) {
-      appointments[index] = appointment;
-    } else {
-      appointments.push(appointment);
+      // Same as above: a synced booking/status change should not keep its
+      // local overlay once the authoritative row is available.
+      continue;
     }
+    appointments.push(appointment);
   }
 
   return {
@@ -253,13 +255,28 @@ async function persistSnapshot(ownerId: string, snapshot: DataSnapshot): Promise
 }
 
 export const useDataStore = create<DataState>((set, get) => {
-  // Subscribe to SyncEngine state changes
+  // Subscribe to SyncEngine state changes. When a sync finishes, pull the
+  // authoritative rows back into the local-first store so pending flags clear.
+  let lastEngineSyncing = false;
   syncEngine.subscribe((engineState) => {
+    const justFinished = lastEngineSyncing && !engineState.isSyncing;
+    lastEngineSyncing = engineState.isSyncing;
+
     set({
       isSyncing: engineState.isSyncing,
       lastSyncedAt: engineState.lastSyncedAt,
       pendingCount: engineState.pendingCount,
     });
+
+    if (
+      justFinished &&
+      engineState.pendingCount === 0 &&
+      activeOwnerIds.current &&
+      networkService.isOnline() &&
+      !backgroundRefreshes.has(activeOwnerIds.current)
+    ) {
+      get().loadAll(activeOwnerIds.current).catch(() => {});
+    }
   });
 
   return {
@@ -593,7 +610,16 @@ export const useDataStore = create<DataState>((set, get) => {
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
 
-      syncEngine.sync(ownerId, clerkUser).catch(() => {});
+      syncEngine
+        .sync(ownerId, clerkUser)
+        .then(() => {
+          // Once the queued booking lands, refresh the store so the local
+          // pending flag is replaced by the authoritative server row.
+          if (networkService.isOnline()) {
+            get().loadAll(ownerId, clerkUser).catch(() => {});
+          }
+        })
+        .catch(() => {});
       return appointment;
     },
 

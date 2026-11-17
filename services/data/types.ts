@@ -71,6 +71,8 @@ export interface Appointment {
 }
 
 export interface BookingInput {
+  /** Optional local ID so an offline-queued booking keeps the same identity online. */
+  id?: string;
   petId: string;
   petName: string;
   serviceId: string;

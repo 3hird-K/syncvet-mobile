@@ -360,7 +360,11 @@ export class SupabaseDataService implements DataService {
   async bookAppointment(ownerId: string, input: BookingInput): Promise<Appointment> {
     await this.ensureUserExists(ownerId);
     const now = new Date().toISOString();
-    const id = `apt_${Date.now()}`;
+    const rawId = input.id;
+    const id =
+      rawId && (rawId.startsWith('apt-') || rawId.startsWith('apt_'))
+        ? rawId
+        : `apt_${Date.now()}`;
 
     const { data, error } = await supabase
       .from('appointments')
