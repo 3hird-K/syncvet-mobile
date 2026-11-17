@@ -134,6 +134,21 @@ export function isValidCDOBarangay(input?: string | null): boolean {
   return findMatchingCDOBarangay(input) !== null;
 }
 
+/** Builds the canonical CDO address used by onboarding and saved to users.address. */
+export function buildCDOAddress(
+  street: string,
+  barangay: string,
+  landmark?: string | null,
+): string {
+  const cleanStreet = street.trim();
+  const cleanBarangay = barangay.trim();
+  const cleanLandmark = landmark?.trim();
+  const streetPart = cleanLandmark
+    ? `${cleanStreet} (Near ${cleanLandmark})`
+    : cleanStreet;
+  return `${streetPart}, ${cleanBarangay}, Cagayan de Oro City, Misamis Oriental`;
+}
+
 export const PHILIPPINE_LOCATIONS: PhLocation[] = [
   // =========================================================================
   // REGION X - MISAMIS ORIENTAL: CAGAYAN DE ORO CITY (COMPLETE BARANGAYS)

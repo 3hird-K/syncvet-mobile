@@ -10,7 +10,6 @@ import { useUnreadMessagesQuery } from '@hooks/queries';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { HomeScreenSkeleton } from '@components/ui/Skeleton';
-import { SyncStatusBar } from '@components/ui/SyncStatusBar';
 import {
   HomeHeader,
   HomePetsSection,
@@ -80,9 +79,6 @@ export default function HomeScreen() {
           petsCount={allPets.length}
           unreadMessageCount={unreadMessageCount}
         />
-
-        {/* Local-first status: offline/cached and pending-sync are explicit. */}
-        <SyncStatusBar compact />
 
         {/* 2. Official CVO Pet Registry Section (Facebook Stories style) */}
         <HomePetsSection pets={allPets} userPhotoUrl={displayPhoto} />

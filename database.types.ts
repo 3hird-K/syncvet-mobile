@@ -911,7 +911,16 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_daily_item_consumption: {
+        Row: {
+          barangay: string | null
+          category: string | null
+          consumption_date: string | null
+          item_name: string | null
+          units_consumed: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       sync_clerk_user_data: {

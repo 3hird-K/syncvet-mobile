@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { detectPhilippineTelco } from '@lib/validation';
 import {
+  buildCDOAddress,
   CDO_BARANGAYS,
   findMatchingCDOBarangay,
   isValidCDOBarangay,
@@ -84,6 +85,9 @@ export default function ResidentOnboardingScreen() {
   const isCompact = width < 380;
 
   const horizontalScrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const stepScrollRefs = useRef<
+    Partial<Record<OnboardingStep, React.ElementRef<typeof ScrollView> | null>>
+  >({});
 
   const { user: clerkUser } = useUser();
   const currentUser = useAuthStore((state) => state.user);
@@ -108,28 +112,49 @@ export default function ResidentOnboardingScreen() {
   const [isBarangayFocused, setIsBarangayFocused] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  // Keyboard avoidance tracker (iOS only - Android handles soft keyboard natively with window adjustResize)
+  // Track keyboard height on both platforms so the active step can scroll its
+  // inputs above the keyboard instead of leaving them hidden behind it.
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-
-    const showSub = Keyboard.addListener('keyboardWillShow', (e) => {
+    const handleShow = (e: { endCoordinates?: { height?: number } }) => {
       setKeyboardHeight(e.endCoordinates?.height || 260);
-    });
-    const hideSub = Keyboard.addListener('keyboardWillHide', () => {
-      setKeyboardHeight(0);
-    });
+    };
+    const handleHide = () => setKeyboardHeight(0);
+
+    const subscriptions = [
+      Keyboard.addListener('keyboardWillShow', handleShow),
+      Keyboard.addListener('keyboardDidShow', handleShow),
+      Keyboard.addListener('keyboardWillHide', handleHide),
+      Keyboard.addListener('keyboardDidHide', handleHide),
+    ];
 
     return () => {
-      showSub.remove();
-      hideSub.remove();
+      for (const subscription of subscriptions) subscription.remove();
     };
   }, []);
+
+  // When an input is focused, ask that step's ScrollView to bring it above the
+  // keyboard. RN's scroll responder already knows the keyboard's screen frame,
+  // so this works on both iOS and Android (including nested paged ScrollViews).
+  const handleInputFocus = (
+    step: OnboardingStep,
+    event: NativeSyntheticEvent<unknown>,
+  ) => {
+    stepScrollRefs.current[step]?.scrollResponderScrollNativeHandleToKeyboard(
+      event.currentTarget,
+      24,
+      true,
+    );
+  };
 
   // --- Step 1 States: Profile & Contact ---
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
-  const [smsConsent, setSmsConsent] = useState(true);
+  // SMS consent is applied by default; no toggle is shown to the user.
+  const [smsConsent] = useState(true);
+  const [smsConsentUpdatedAt, setSmsConsentUpdatedAt] = useState<string | null>(
+    () => new Date().toISOString(),
+  );
 
   // --- Step 2 States: CDO Location ---
   const [barangaySearch, setBarangaySearch] = useState(
@@ -155,9 +180,8 @@ export default function ResidentOnboardingScreen() {
   const [emergencyPhone, setEmergencyPhone] = useState(
     currentUser?.rawUserMetaData?.emergency_contact_phone || '',
   );
-  const [caredAnimals, setCaredAnimals] = useState<('dogs' | 'cats')[]>(
-    currentUser?.rawUserMetaData?.cared_animals || ['dogs'],
-  );
+  // Fixed default for all onboarding submissions; no animal picker in the UI.
+  const [caredAnimals] = useState<('dogs' | 'cats')[]>(['dogs', 'cats']);
 
   // Sync initial user details once and fetch Supabase public.users if exists
   const initialSyncRef = useRef(false);
@@ -198,9 +222,13 @@ export default function ResidentOnboardingScreen() {
                 setStreet(meta.streetAddress || meta.street);
               }
               if (meta.landmark) setLandmark(meta.landmark);
-              if (meta.smsConsent !== undefined || meta.sms_notifications_enabled !== undefined) {
-                setSmsConsent(Boolean(meta.smsConsent ?? meta.sms_notifications_enabled));
-              }
+              const restoredConsentAt =
+                meta.smsConsentUpdatedAt ||
+                meta.sms_consent_updated_at ||
+                meta.smsConsentAt ||
+                meta.sms_consent_at;
+              if (restoredConsentAt) setSmsConsentUpdatedAt(restoredConsentAt);
+
               if (meta.emergencyContactName || meta.emergency_contact_name) {
                 setEmergencyContact(meta.emergencyContactName || meta.emergency_contact_name);
               }
@@ -209,9 +237,6 @@ export default function ResidentOnboardingScreen() {
               }
               if (meta.emergencyContactPhone || meta.emergency_contact_phone) {
                 setEmergencyPhone(formatPhilippineMobileInput(meta.emergencyContactPhone || meta.emergency_contact_phone));
-              }
-              if (meta.caredAnimals || meta.cared_animals) {
-                setCaredAnimals(meta.caredAnimals || meta.cared_animals);
               }
             }
           } catch {}
@@ -252,17 +277,6 @@ export default function ResidentOnboardingScreen() {
     setEmergencyPhone(formatted);
   };
 
-  const toggleAnimal = (type: 'dogs' | 'cats') => {
-    haptic.light();
-    setCaredAnimals((prev) => {
-      if (prev.includes(type)) {
-        return prev.filter((a) => a !== type);
-      } else {
-        return [...prev, type];
-      }
-    });
-  };
-
   // Step Validations
   const isStep1Valid = useMemo(() => {
     return firstName.trim().length > 0 && isPhoneValid;
@@ -280,7 +294,13 @@ export default function ResidentOnboardingScreen() {
     return isBarangayValid && street.trim().length > 0;
   }, [isBarangayValid, street]);
 
-  const isStep3Valid = true;
+  const isEmergencyPhoneValid = useMemo(() => {
+    return emergencyPhone.trim() === '' || isPhilippineMobile(emergencyPhone);
+  }, [emergencyPhone]);
+
+  const isStep3Valid = useMemo(() => {
+    return caredAnimals.length > 0 && isEmergencyPhoneValid;
+  }, [caredAnimals, isEmergencyPhoneValid]);
 
   // Step access control: prevent swiping next if required fields aren't filled
   const canAccessStep2 = isStep1Valid;
@@ -312,7 +332,7 @@ export default function ResidentOnboardingScreen() {
             updated_at: now,
           }).eq('id', ownerId);
         } else if (currentStepNum === 2 && isStep2Valid) {
-          const fullAddress = `${street.trim()}, ${finalBarangay}, Cagayan de Oro City, Misamis Oriental`;
+          const fullAddress = buildCDOAddress(street, finalBarangay, landmark);
           await supabase.from('users').update({
             address: fullAddress,
             updated_at: now,
@@ -437,14 +457,27 @@ export default function ResidentOnboardingScreen() {
   };
 
   const handleFinish = async () => {
+    if (!isStep1Valid || !isStep2Valid || !isStep3Valid) {
+      haptic.warning();
+      toast.error('Registration Incomplete', {
+        description: !isStep1Valid
+          ? 'First Name and a valid 11-digit mobile number (09XX) are required.'
+          : !isStep2Valid
+            ? 'A valid CDO barangay and Street / House No. are required.'
+            : 'Enter a valid 11-digit emergency contact mobile starting with 09, or leave it blank.',
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const finalBarangay = matchedBarangay || selectedBarangay.trim() || barangaySearch.trim();
       const cleanMobile = mobileNumber.replace(/[\s\-]/g, '');
       const cleanEmergency = emergencyPhone.replace(/[\s\-]/g, '');
       const cleanStreet = street.trim();
-      const fullAddress = `${cleanStreet}, ${finalBarangay}, Cagayan de Oro City, Misamis Oriental`;
-      const petTypes = (caredAnimals || ['dogs']).map((a) => (a === 'dogs' ? 'Dogs' : 'Cats'));
+      const fullAddress = buildCDOAddress(cleanStreet, finalBarangay, landmark);
+      const petTypes = caredAnimals.map((a) => (a === 'dogs' ? 'Dogs' : 'Cats'));
+      const consentTimestamp = smsConsentUpdatedAt || new Date().toISOString();
 
       const cleanRelation = relationship === 'Spouse / Partner' ? 'Spouse' : relationship;
       const metadata = {
@@ -454,6 +487,7 @@ export default function ResidentOnboardingScreen() {
         petTypes,
         roleTitle: 'Pet Owner',
         smsConsent,
+        smsConsentUpdatedAt: consentTimestamp,
         accountType: 'pet_owner',
         phoneNumber: cleanMobile,
         mobileNumber: cleanMobile,
@@ -465,6 +499,7 @@ export default function ResidentOnboardingScreen() {
       };
 
       await completeResidentOnboarding({
+        email: userEmail,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
@@ -473,6 +508,7 @@ export default function ResidentOnboardingScreen() {
         street: cleanStreet,
         landmark: landmark.trim(),
         smsNotificationsEnabled: smsConsent,
+        smsConsentUpdatedAt: consentTimestamp,
         emergencyContactName: emergencyContact.trim(),
         emergencyContactRelationship: relationship,
         emergencyContactPhone: cleanEmergency,
@@ -481,50 +517,39 @@ export default function ResidentOnboardingScreen() {
         explicitUserId: ownerId,
       });
 
-      // Direct registration into Supabase public.users
-      if (ownerId) {
-        const now = new Date().toISOString();
-        try {
-          const { data: updatedUsers, error: updateErr } = await supabase
-            .from('users')
-            .update({
-              first_name: firstName.trim() || null,
-              last_name: lastName.trim() || null,
-              full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
-              phone_number: cleanMobile,
-              address: fullAddress,
-              avatar_url: userPhoto || null,
-              role: 'Pet Owner',
-              profile_completed: true,
-              raw_user_meta_data: metadata,
-              updated_at: now,
-            })
-            .eq('id', ownerId)
-            .select();
+      const persistedOwnerId = ownerId || useAuthStore.getState().user?.id || '';
 
-          if (!updatedUsers || updatedUsers.length === 0) {
-            await supabase.from('users').upsert(
-              {
-                id: ownerId,
-                email: userEmail,
-                first_name: firstName.trim() || null,
-                last_name: lastName.trim() || null,
-                full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
-                phone_number: cleanMobile,
-                address: fullAddress,
-                avatar_url: userPhoto || null,
-                role: 'Pet Owner',
-                profile_completed: true,
-                raw_user_meta_data: metadata,
-                updated_at: now,
-              },
-              { onConflict: 'id' },
-            );
-          }
-          console.log('[handleFinish] Supabase public.users registration successfully saved!');
-        } catch (dbErr) {
-          console.warn('[handleFinish] Direct Supabase save note:', dbErr);
-        }
+      // Confirm the authoritative write actually landed before celebrating.
+      const { data: dbUser, error: verifyError } = await supabase
+        .from('users')
+        .select(
+          'id, email, first_name, last_name, full_name, phone_number, address, role, profile_completed, raw_user_meta_data, updated_at',
+        )
+        .eq('id', persistedOwnerId)
+        .maybeSingle();
+
+      if (verifyError) throw verifyError;
+
+      const dbMeta = (dbUser?.raw_user_meta_data as Record<string, any> | null) || {};
+      const isProfileComplete =
+        dbUser?.profile_completed === true &&
+        dbUser.phone_number === cleanMobile &&
+        dbUser.address === fullAddress &&
+        Boolean(dbUser.email?.trim()) &&
+        Boolean(dbUser.first_name?.trim()) &&
+        (dbUser.last_name ?? '') === lastName.trim() &&
+        Boolean(dbUser.full_name?.trim()) &&
+        Boolean(dbUser.role?.trim()) &&
+        dbMeta.barangay === finalBarangay &&
+        dbMeta.streetAddress === cleanStreet &&
+        dbMeta.smsConsent === smsConsent &&
+        dbMeta.smsConsentUpdatedAt === consentTimestamp &&
+        dbMeta.emergencyContactName === emergencyContact.trim() &&
+        dbMeta.emergencyContactPhone === cleanEmergency &&
+        Array.isArray(dbMeta.petTypes) && dbMeta.petTypes.length === 2;
+
+      if (!isProfileComplete) {
+        throw new Error('Supabase profile is missing required onboarding fields.');
       }
 
       // Ensure Clerk unsafeMetadata is completely wiped; pure Supabase architecture
@@ -535,8 +560,8 @@ export default function ResidentOnboardingScreen() {
       }
 
       // Enqueue to offline synchronization engine
-      if (ownerId) {
-        await syncQueue.enqueue(ownerId, 'profile', ownerId, 'UPDATE_PROFILE', {
+      if (persistedOwnerId) {
+        await syncQueue.enqueue(persistedOwnerId, 'profile', persistedOwnerId, 'UPDATE_PROFILE', {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           mobileNumber: cleanMobile,
@@ -544,7 +569,7 @@ export default function ResidentOnboardingScreen() {
           metadata,
           timestamp: Date.now(),
         });
-        syncEngine.sync(ownerId, clerkUser).catch(() => {});
+        syncEngine.sync(persistedOwnerId, clerkUser).catch(() => {});
       }
 
       haptic.success();
@@ -568,7 +593,8 @@ export default function ResidentOnboardingScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
         {/* Stepper Indicator */}
         <View style={styles.stepperContainer}>
@@ -722,21 +748,24 @@ export default function ResidentOnboardingScreen() {
           scrollEventThrottle={16}
           onScrollEndDrag={handleScrollEndDrag}
           onMomentumScrollEnd={handleMomentumScrollEnd}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'}
+          keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           style={styles.horizontalScroll}
         >
           {/* ================= STEP 1: Profile & Contact ================= */}
           <View style={[styles.stepPage, { width }]}>
             <ScrollView
+              ref={(ref) => {
+                stepScrollRefs.current[1] = ref;
+              }}
               contentContainerStyle={[
                 styles.pageScrollContent,
-                Platform.OS === 'ios' && keyboardHeight > 0
+                keyboardHeight > 0
                   ? { paddingBottom: keyboardHeight + 40 }
                   : { paddingBottom: 60 },
               ]}
+              keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.heading}>Resident Profile & Contact</Text>
@@ -754,6 +783,7 @@ export default function ResidentOnboardingScreen() {
                     style={styles.input}
                     value={firstName}
                     onChangeText={setFirstName}
+                    onFocus={(event) => handleInputFocus(1, event)}
                     placeholder="First Name"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="words"
@@ -766,6 +796,7 @@ export default function ResidentOnboardingScreen() {
                     style={styles.input}
                     value={lastName}
                     onChangeText={setLastName}
+                    onFocus={(event) => handleInputFocus(1, event)}
                     placeholder="Last Name"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="words"
@@ -834,7 +865,10 @@ export default function ResidentOnboardingScreen() {
                     style={styles.phoneInput}
                     value={mobileNumber}
                     onChangeText={handlePhoneChange}
-                    onFocus={() => setIsPhoneFocused(true)}
+                    onFocus={(event) => {
+                      setIsPhoneFocused(true);
+                      handleInputFocus(1, event);
+                    }}
                     onBlur={() => setIsPhoneFocused(false)}
                     placeholder="09XX-XXX-XXXX"
                     placeholderTextColor={colors.textMuted}
@@ -906,14 +940,17 @@ export default function ResidentOnboardingScreen() {
           {renderStep2 && (
             <View style={[styles.stepPage, { width }]}>
             <ScrollView
+              ref={(ref) => {
+                stepScrollRefs.current[2] = ref;
+              }}
               contentContainerStyle={[
                 styles.pageScrollContent,
-                Platform.OS === 'ios' && keyboardHeight > 0
+                keyboardHeight > 0
                   ? { paddingBottom: keyboardHeight + 40 }
                   : { paddingBottom: 60 },
               ]}
+              keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.heading}>Cagayan de Oro Residence</Text>
@@ -969,7 +1006,10 @@ export default function ResidentOnboardingScreen() {
                         setSelectedBarangay('');
                       }
                     }}
-                    onFocus={() => setIsBarangayFocused(true)}
+                    onFocus={(event) => {
+                      setIsBarangayFocused(true);
+                      handleInputFocus(2, event);
+                    }}
                     onBlur={() => setIsBarangayFocused(false)}
                     placeholder="Type CDO Barangay (e.g. Carmen, Nazareth, Bulua)..."
                     placeholderTextColor={colors.textMuted}
@@ -1054,6 +1094,7 @@ export default function ResidentOnboardingScreen() {
                   style={styles.input}
                   value={street}
                   onChangeText={setStreet}
+                  onFocus={(event) => handleInputFocus(2, event)}
                   placeholder="e.g. Block 4 Lot 12, Xavier Estates"
                   placeholderTextColor={colors.textMuted}
                 />
@@ -1066,6 +1107,7 @@ export default function ResidentOnboardingScreen() {
                   style={styles.input}
                   value={landmark}
                   onChangeText={setLandmark}
+                  onFocus={(event) => handleInputFocus(2, event)}
                   placeholder="e.g. Near Barangay Hall"
                   placeholderTextColor={colors.textMuted}
                 />
@@ -1118,14 +1160,17 @@ export default function ResidentOnboardingScreen() {
           {renderStep3 && (
             <View style={[styles.stepPage, { width }]}>
             <ScrollView
+              ref={(ref) => {
+                stepScrollRefs.current[3] = ref;
+              }}
               contentContainerStyle={[
                 styles.pageScrollContent,
-                Platform.OS === 'ios' && keyboardHeight > 0
+                keyboardHeight > 0
                   ? { paddingBottom: keyboardHeight + 40 }
                   : { paddingBottom: 60 },
               ]}
+              keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.heading}>Emergency Contact & Pet Info</Text>
@@ -1140,6 +1185,7 @@ export default function ResidentOnboardingScreen() {
                   style={styles.input}
                   value={emergencyContact}
                   onChangeText={setEmergencyContact}
+                  onFocus={(event) => handleInputFocus(3, event)}
                   placeholder="e.g. Maria Dela Cruz"
                   placeholderTextColor={colors.textMuted}
                 />
@@ -1170,54 +1216,18 @@ export default function ResidentOnboardingScreen() {
                     style={styles.phoneInput}
                     value={emergencyPhone}
                     onChangeText={handleEmergencyPhoneChange}
+                    onFocus={(event) => handleInputFocus(3, event)}
                     placeholder="0918-987-6543"
                     placeholderTextColor={colors.textMuted}
                     keyboardType="phone-pad"
                     maxLength={13}
                   />
                 </View>
-              </View>
-
-              {/* Animal Care Preferences */}
-              <View style={styles.fieldSection}>
-                <Text style={styles.inputLabel}>What animals do you care for in CDO?</Text>
-                <View style={styles.animalRow}>
-                  <Pressable
-                    style={[
-                      styles.animalCard,
-                      caredAnimals.includes('dogs') && styles.animalCardSelected,
-                    ]}
-                    onPress={() => toggleAnimal('dogs')}
-                  >
-                    <Text style={styles.animalEmoji}>🐕</Text>
-                    <Text
-                      style={[
-                        styles.animalTitle,
-                        caredAnimals.includes('dogs') && styles.animalTitleSelected,
-                      ]}
-                    >
-                      Dogs <Text style={styles.animalSubtext}>(Canines)</Text>
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.animalCard,
-                      caredAnimals.includes('cats') && styles.animalCardSelected,
-                    ]}
-                    onPress={() => toggleAnimal('cats')}
-                  >
-                    <Text style={styles.animalEmoji}>🐈</Text>
-                    <Text
-                      style={[
-                        styles.animalTitle,
-                        caredAnimals.includes('cats') && styles.animalTitleSelected,
-                      ]}
-                    >
-                      Cats <Text style={styles.animalSubtext}>(Felines)</Text>
-                    </Text>
-                  </Pressable>
-                </View>
+                {!isEmergencyPhoneValid ? (
+                  <Text style={styles.warningText}>
+                    Enter a valid 11-digit mobile number starting with 09, or leave blank.
+                  </Text>
+                ) : null}
               </View>
 
               {/* Complete Registration Action Button */}
@@ -1711,46 +1721,6 @@ const styles = StyleSheet.create({
   barangayChipTextSelected: {
     fontFamily: typography.font.bold,
     color: colors.primary,
-  },
-
-  /* Step 3 Animals */
-  animalRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  animalCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primaryLighter,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    gap: 8,
-  },
-  animalCardSelected: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  animalEmoji: {
-    fontSize: 20,
-  },
-  animalTitle: {
-    fontFamily: typography.font.semibold,
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  animalTitleSelected: {
-    fontFamily: typography.font.bold,
-    color: colors.primary,
-  },
-  animalSubtext: {
-    fontFamily: typography.font.regular,
-    fontSize: 11,
-    color: colors.textMuted,
   },
 
   /* Registration Action Buttons */

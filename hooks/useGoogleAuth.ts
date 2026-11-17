@@ -172,7 +172,8 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       const hasCompletedProfile = Boolean(
         currentUser?.profileCompleted &&
-        (currentUser?.mobileNumber || currentUser?.address)
+        currentUser?.mobileNumber &&
+        currentUser?.address
       );
 
       // Provide a deliberate, smooth loading experience with PawLoading

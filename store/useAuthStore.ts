@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { getAuthService, AuthError } from '@services/auth';
 import { supabase } from '@lib/supabase';
+import { buildCDOAddress } from '@lib/philippineAddresses';
 import { networkService } from '@services/network';
 import { useDataStore } from './useDataStore';
 import type {
@@ -33,6 +34,7 @@ interface AuthState {
     lastName?: string
   ) => Promise<void>;
   completeResidentOnboarding: (payload: {
+    email?: string;
     firstName: string;
     lastName: string;
     fullName?: string;
@@ -41,6 +43,7 @@ interface AuthState {
     street: string;
     landmark?: string;
     smsNotificationsEnabled: boolean;
+    smsConsentUpdatedAt?: string;
     emergencyContactName?: string;
     emergencyContactRelationship?: string;
     emergencyContactPhone?: string;
@@ -136,7 +139,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const address = dbUser?.address || currentUser?.address || '';
 
     const profileCompleted = Boolean(
-      dbUser?.profile_completed ?? currentUser?.profileCompleted,
+      (dbUser?.profile_completed ?? currentUser?.profileCompleted) &&
+        mobileNumber &&
+        address,
     );
 
     const role: UserRole =
@@ -247,7 +252,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const cleanMobile = payload.mobileNumber.trim();
-    const cleanAddress = `${payload.street.trim()}, ${payload.barangay.trim()}, Cagayan de Oro City, Misamis Oriental`;
+    const cleanAddress = buildCDOAddress(
+      payload.street,
+      payload.barangay,
+      payload.landmark,
+    );
     const cleanFirst = payload.firstName.trim();
     const cleanLast = payload.lastName.trim();
     const cleanName = (payload.fullName || `${cleanFirst} ${cleanLast}`).trim() || user?.fullName || 'Resident';
@@ -268,6 +277,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       petTypes,
       roleTitle: 'Pet Owner',
       smsConsent: payload.smsNotificationsEnabled,
+      smsConsentUpdatedAt:
+        payload.smsConsentUpdatedAt || new Date().toISOString(),
       accountType: 'pet_owner',
       phoneNumber: cleanMobile,
       mobileNumber: cleanMobile,
@@ -278,11 +289,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       emergencyContactRelation: cleanRelation,
     };
 
-    try {
-      const now = new Date().toISOString();
-      const { data: updatedRows } = await supabase
-        .from('users')
-        .update({
+    // Single authoritative write for onboarding: upsert every persisted field
+    // in one call and fail loudly if Supabase does not confirm the row.
+    const now = new Date().toISOString();
+    const { data: savedRows, error: saveError } = await supabase
+      .from('users')
+      .upsert(
+        {
+          id: targetUserId,
+          email: payload.email?.trim() || user?.email || `${targetUserId}@resident.syncvet.app`,
           phone_number: cleanMobile,
           address: cleanAddress,
           full_name: cleanName,
@@ -293,33 +308,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           profile_completed: true,
           raw_user_meta_data: metadata,
           updated_at: now,
-        })
-        .eq('id', targetUserId)
-        .select();
+        },
+        { onConflict: 'id' },
+      )
+      .select('id');
 
-      if (!updatedRows || updatedRows.length === 0) {
-        await supabase
-          .from('users')
-          .upsert(
-            {
-              id: targetUserId,
-              email: user?.email || `${targetUserId}@resident.syncvet.app`,
-              phone_number: cleanMobile,
-              address: cleanAddress,
-              full_name: cleanName,
-              first_name: cleanFirst || null,
-              last_name: cleanLast || null,
-              avatar_url: user?.photoUrl || null,
-              role: 'Pet Owner',
-              profile_completed: true,
-              raw_user_meta_data: metadata,
-              updated_at: now,
-            },
-            { onConflict: 'id' },
-          );
-      }
-    } catch (err: any) {
-      console.warn('[useAuthStore] completeResidentOnboarding error:', err?.message);
+    if (saveError) {
+      throw new AuthError('UNKNOWN', `Could not save profile: ${saveError.message}`);
+    }
+    if (!savedRows || savedRows.length === 0) {
+      throw new AuthError('UNKNOWN', 'Profile was not saved to the database.');
     }
 
     const updated: AuthUser = {

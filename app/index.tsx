@@ -43,7 +43,8 @@ export default function IndexScreen() {
 
         const hasCompletedProfile = Boolean(
           freshUser?.profileCompleted &&
-          (freshUser?.mobileNumber || freshUser?.address)
+          freshUser?.mobileNumber &&
+          freshUser?.address
         );
 
         if (isMounted) {

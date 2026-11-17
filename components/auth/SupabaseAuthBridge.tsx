@@ -102,6 +102,77 @@ export function SupabaseAuthBridge() {
 
         if (!isMounted) return;
 
+        // Repair path: an older bundle may have left the public.users row
+        // incomplete even though the resident finished onboarding locally.
+        // Re-push the locally persisted profile before syncUserFromClerk
+        // can flip profileCompleted back to false.
+        if (!dbError && dbUser && !dbUser.profile_completed) {
+          const local = useAuthStore.getState().user;
+          const meta: any = local?.rawUserMetaData || {};
+          const hasLocalCompletion =
+            local?.profileCompleted === true ||
+            meta.profileCompleted === true;
+          if (
+            local?.id === clerkUser.id &&
+            hasLocalCompletion &&
+            local.mobileNumber &&
+            local.address
+          ) {
+            const addressParts = local.address
+              .split(',')
+              .map((part) => part.trim())
+              .filter(Boolean);
+            const mappedPetTypes: ('dogs' | 'cats')[] = Array.isArray(meta.petTypes)
+              ? meta.petTypes.map((pet: string) =>
+                  String(pet).toLowerCase().startsWith('dog') ? 'dogs' : 'cats',
+                )
+              : [];
+            const petTypes = mappedPetTypes.length
+              ? mappedPetTypes
+              : (['dogs', 'cats'] as ('dogs' | 'cats')[]);
+
+            console.log(
+              '[SupabaseAuthBridge] Repairing incomplete public.users row for',
+              clerkUser.id,
+            );
+
+            try {
+              await useAuthStore.getState().completeResidentOnboarding({
+                email:
+                  clerkUser.primaryEmailAddress?.emailAddress ||
+                  local.email ||
+                  `${clerkUser.id}@resident.syncvet.app`,
+                firstName: local.firstName || clerkUser.firstName || '',
+                lastName: local.lastName || clerkUser.lastName || '',
+                fullName: local.fullName || clerkUser.fullName || '',
+                mobileNumber: local.mobileNumber,
+                barangay: meta.barangay || addressParts[1] || '',
+                street: meta.streetAddress || addressParts[0] || '',
+                landmark: meta.landmark || '',
+                smsNotificationsEnabled: meta.smsConsent !== false,
+                smsConsentUpdatedAt:
+                  meta.smsConsentUpdatedAt || new Date().toISOString(),
+                emergencyContactName: meta.emergencyContactName || '',
+                emergencyContactRelationship:
+                  meta.emergencyContactRelation || 'Spouse',
+                emergencyContactPhone: meta.emergencyContactPhone || '',
+                caredAnimals: petTypes,
+                healthDeclarationAgreed: true,
+                explicitUserId: clerkUser.id,
+              });
+              console.log(
+                '[SupabaseAuthBridge] public.users repair completed for',
+                clerkUser.id,
+              );
+            } catch (repairError) {
+              console.warn(
+                '[SupabaseAuthBridge] Failed to repair public.users row:',
+                repairError,
+              );
+            }
+          }
+        }
+
         // Step B: User is not in Supabase public.users
         if (!dbError && !dbUser) {
           const currentStoreUser = useAuthStore.getState().user;

@@ -107,7 +107,8 @@ export default function OnboardingScreen() {
 
       const hasCompletedProfile = Boolean(
         currentUser.profileCompleted &&
-        (currentUser.mobileNumber || currentUser.address),
+        currentUser.mobileNumber &&
+        currentUser.address,
       );
 
       router.replace(hasCompletedProfile ? '/(main)' : '/(register)/owner');
