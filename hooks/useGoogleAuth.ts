@@ -3,10 +3,10 @@ import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import * as Crypto from 'expo-crypto';
 import Constants from 'expo-constants';
-import { useAuth, useSSO, useUser } from '@clerk/expo';
-import { useSignInWithGoogle } from '@clerk/expo/google';
-import { isRunningInExpoGo } from 'expo';
+import { useAuth, useClerk, useSSO, useUser } from '@clerk/expo';
+import { isRunningInExpoGo, requireOptionalNativeModule } from 'expo';
 
 import { haptic } from '@lib/haptics';
 import { withTimeout } from '@lib/asyncUtils';
@@ -41,6 +41,54 @@ function buildOAuthRedirectUrl(): string {
   });
 }
 
+const NATIVE_GOOGLE_MODULE_UNAVAILABLE = 'NATIVE_GOOGLE_MODULE_UNAVAILABLE';
+
+type NativeGoogleCredentialResponse =
+  | { type: 'success'; data: { idToken: string; user?: unknown } }
+  | { type: 'cancelled' | 'noSavedCredentialFound'; data: null };
+
+type NativeGoogleSignInModule = {
+  configure(params: { webClientId: string; autoSelectEnabled?: boolean }): void;
+  presentExplicitSignIn(params: {
+    nonce: string;
+  }): Promise<NativeGoogleCredentialResponse>;
+};
+
+function getGoogleWebClientId(): string | undefined {
+  return (
+    Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_GOOGLE_WEB_CLIENT_ID ||
+    process.env.EXPO_PUBLIC_CLERK_GOOGLE_WEB_CLIENT_ID
+  );
+}
+
+function isCancellationError(error: any): boolean {
+  const message = String(error?.message || error?.errors?.[0]?.message || '').toLowerCase();
+  const code = String(error?.code || error?.errors?.[0]?.code || '');
+
+  return (
+    code === 'SIGN_IN_CANCELLED' ||
+    code === '-5' ||
+    message.includes('cancel') ||
+    message.includes('dismiss') ||
+    message.includes('closed by user')
+  );
+}
+
+function formatAuthError(error: any): string {
+  if (error?.message === NATIVE_GOOGLE_MODULE_UNAVAILABLE) {
+    return 'Google sign-in is not available in this build. Please reinstall the app.';
+  }
+
+  const code = String(error?.code || error?.errors?.[0]?.code || '');
+  const message =
+    error?.errors?.[0]?.longMessage ||
+    error?.errors?.[0]?.message ||
+    error?.message ||
+    'Could not sign in with Google. Please try again.';
+
+  return code && !String(message).includes(code) ? `${message} (${code})` : String(message);
+}
+
 export interface UseGoogleAuthReturn {
   handleGoogleSignIn: () => Promise<boolean>;
   connecting: boolean;
@@ -58,8 +106,13 @@ export interface UseGoogleAuthReturn {
 export function useGoogleAuth(): UseGoogleAuthReturn {
   const router = useRouter();
   const { isLoaded: clerkLoaded } = useAuth();
+  const { setActive, client } = useClerk() as any;
+  // Use the same legacy client resources Clerk's native Google hook uses.
+  // The Core 3 `useSignIn()`/`useSignUp()` hooks do not support
+  // `strategy: 'google_one_tap'`.
+  const signInResource = client?.signIn;
+  const signUpResource = client?.signUp;
   const { startSSOFlow } = useSSO();
-  const { startGoogleAuthenticationFlow } = useSignInWithGoogle();
   const { user: clerkUser } = useUser();
 
   const [connecting, setConnecting] = useState(false);
@@ -221,6 +274,119 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
     [router],
   );
 
+  /**
+   * Runs the native Google account picker directly instead of going through a
+   * browser redirect. Keeping the picker and the Clerk token exchange separate
+   * lets us report exactly which step failed.
+   */
+  const getNativeGoogleIdToken = useCallback(async (): Promise<string | null> => {
+    const nativeModule =
+      requireOptionalNativeModule<NativeGoogleSignInModule>('ClerkGoogleSignIn');
+
+    if (!nativeModule) {
+      throw new Error(NATIVE_GOOGLE_MODULE_UNAVAILABLE);
+    }
+
+    const webClientId = getGoogleWebClientId();
+    if (!webClientId) {
+      throw new Error(
+        'Google Sign-In is missing its web client ID. Rebuild the app after configuring Clerk.',
+      );
+    }
+
+    nativeModule.configure({ webClientId, autoSelectEnabled: false });
+    const nonce = Crypto.randomUUID();
+
+    console.log('[useGoogleAuth] Native Google picker opening');
+
+    try {
+      const response = await withTimeout(
+        nativeModule.presentExplicitSignIn({ nonce }),
+        60000,
+        'Google sign-in was not completed. Choose an account and continue.',
+      );
+
+      console.log('[useGoogleAuth] Native Google picker result:', response?.type);
+
+      if (response?.type === 'success' && response.data?.idToken) {
+        return response.data.idToken;
+      }
+
+      if (
+        response?.type === 'cancelled' ||
+        response?.type === 'noSavedCredentialFound'
+      ) {
+        return null;
+      }
+
+      throw new Error('Google sign-in did not return an account.');
+    } catch (pickerError: any) {
+      if (isCancellationError(pickerError)) return null;
+
+      console.error('[useGoogleAuth] Native Google picker failed:', pickerError);
+      throw pickerError;
+    }
+  }, []);
+
+  const exchangeGoogleTokenWithClerk = useCallback(
+    async (idToken: string) => {
+      if (!signInResource || !signUpResource) {
+        throw new Error('Clerk sign-in is still preparing. Please try again.');
+      }
+
+      let createdSessionId: string | null = null;
+
+      try {
+        console.log('[useGoogleAuth] Exchanging Google token with Clerk');
+        await withTimeout(
+          signInResource.create({ strategy: 'google_one_tap', token: idToken }),
+          20000,
+          'Google account verification timed out. Please try again.',
+        );
+
+        if (signInResource.firstFactorVerification?.status === 'transferable') {
+          console.log('[useGoogleAuth] Transferring Google account to sign-up');
+          await withTimeout(
+            signUpResource.create({ transfer: true }),
+            20000,
+            'Google account transfer timed out. Please try again.',
+          );
+          createdSessionId = signUpResource.createdSessionId ?? null;
+        } else {
+          createdSessionId = signInResource.createdSessionId ?? null;
+        }
+      } catch (clerkError: any) {
+        const isNewAccount = Boolean(
+          (Array.isArray(clerkError?.errors) &&
+            clerkError.errors.some(
+              (item: any) => item?.code === 'external_account_not_found',
+            )) ||
+            clerkError?.code === 'external_account_not_found',
+        );
+
+        if (!isNewAccount) {
+          console.error('[useGoogleAuth] Clerk Google token exchange failed:', clerkError);
+          throw clerkError;
+        }
+
+        console.log('[useGoogleAuth] Creating a new Clerk user from Google account');
+        await withTimeout(
+          signUpResource.create({ strategy: 'google_one_tap', token: idToken }),
+          20000,
+          'Google account registration timed out. Please try again.',
+        );
+        createdSessionId = signUpResource.createdSessionId ?? null;
+      }
+
+      if (!createdSessionId) {
+        throw new Error('Clerk did not create a session for this Google account.');
+      }
+
+      return { createdSessionId, signIn: signInResource, signUp: signUpResource };
+    },
+    [signInResource, signUpResource],
+  );
+
   const handleGoogleSignIn = useCallback(async (): Promise<boolean> => {
     resetPostAuthRouting();
 
@@ -237,31 +403,29 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       let authResult: any = undefined;
 
-      // Native builds: use Clerk's native Google One Tap flow. No browser, no
-      // app switching, and no sso-callback redirect to get stuck on.
+      // Native builds: run the in-app Google account picker, then exchange the
+      // returned ID token with Clerk. Once the picker opens, never silently
+      // switch to the browser flow — that hid the real failure behind the old
+      // "took too long to open" timeout.
       if (Platform.OS !== 'web') {
         try {
-          authResult = await withTimeout(
-            startGoogleAuthenticationFlow(),
-            20000,
-            'Google sign-in took too long to open.',
-          );
+          const idToken = await getNativeGoogleIdToken();
 
-          // A null result here means the Google account dialog was dismissed.
-          if (!authResult?.createdSessionId) return false;
+          // A null token means the chooser was dismissed or no account was
+          // selected. That is a user cancellation, not an error.
+          if (!idToken) return false;
+
+          authResult = {
+            ...(await exchangeGoogleTokenWithClerk(idToken)),
+            setActive,
+          };
         } catch (nativeError: any) {
-          const nativeMessage = String(nativeError?.message || '');
-          const isCancellation =
-            nativeMessage.toLowerCase().includes('cancel') ||
-            nativeError?.code === 'SIGN_IN_CANCELLED' ||
-            nativeError?.code === '-5';
-
-          if (isCancellation) throw nativeError;
-
-          console.warn(
-            '[useGoogleAuth] Native Google flow unavailable; falling back to browser flow.',
-            nativeError,
-          );
+          // Only fall back if the native module is genuinely missing (Expo Go,
+          // web, or an old build). Any error after the picker opened is real
+          // and is surfaced to the user and the logs.
+          if (nativeError?.message !== NATIVE_GOOGLE_MODULE_UNAVAILABLE) {
+            throw nativeError;
+          }
           authResult = undefined;
         }
       }
@@ -276,20 +440,21 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
               redirectUrl: buildOAuthRedirectUrl(),
             }),
             25000,
-            'Google sign-in took too long to open.',
+            'Google browser sign-in timed out. Please try again.',
           );
         } finally {
           await Promise.resolve(WebBrowser.coolDownAsync()).catch(() => {});
         }
       }
 
-      const { createdSessionId, setActive, signIn, signUp } = authResult ?? {};
+      const { createdSessionId, signIn, signUp } = authResult ?? {};
+      const authSetActive = authResult?.setActive ?? setActive;
       const sessionId =
         createdSessionId || signIn?.createdSessionId || signUp?.createdSessionId;
 
-      if (sessionId && setActive) {
+      if (sessionId && authSetActive) {
         await withTimeout(
-          setActive({ session: sessionId }),
+          authSetActive({ session: sessionId }),
           12000,
           'Clerk session activation timed out',
         );
@@ -303,21 +468,11 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       return false;
     } catch (err: any) {
-      console.log('Google Authentication error:', err);
+      console.error('[useGoogleAuth] Google authentication failed:', err);
 
-      const rawMsg =
-        err?.errors?.[0]?.longMessage ||
-        err?.message ||
-        'Could not sign in with Google. Please try again.';
+      const rawMsg = formatAuthError(err);
 
-      const isCancellation =
-        rawMsg.toLowerCase().includes('cancel') ||
-        rawMsg.toLowerCase().includes('dismiss') ||
-        rawMsg.toLowerCase().includes('closed') ||
-        err?.code === 'SIGN_IN_CANCELLED' ||
-        err?.code === '-5';
-
-      if (!isCancellation) {
+      if (!isCancellationError(err)) {
         setError(rawMsg);
         haptic.error();
       }
@@ -330,7 +485,9 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
     }
   }, [
     clerkLoaded,
-    startGoogleAuthenticationFlow,
+    getNativeGoogleIdToken,
+    exchangeGoogleTokenWithClerk,
+    setActive,
     startSSOFlow,
     handlePostAuthRouting,
     clerkUser,
