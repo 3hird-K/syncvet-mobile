@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import Constants from 'expo-constants';
-import { useSSO, useUser } from '@clerk/expo';
+import { useAuth, useSSO, useUser } from '@clerk/expo';
+import { useSignInWithGoogle } from '@clerk/expo/google';
 import { isRunningInExpoGo } from 'expo';
 
 import { haptic } from '@lib/haptics';
@@ -19,13 +20,25 @@ import { useOnboardingStore } from '@store/useOnboardingStore';
 import { supabase } from '@lib/supabase';
 import { isRestrictedStaffRole } from '@services/auth/types';
 
-function useWarmUpBrowser() {
-  React.useEffect(() => {
-    void WebBrowser.warmUpAsync();
-    return () => {
-      void WebBrowser.coolDownAsync();
-    };
-  }, []);
+function buildOAuthRedirectUrl(): string {
+  let isExpoGo = false;
+  try {
+    isExpoGo = isRunningInExpoGo();
+  } catch {
+    isExpoGo = false;
+  }
+
+  if (isExpoGo) {
+    const base =
+      Constants.linkingUri ||
+      `exp://${Platform.OS === 'android' ? '192.168.254.101' : 'localhost'}:8081`;
+    return `${base.replace(/\/--\/.*$/, '').replace(/\/$/, '')}/--/sso-callback`;
+  }
+
+  return AuthSession.makeRedirectUri({
+    scheme: 'syncvet',
+    path: 'sso-callback',
+  });
 }
 
 export interface UseGoogleAuthReturn {
@@ -36,13 +49,17 @@ export interface UseGoogleAuthReturn {
 }
 
 /**
- * Production-ready Google Authentication hook for SyncVet.
- * Uses standard Clerk OAuth SSO flow for reliable 1-step Google authentication.
+ * Google authentication for SyncVet.
+ *
+ * Native builds use Clerk's native Google One Tap flow, which does not depend
+ * on a web browser or an app-switching redirect. The browser-based SSO flow is
+ * kept as a fallback for web and for devices where the native module is absent.
  */
 export function useGoogleAuth(): UseGoogleAuthReturn {
-  useWarmUpBrowser();
   const router = useRouter();
+  const { isLoaded: clerkLoaded } = useAuth();
   const { startSSOFlow } = useSSO();
+  const { startGoogleAuthenticationFlow } = useSignInWithGoogle();
   const { user: clerkUser } = useUser();
 
   const [connecting, setConnecting] = useState(false);
@@ -207,46 +224,66 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
   const handleGoogleSignIn = useCallback(async (): Promise<boolean> => {
     resetPostAuthRouting();
 
+    if (!clerkLoaded) {
+      setError('Google sign-in is still preparing. Please try again in a moment.');
+      return false;
+    }
+
     try {
       haptic.medium();
       setConnecting(true);
       useAuthStore.getState().setAuthLoading(true);
       setError(undefined);
 
-      let isExpoGo = false;
-      try {
-        isExpoGo = isRunningInExpoGo();
-      } catch {
-        isExpoGo = false;
+      let authResult: any = undefined;
+
+      // Native builds: use Clerk's native Google One Tap flow. No browser, no
+      // app switching, and no sso-callback redirect to get stuck on.
+      if (Platform.OS !== 'web') {
+        try {
+          authResult = await withTimeout(
+            startGoogleAuthenticationFlow(),
+            20000,
+            'Google sign-in took too long to open.',
+          );
+
+          // A null result here means the Google account dialog was dismissed.
+          if (!authResult?.createdSessionId) return false;
+        } catch (nativeError: any) {
+          const nativeMessage = String(nativeError?.message || '');
+          const isCancellation =
+            nativeMessage.toLowerCase().includes('cancel') ||
+            nativeError?.code === 'SIGN_IN_CANCELLED' ||
+            nativeError?.code === '-5';
+
+          if (isCancellation) throw nativeError;
+
+          console.warn(
+            '[useGoogleAuth] Native Google flow unavailable; falling back to browser flow.',
+            nativeError,
+          );
+          authResult = undefined;
+        }
       }
 
-      // In Expo Go on Android, Android OS only recognises the exp:// scheme to return to the Expo Go client.
-      // Custom schemes like syncvet:// only work in standalone / custom dev builds.
-      let redirectUrl = 'syncvet://sso-callback';
-      if (isExpoGo) {
-        const base =
-          Constants.linkingUri ||
-          `exp://${Platform.OS === 'android' ? '192.168.254.101' : 'localhost'}:8081`;
-        const cleanBase = base.replace(/\/--\/.*$/, '').replace(/\/$/, '');
-        redirectUrl = `${cleanBase}/--/sso-callback`;
-      } else {
-        redirectUrl = AuthSession.makeRedirectUri({
-          scheme: 'syncvet',
-          path: 'sso-callback',
-        });
+      // Web, Expo Go, or devices without the native Google module.
+      if (!authResult?.createdSessionId) {
+        await Promise.resolve(WebBrowser.warmUpAsync()).catch(() => {});
+        try {
+          authResult = await withTimeout(
+            startSSOFlow({
+              strategy: 'oauth_google',
+              redirectUrl: buildOAuthRedirectUrl(),
+            }),
+            25000,
+            'Google sign-in took too long to open.',
+          );
+        } finally {
+          await Promise.resolve(WebBrowser.coolDownAsync()).catch(() => {});
+        }
       }
 
-      console.log('[useGoogleAuth] OAuth Redirect URL:', redirectUrl);
-
-      const { createdSessionId, setActive, signIn, signUp } = await withTimeout(
-        startSSOFlow({
-          strategy: 'oauth_google',
-          redirectUrl,
-        }),
-        25000,
-        'Google sign-in took too long. Please try again.',
-      );
-
+      const { createdSessionId, setActive, signIn, signUp } = authResult ?? {};
       const sessionId =
         createdSessionId || signIn?.createdSessionId || signUp?.createdSessionId;
 
@@ -257,17 +294,13 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
           'Clerk session activation timed out',
         );
 
-        // Fire-and-forget: these cleanup calls must never race with or block
-        // the browser handshake that just completed.
         Promise.resolve(WebBrowser.dismissAuthSession()).catch(() => {});
-        Promise.resolve(WebBrowser.coolDownAsync()).catch(() => {});
 
         haptic.success();
         await handlePostAuthRouting(signUp, signIn, clerkUser);
         return true;
       }
 
-      // Browser was dismissed without a completed sign-in.
       return false;
     } catch (err: any) {
       console.log('Google Authentication error:', err);
@@ -296,6 +329,8 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       useAuthStore.getState().setAuthLoading(false);
     }
   }, [
+    clerkLoaded,
+    startGoogleAuthenticationFlow,
     startSSOFlow,
     handlePostAuthRouting,
     clerkUser,

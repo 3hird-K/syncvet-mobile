@@ -162,6 +162,14 @@ export default function OnboardingScreen() {
   // Authentication genuinely requires connectivity. Explain that only when the
   // user reaches the action, never as a blocking banner on the static slides.
   const handleSignInPress = useCallback(async () => {
+    if (!clerkLoaded) {
+      toast.info('Preparing Google Sign-In', {
+        description: 'Please wait a moment and try again.',
+        duration: 2500,
+      });
+      return;
+    }
+
     if (!networkService.isOnline()) {
       haptic.light();
       toast.info('You are offline', {
@@ -171,7 +179,7 @@ export default function OnboardingScreen() {
       return;
     }
     await handleGoogleSignIn();
-  }, [handleGoogleSignIn]);
+  }, [handleGoogleSignIn, clerkLoaded]);
 
   const onScrollEndDrag = useCallback(
     (e: ScrollEvent) => {
