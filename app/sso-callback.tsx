@@ -1,17 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useAuth, useUser } from '@clerk/expo';
 
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { networkService } from '@services/network';
+import { withTimeout } from '@lib/asyncUtils';
+import { claimPostAuthRouting, releasePostAuthRouting } from '@lib/authFlowCoordinator';
 import { isRestrictedStaffRole } from '@services/auth/types';
 import { PawFootprintLoader } from '@components/ui/PawLoading';
 import { AnimatedBubbleBackground } from '@components/ui/AnimatedBubbleBackground';
-
-WebBrowser.maybeCompleteAuthSession();
 
 export default function SSOCallbackScreen() {
   const router = useRouter();
@@ -19,49 +18,37 @@ export default function SSOCallbackScreen() {
   const { user: clerkUser } = useUser();
   const routed = useRef(false);
 
+  const finishRouting = useCallback(() => {
+    if (routed.current) return;
+    routed.current = true;
+
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) {
+      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
+      return;
+    }
+
+    if (isRestrictedStaffRole(currentUser.role)) {
+      router.replace('/unauthorized-role');
+      return;
+    }
+
+    const hasCompletedProfile = Boolean(
+      currentUser.profileCompleted && currentUser.mobileNumber && currentUser.address,
+    );
+
+    router.replace(hasCompletedProfile ? '/(main)' : '/(register)/owner');
+  }, [router]);
+
   useEffect(() => {
-    try {
-      WebBrowser.maybeCompleteAuthSession();
-      void WebBrowser.dismissAuthSession();
-      void WebBrowser.coolDownAsync();
-    } catch {}
-  }, []);
+    // Hard deadline: never strand the user on the paw loader just because
+    // Clerk is still initializing or the profile lookup is slow.
+    const timer = setTimeout(() => finishRouting(), 8000);
+    return () => clearTimeout(timer);
+  }, [finishRouting]);
 
   useEffect(() => {
     if (routed.current) return;
-
-    const finishRouting = (delay = false) => {
-      if (routed.current) return;
-      routed.current = true;
-
-      const currentUser = useAuthStore.getState().user;
-      if (!currentUser) {
-        router.replace({ pathname: '/onboarding', params: { slide: '3' } });
-        return;
-      }
-
-      // Redirect Veterinarians and Administrators away from pet owner mobile app
-      if (isRestrictedStaffRole(currentUser.role)) {
-        router.replace('/unauthorized-role');
-        return;
-      }
-
-      const hasCompletedProfile = Boolean(
-        currentUser.profileCompleted &&
-        currentUser.mobileNumber &&
-        currentUser.address
-      );
-
-      const navigate = () => {
-        router.replace(hasCompletedProfile ? '/(main)' : '/(register)/owner');
-      };
-
-      if (delay) {
-        setTimeout(navigate, 800);
-      } else {
-        navigate();
-      }
-    };
 
     const authState = useAuthStore.getState();
     const hasLocalSession =
@@ -69,8 +56,6 @@ export default function SSOCallbackScreen() {
     const isOffline = !networkService.isOnline();
 
     // An existing local session is authoritative on a cold start while offline.
-    // Clerk may still be initializing, and waiting for it can strand the user
-    // on this callback screen or send them back to online-only authentication.
     if (isOffline && hasLocalSession) {
       finishRouting();
       return;
@@ -79,24 +64,35 @@ export default function SSOCallbackScreen() {
     if (!isLoaded) return;
 
     if (isSignedIn && clerkUser) {
+      const userId = clerkUser.id;
+      if (!claimPostAuthRouting(userId)) return;
+
       useOnboardingStore.getState().setCompleted();
 
-      useAuthStore.getState().googleSignIn({
-        email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
-        fullName: clerkUser.fullName || clerkUser.firstName || 'Resident',
-        photoUrl: clerkUser.imageUrl,
-      }).then(async () => {
-        await useAuthStore.getState().syncUserFromClerk(clerkUser);
-        finishRouting(true);
-      }).catch(() => {
-        // A failed network lookup must not undo a usable local session.
-        finishRouting();
-      });
+      void withTimeout(
+        (async () => {
+          await useAuthStore.getState().googleSignIn({
+            id: userId,
+            email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
+            fullName: clerkUser.fullName || clerkUser.firstName || 'Resident',
+            photoUrl: clerkUser.imageUrl,
+          });
+          await useAuthStore.getState().syncUserFromClerk(clerkUser);
+        })(),
+        6000,
+        'Session restore timed out',
+      )
+        .then(() => finishRouting())
+        .catch((error) => {
+          console.warn('[sso-callback] Session restore note:', error);
+          releasePostAuthRouting(userId);
+          // Keep any usable local session; otherwise fall back to onboarding.
+          finishRouting();
+        });
     } else if (!isSignedIn) {
-      routed.current = true;
-      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
+      finishRouting();
     }
-  }, [isLoaded, isSignedIn, clerkUser, router]);
+  }, [isLoaded, isSignedIn, clerkUser, finishRouting]);
 
   return (
     <View style={styles.container}>

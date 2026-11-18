@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { useAuth, useUser } from '@clerk/expo';
 import { setSupabaseTokenProvider, supabase } from '@lib/supabase';
+import { withTimeout } from '@lib/asyncUtils';
 import { useAuthStore } from '@store/useAuthStore';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { supabaseRealtimeService } from '@services/realtime/SupabaseRealtimeService';
@@ -24,6 +25,29 @@ export function SupabaseAuthBridge() {
   const { isOnline } = useNetworkStatus();
   const syncUserFromClerk = useAuthStore((state) => state.syncUserFromClerk);
   const sessionInitializedRef = useRef<string | null>(null);
+
+  // 0. Install the Clerk token provider before any Supabase query runs.
+  // Effects execute in declaration order, so this must stay above the
+  // verification/heartbeat effects that call Supabase.
+  useEffect(() => {
+    if (isSignedIn) {
+      setSupabaseTokenProvider(async () => {
+        try {
+          const templateToken = await withTimeout(
+            getToken({ template: 'supabase' }),
+            3000,
+            'Clerk Supabase token timed out',
+          ).catch(() => null);
+          if (templateToken) return templateToken;
+          return await withTimeout(getToken(), 3000, 'Clerk token timed out').catch(() => null);
+        } catch {
+          return null;
+        }
+      });
+    } else {
+      setSupabaseTokenProvider(null);
+    }
+  }, [isSignedIn, getToken]);
 
   // 1. If Clerk session is terminated or user is deleted in Clerk, clear local auth store
   useEffect(() => {
@@ -301,23 +325,6 @@ export function SupabaseAuthBridge() {
       appStateSub.remove();
     };
   }, [clerkUser?.id, isSignedIn, isOnline, clerkSignOut]);
-
-  // 7. Supabase JWT Token Provider
-  useEffect(() => {
-    if (isSignedIn) {
-      setSupabaseTokenProvider(async () => {
-        try {
-          const templateToken = await getToken({ template: 'supabase' }).catch(() => null);
-          if (templateToken) return templateToken;
-          return await getToken();
-        } catch {
-          return null;
-        }
-      });
-    } else {
-      setSupabaseTokenProvider(null);
-    }
-  }, [isSignedIn, getToken]);
 
   return null;
 }

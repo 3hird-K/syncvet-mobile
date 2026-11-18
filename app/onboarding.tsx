@@ -11,7 +11,6 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
 import { useAuth, useUser } from '@clerk/expo';
 import { useGoogleAuth } from '@hooks/useGoogleAuth';
 import Animated, {
@@ -87,11 +86,6 @@ export default function OnboardingScreen() {
 
     coldStartCheckedRef.current = true;
     setCheckingAuth(true);
-
-    try {
-      void WebBrowser.dismissAuthSession();
-      void WebBrowser.coolDownAsync();
-    } catch {}
 
     const finishRouting = () => {
       const currentUser = useAuthStore.getState().user;

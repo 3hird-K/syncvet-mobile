@@ -100,9 +100,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      restoreSession().finally(() => {
-        SplashScreen.hideAsync().catch(() => { });
-      });
+      Promise.race([
+        restoreSession(),
+        new Promise<void>((resolve) => setTimeout(resolve, 4000)),
+      ])
+        .catch(() => {})
+        .finally(() => {
+          SplashScreen.hideAsync().catch(() => {});
+        });
     }
   }, [fontsLoaded, fontError, restoreSession]);
 

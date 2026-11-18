@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
+import { withTimeout } from '@lib/asyncUtils';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
 import { isRestrictedStaffRole } from '@services/auth/types';
@@ -31,7 +32,11 @@ export default function IndexScreen() {
 
       if (isAuth) {
         if (clerkUser) {
-          await useAuthStore.getState().syncUserFromClerk(clerkUser).catch(() => {});
+          await withTimeout(
+            useAuthStore.getState().syncUserFromClerk(clerkUser),
+            3000,
+            'profile sync timeout',
+          ).catch(() => {});
         }
 
         const freshUser = useAuthStore.getState().user;
