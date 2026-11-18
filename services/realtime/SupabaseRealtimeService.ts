@@ -38,6 +38,8 @@ class SupabaseRealtimeService {
   private queueCallAlert: QueueCallAlert | null = null;
   private queueCallListeners = new Set<(alert: QueueCallAlert | null) => void>();
   private lastAppliedQueueStatus = new Map<string, string>();
+  private baselinedOwners = new Set<string>();
+  private completionToastShown = new Set<string>();
 
   public setOnAccountDeleted(callback?: () => Promise<void>): void {
     this.onAccountDeletedCallback = callback;
@@ -105,7 +107,16 @@ class SupabaseRealtimeService {
       .limit(50);
 
     if (error || !data?.length) return;
+
+    // The first poll only establishes the current state. A ticket that was
+    // already completed before this session is history, not a live event.
+    const isBaseline = !this.baselinedOwners.has(ownerId);
+    this.baselinedOwners.add(ownerId);
+
     for (const ticket of data) {
+      if (isBaseline && normalizeQueueStatus(ticket.status) === 'completed') {
+        this.completionToastShown.add(ticket.id);
+      }
       this.handleQueueTicketChange(ownerId, { eventType: 'UPDATE', new: ticket });
     }
   }
@@ -432,7 +443,10 @@ class SupabaseRealtimeService {
       this.raiseQueueCall(updatedAppointment, ticket);
     } else {
       this.clearQueueCallAlert(ticket.id);
-      if (appointmentStatus === 'completed') {
+      // Show this once per ticket, and only for a completion that happens
+      // during this session — not for old tickets replayed by the 3s poll.
+      if (appointmentStatus === 'completed' && !this.completionToastShown.has(ticket.id)) {
+        this.completionToastShown.add(ticket.id);
         toast.success('Visit Completed', {
           description: `${appointment.petName}'s visit was completed and placed in History.`,
         });
@@ -486,6 +500,7 @@ class SupabaseRealtimeService {
     }
     this.currentOwnerId = null;
     this.lastAppliedQueueStatus.clear();
+    this.baselinedOwners.clear();
     this.clearQueueCallAlert();
   }
 }

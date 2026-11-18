@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: '#E4E6EB',
   },
   createStoryTopWrap: {
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     backgroundColor: '#0D9488',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',

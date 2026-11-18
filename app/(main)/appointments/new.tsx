@@ -47,6 +47,7 @@ import {
   todayISO,
 } from '@lib/format';
 import { haptic } from '@lib/haptics';
+import { findSameDayBookingConflict, type SameDayConflict } from '@lib/bookingRules';
 import {
   getServiceUnavailableMessage,
   getVaccinationDueDate,
@@ -66,6 +67,12 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<BookingStepIn
 
 const BOOKING_STEPS = [1, 2, 3, 4] as const;
 type BookingStepIndex = (typeof BOOKING_STEPS)[number];
+
+function getConflictMessage(conflict: SameDayConflict): string {
+  return conflict.reason === 'consultation'
+    ? 'Only one consultation per pet per day is allowed.'
+    : 'Vaccination and spay/neuter cannot be scheduled on the same day.';
+}
 
 const STEP_SUBTITLES: Record<BookingStepIndex, string> = {
   1: 'Select Pet',
@@ -277,6 +284,21 @@ export default function NewAppointmentScreen() {
     [selectedServiceId],
   );
 
+  // A duplicate/unsafe booking cannot be advanced or confirmed.
+  const sameDayConflict = useMemo(
+    () =>
+      dateISO
+        ? findSameDayBookingConflict({
+            appointments,
+            petId: selectedPetId,
+            petName: selectedPet?.name,
+            date: dateISO,
+            serviceId: selectedServiceId,
+          })
+        : undefined,
+    [appointments, dateISO, selectedPetId, selectedPet?.name, selectedServiceId],
+  );
+
   // Available dates (Next 10 municipal business days: Monday to Friday)
   const dateOptions = useMemo(() => {
     const today = todayISO();
@@ -287,6 +309,7 @@ export default function NewAppointmentScreen() {
       weekday: string;
       isToday: boolean;
       hasAvailableSlots: boolean;
+      hasConflict: boolean;
     }[] = [];
 
     let daysAdded = 0;
@@ -299,9 +322,18 @@ export default function NewAppointmentScreen() {
 
       if (!isWeekend) {
         const isToday = iso === today;
-        const hasAvailableSlots = isToday
-          ? TIME_SLOTS.some((s) => isSlotAvailable(iso, s))
-          : true;
+        const hasConflict = Boolean(
+          findSameDayBookingConflict({
+            appointments,
+            petId: selectedPetId,
+            petName: selectedPet?.name,
+            date: iso,
+            serviceId: selectedServiceId,
+          }),
+        );
+        // One consultation per day; vaccination and spay/neuter never share a day.
+        const hasAvailableSlots =
+          !hasConflict && (isToday ? TIME_SLOTS.some((s) => isSlotAvailable(iso, s)) : true);
 
         options.push({
           iso,
@@ -309,13 +341,14 @@ export default function NewAppointmentScreen() {
           weekday: formatWeekdayDate(iso).split(',')[0],
           isToday,
           hasAvailableSlots,
+          hasConflict,
         });
         daysAdded++;
       }
       offset++;
     }
     return options;
-  }, []);
+  }, [appointments, selectedPetId, selectedPet?.name, selectedServiceId]);
 
   // Auto-select first available date with open slots
   useEffect(() => {
@@ -324,6 +357,23 @@ export default function NewAppointmentScreen() {
       setDateISO(firstOpen.iso);
     }
   }, [dateOptions, dateISO]);
+
+  // Switching pet or service can turn the chosen date into a same-day
+  // procedure conflict. Clear it so auto-select can move to a valid date.
+  useEffect(() => {
+    if (!dateISO) return;
+    const conflict = findSameDayBookingConflict({
+      appointments,
+      petId: selectedPetId,
+      petName: selectedPet?.name,
+      date: dateISO,
+      serviceId: selectedServiceId,
+    });
+    if (conflict) {
+      setDateISO(undefined);
+      setTimeSlot(undefined);
+    }
+  }, [dateISO, appointments, selectedPetId, selectedPet?.name, selectedServiceId]);
 
   // If selected time slot is unavailable on the chosen date, reset it
   useEffect(() => {
@@ -428,6 +478,35 @@ export default function NewAppointmentScreen() {
           return false;
         }
 
+        const sameDayConflict = findSameDayBookingConflict({
+          appointments,
+          petId: selectedPetId,
+          petName: selectedPet?.name,
+          date: dateISO,
+          serviceId: selectedServiceId,
+        });
+        if (sameDayConflict) {
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            const conflictService =
+              getService(sameDayConflict.appointment.serviceId || '')?.name || 'another visit';
+            toast.error(
+              sameDayConflict.reason === 'consultation'
+                ? 'Consultation Already Scheduled'
+                : 'Same-Day Procedure Conflict',
+              {
+                id: 'booking-same-day-conflict',
+                description:
+                  sameDayConflict.reason === 'consultation'
+                    ? `${selectedPet?.name || 'This pet'} already has a consultation on ${formatShortDate(dateISO)}. Only one consultation per day is allowed.`
+                    : `${selectedPet?.name || 'This pet'} already has ${conflictService} on ${formatShortDate(dateISO)}. Vaccination and spay/neuter must be on separate days.`,
+              },
+            );
+          }
+          return false;
+        }
+
         const conflict = findScheduleConflict(dateISO, timeSlot);
         if (conflict) {
           haptic.warning();
@@ -446,6 +525,7 @@ export default function NewAppointmentScreen() {
       return true;
     },
     [
+      appointments,
       selectedPetId,
       selectedPet,
       selectedServiceId,
@@ -540,6 +620,19 @@ export default function NewAppointmentScreen() {
         getServiceUnavailableMessage(selectedPet, selectedService.id) ||
           'This service is no longer needed for the selected pet.',
       );
+      return;
+    }
+
+    const sameDayConflict = findSameDayBookingConflict({
+      appointments,
+      petId: selectedPet.id,
+      petName: selectedPet.name,
+      date: dateISO,
+      serviceId: selectedService.id,
+    });
+    if (sameDayConflict) {
+      haptic.warning();
+      setError(`${getConflictMessage(sameDayConflict)} Please choose another date.`);
       return;
     }
 
@@ -1021,7 +1114,11 @@ export default function NewAppointmentScreen() {
                         isClosed && styles.dateLabelDisabled,
                       ]}
                     >
-                      {isClosed && opt.isToday ? 'Closed Today' : opt.label}
+                      {opt.hasConflict
+                        ? 'Conflict'
+                        : isClosed && opt.isToday
+                        ? 'Closed Today'
+                        : opt.label}
                     </Text>
                   </Pressable>
                 );
@@ -1088,16 +1185,44 @@ export default function NewAppointmentScreen() {
             </View>
 
 
+            {sameDayConflict ? (
+              <View style={styles.errorBanner}>
+                <Ionicons name="alert-circle" size={16} color={colors.error} />
+                <Text style={styles.errorText}>{getConflictMessage(sameDayConflict)}</Text>
+              </View>
+            ) : null}
+
             {/* Continue to Review Details */}
             <Pressable
               onPress={() => handleNextStep(3)}
-              style={styles.swipePromptPill}
+              disabled={Boolean(sameDayConflict)}
+              style={[
+                styles.swipePromptPill,
+                sameDayConflict && styles.swipePromptPillDisabled,
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Proceed to Review Details"
+              accessibilityState={{ disabled: Boolean(sameDayConflict) }}
             >
-              <Text style={styles.swipePromptText}>Continue to Review & Confirm</Text>
-              <View style={styles.swipePromptIconWrap}>
-                <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+              <Text
+                style={[
+                  styles.swipePromptText,
+                  sameDayConflict && styles.swipePromptTextDisabled,
+                ]}
+              >
+                {sameDayConflict ? 'Choose Another Date' : 'Continue to Review & Confirm'}
+              </Text>
+              <View
+                style={[
+                  styles.swipePromptIconWrap,
+                  sameDayConflict && styles.swipePromptIconWrapDisabled,
+                ]}
+              >
+                <Ionicons
+                  name={sameDayConflict ? 'close-circle-outline' : 'arrow-forward'}
+                  size={13}
+                  color={sameDayConflict ? colors.textDisabled : colors.primary}
+                />
               </View>
             </Pressable>
           </SlideWrapper>
@@ -1168,6 +1293,13 @@ export default function NewAppointmentScreen() {
             </View>
           ) : null}
 
+          {sameDayConflict ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={16} color={colors.error} />
+              <Text style={styles.errorText}>{getConflictMessage(sameDayConflict)}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.finalSubmitRow}>
             <Button
               title="Confirm & Book Appointment"
@@ -1175,7 +1307,7 @@ export default function NewAppointmentScreen() {
               size="lg"
               onPress={handleConfirmBooking}
               loading={submitting}
-              disabled={submitting}
+              disabled={submitting || Boolean(sameDayConflict)}
               showPaw
               fullWidth
             />
@@ -1196,6 +1328,7 @@ export default function NewAppointmentScreen() {
       notes,
       dateOptions,
       dateISO,
+      sameDayConflict,
       timeSlot,
       submitting,
       error,
@@ -1980,11 +2113,21 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 168, 150, 0.18)',
     marginTop: spacing.md,
   },
+  swipePromptPillDisabled: {
+    backgroundColor: 'rgba(100, 116, 139, 0.08)',
+    borderColor: 'rgba(100, 116, 139, 0.14)',
+  },
   swipePromptText: {
     ...typography.captionBold,
     color: colors.primary,
     fontSize: 12.5,
     fontWeight: '700',
+  },
+  swipePromptTextDisabled: {
+    color: colors.textDisabled,
+  },
+  swipePromptIconWrapDisabled: {
+    borderColor: 'rgba(100, 116, 139, 0.14)',
   },
   swipePromptIconWrap: {
     width: 22,

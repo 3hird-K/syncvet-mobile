@@ -64,7 +64,7 @@ export function AppointmentSwitch({
         onLayout={handleLayout}
         accessibilityRole="tablist"
       >
-        {/* Animated Sliding White Capsule Thumb */}
+        {/* Animated Sliding Rounded-Rectangle Thumb */}
         {thumbWidth > 0 && (
           <Animated.View
             style={[
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(7, 30, 38, 0.05)',
-    borderRadius: radius.pill,
+    borderRadius: radius.md,
     padding: 4,
     height: 46,
     borderWidth: 1,
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     bottom: 4,
     left: 4,
     backgroundColor: colors.surface,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: 'rgba(10, 110, 100, 0.10)',
   },
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     minWidth: 20,
     height: 20,
     paddingHorizontal: 6,
-    borderRadius: 10,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },

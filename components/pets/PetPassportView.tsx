@@ -25,6 +25,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
+import { findSameDayBookingConflict } from '@lib/bookingRules';
+import { getService } from '@lib/services';
 import { ageFromBirthYear, formatDateWithYear } from '@lib/format';
 import {
   getServiceUnavailableMessage,
@@ -145,12 +147,15 @@ export function PetPassportView({
   const { user: clerkUser } = useUser();
   const authUser = useAuthStore((state) => state.user);
   const allPets = useDataStore((state) => state.pets) || [];
+  const appointments = useDataStore((state) => state.appointments) || [];
   const ownerId = authUser?.id || pet?.ownerId || '';
   const qrRef = useRef<any>(null);
   const scrollBodyRef = useRef<any>(null);
   const editScrollRef = useRef<any>(null);
   const symptomsInputRef = useRef<any>(null);
   const symptomsFocusedRef = useRef(false);
+  const procedureNotesInputRef = useRef<any>(null);
+  const procedureNotesFocusedRef = useRef(false);
   const bodyScrollOffsetRef = useRef(0);
   const keyboardTopRef = useRef<number | null>(null);
 
@@ -176,35 +181,39 @@ export function PetPassportView({
     };
   }, []);
 
-  // Keep the clinical symptoms field visible above the keyboard. Measuring the
+  // Keep a focused multiline field visible above the keyboard. Measuring the
   // input in page coordinates works with both adjustResize and adjustPan.
-  const revealSymptomsInput = useCallback(() => {
-    const input = symptomsInputRef.current;
-    const scroller = scrollBodyRef.current;
-    if (!input || !scroller) return;
+  const revealInputAboveKeyboard = useCallback(
+    (inputRef: React.RefObject<any> | null) => {
+      const input = inputRef?.current;
+      const scroller = scrollBodyRef.current;
+      if (!input || !scroller) return;
 
-    input.measure(
-      (_x: number, _y: number, _width: number, height: number, _pageX: number, pageY: number) => {
-        const keyboardTop = keyboardTopRef.current ?? windowHeight;
-        const inputBottom = pageY + height;
-        const safeBottom = keyboardTop - 16;
-        if (!Number.isFinite(inputBottom) || inputBottom <= safeBottom) return;
+      input.measure(
+        (_x: number, _y: number, _width: number, height: number, _pageX: number, pageY: number) => {
+          const keyboardTop = keyboardTopRef.current ?? windowHeight;
+          const inputBottom = pageY + height;
+          const safeBottom = keyboardTop - 16;
+          if (!Number.isFinite(inputBottom) || inputBottom <= safeBottom) return;
 
-        const targetY = Math.max(0, bodyScrollOffsetRef.current + (inputBottom - safeBottom) + 12);
-        scroller.scrollTo({ y: targetY, animated: true });
-      },
-    );
-  }, [windowHeight]);
+          const targetY = Math.max(0, bodyScrollOffsetRef.current + (inputBottom - safeBottom) + 12);
+          scroller.scrollTo({ y: targetY, animated: true });
+        },
+      );
+    },
+    [windowHeight],
+  );
 
   // On Android keyboardDidShow can arrive after the focus handler runs, so
   // scroll again once the keyboard height is committed.
   useEffect(() => {
-    if (keyboardHeight > 0 && symptomsFocusedRef.current) {
-      const timer = setTimeout(revealSymptomsInput, 60);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [keyboardHeight, revealSymptomsInput]);
+    if (keyboardHeight <= 0) return undefined;
+    const timer = setTimeout(() => {
+      if (symptomsFocusedRef.current) revealInputAboveKeyboard(symptomsInputRef);
+      if (procedureNotesFocusedRef.current) revealInputAboveKeyboard(procedureNotesInputRef);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [keyboardHeight, revealInputAboveKeyboard]);
 
   const [activeTab, setActiveTab] = useState<PetDetailTab>('overview');
   const [isEditing, setIsEditing] = useState(false);
@@ -356,8 +365,19 @@ export function PetPassportView({
     const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (clinicalDate === todayISO && now.getHours() >= 16) return false;
     if (!clinicalSymptoms.trim()) return false;
+    if (
+      findSameDayBookingConflict({
+        appointments,
+        petId: pet.id,
+        petName: pet.name,
+        date: clinicalDate,
+        serviceId: 'consultation',
+      })
+    ) {
+      return false;
+    }
     return true;
-  }, [selectedServices, clinicalDate, clinicalSymptoms]);
+  }, [appointments, pet, selectedServices, clinicalDate, clinicalSymptoms]);
 
   // Check required fields for Procedure Booking (Procedure + Valid Weekday Date + Prep Checkbox)
   const isProcedureFormValid = useMemo(() => {
@@ -369,8 +389,19 @@ export function PetPassportView({
     const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (procedureDate === todayISO && now.getHours() >= 16) return false;
     if (!prepConfirmed) return false;
+    if (
+      findSameDayBookingConflict({
+        appointments,
+        petId: pet.id,
+        petName: pet.name,
+        date: procedureDate,
+        serviceId,
+      })
+    ) {
+      return false;
+    }
     return true;
-  }, [pet, selectedProcedure, procedureDate, prepConfirmed]);
+  }, [appointments, pet, selectedProcedure, procedureDate, prepConfirmed]);
 
   // 1. Save Edited Pet Info
   const handleSaveEdit = async () => {
@@ -502,6 +533,21 @@ export function PetPassportView({
       return;
     }
 
+    const consultationConflict = findSameDayBookingConflict({
+      appointments,
+      petId: pet.id,
+      petName: pet.name,
+      date: clinicalDate,
+      serviceId: 'consultation',
+    });
+    if (consultationConflict) {
+      haptic.warning();
+      toast.error('Consultation Already Scheduled', {
+        description: `${pet.name} already has a consultation on ${formatShadcnDate(clinicalDate)}. Only one consultation per day is allowed.`,
+      });
+      return;
+    }
+
     setSubmittingClinical(true);
     try {
       haptic.success();
@@ -557,6 +603,23 @@ export function PetPassportView({
             'This procedure is no longer needed for your pet.',
         },
       );
+      return;
+    }
+
+    const procedureConflict = findSameDayBookingConflict({
+      appointments,
+      petId: pet.id,
+      petName: pet.name,
+      date: procedureDate,
+      serviceId,
+    });
+    if (procedureConflict) {
+      haptic.warning();
+      const conflictName =
+        getService(procedureConflict.appointment.serviceId || '')?.name || 'another procedure';
+      toast.error('Same-Day Procedure Conflict', {
+        description: `${pet.name} already has ${conflictName} on ${formatShadcnDate(procedureDate)}. Vaccination and spay/neuter must be on separate days.`,
+      });
       return;
     }
 
@@ -1287,13 +1350,13 @@ export function PetPassportView({
                 textAlignVertical="top"
                 onFocus={() => {
                   symptomsFocusedRef.current = true;
-                  setTimeout(revealSymptomsInput, 80);
+                  setTimeout(() => revealInputAboveKeyboard(symptomsInputRef), 80);
                 }}
                 onBlur={() => {
                   symptomsFocusedRef.current = false;
                 }}
                 onContentSizeChange={() => {
-                  if (symptomsFocusedRef.current) revealSymptomsInput();
+                  if (symptomsFocusedRef.current) revealInputAboveKeyboard(symptomsInputRef);
                 }}
               />
             </View>
@@ -1583,6 +1646,7 @@ export function PetPassportView({
             <View style={styles.formFieldBlock}>
               <Text style={styles.fieldSubLabelBold}>Special Clinical Notes (Optional)</Text>
               <TextInput
+                ref={procedureNotesInputRef}
                 value={procedureNotes}
                 onChangeText={setProcedureNotes}
                 placeholder="Allergies, prior medication, temperament, or special handling instructions..."
@@ -1592,9 +1656,16 @@ export function PetPassportView({
                 style={styles.multilineInput}
                 textAlignVertical="top"
                 onFocus={() => {
-                  setTimeout(() => {
-                    scrollBodyRef.current?.scrollToEnd({ animated: true });
-                  }, 120);
+                  procedureNotesFocusedRef.current = true;
+                  setTimeout(() => revealInputAboveKeyboard(procedureNotesInputRef), 80);
+                }}
+                onBlur={() => {
+                  procedureNotesFocusedRef.current = false;
+                }}
+                onContentSizeChange={() => {
+                  if (procedureNotesFocusedRef.current) {
+                    revealInputAboveKeyboard(procedureNotesInputRef);
+                  }
                 }}
               />
             </View>
