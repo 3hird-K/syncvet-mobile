@@ -15,9 +15,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { colors, radius, shadows, typography } from '@theme';
+import { colors, radius, shadows, spacing, typography } from '@theme';
 import { haptic } from '@lib/haptics';
-import { startQueueRing, stopQueueRing } from '@lib/sound';
+import { getService } from '@lib/services';
 import type { Appointment, QueueTicketInfo } from '@services/data';
 
 interface PetCalledRingModalProps {
@@ -25,7 +25,6 @@ interface PetCalledRingModalProps {
   appointment: Appointment | null;
   ticket?: QueueTicketInfo | null;
   onAcknowledge: () => void;
-  onCompleteVisit?: () => void;
 }
 
 export function PetCalledRingModal({
@@ -33,7 +32,6 @@ export function PetCalledRingModal({
   appointment,
   ticket,
   onAcknowledge,
-  onCompleteVisit,
 }: PetCalledRingModalProps) {
   const bellScale = useSharedValue(1);
   const bellRotate = useSharedValue(0);
@@ -49,14 +47,7 @@ export function PetCalledRingModal({
 
   useEffect(() => {
     if (visible && appointment) {
-      // Start ringing & vibration
-      startQueueRing(
-        appointment.petName,
-        activeTicket.ticketNumber,
-        activeTicket.consultationRoom || 'Consultation Desk 1',
-      );
-
-      // Start ringing bell animation
+      // The realtime service owns the chime/vibration; the modal owns the visual alert.
       bellScale.value = withRepeat(
         withSequence(
           withTiming(1.15, { duration: 180 }),
@@ -79,15 +70,10 @@ export function PetCalledRingModal({
         false,
       );
     } else {
-      stopQueueRing();
       bellScale.value = 1;
       bellRotate.value = 0;
     }
-
-    return () => {
-      stopQueueRing();
-    };
-  }, [visible, appointment, activeTicket.ticketNumber, activeTicket.consultationRoom, bellScale, bellRotate]);
+  }, [visible, appointment, bellScale, bellRotate]);
 
   const animatedBellStyle = useAnimatedStyle(() => ({
     transform: [
@@ -98,16 +84,13 @@ export function PetCalledRingModal({
 
   if (!visible || !appointment) return null;
 
+  const service = getService(appointment.serviceId);
+  const room = activeTicket.consultationRoom || 'Consultation Desk 1';
+  const vet = activeTicket.servingVet || 'Dr. Helen Ann P. Tacandong, DVM';
+
   const handleDismiss = () => {
-    stopQueueRing();
     haptic.medium();
     onAcknowledge();
-  };
-
-  const handleComplete = () => {
-    stopQueueRing();
-    haptic.success();
-    onCompleteVisit?.();
   };
 
   return (
@@ -121,67 +104,106 @@ export function PetCalledRingModal({
         <Pressable style={styles.backdrop} onPress={handleDismiss} />
 
         <View style={[styles.dialogCard, shadows.lg]}>
-          {/* Pulsing Bell Hero */}
-          <View style={styles.bellOuterCircle}>
-            <Animated.View style={[styles.bellInnerCircle, animatedBellStyle]}>
-              <MaterialCommunityIcons name="bell-ring" size={38} color="#FFFFFF" />
-            </Animated.View>
-          </View>
-
-          {/* Calling Header */}
-          <View style={styles.callingBadge}>
-            <View style={styles.pulseDot} />
-            <Text style={styles.callingBadgeText}>NOW CALLING PATIENT</Text>
-          </View>
-
-          <Text style={styles.petNameText}>{appointment.petName}</Text>
-          <Text style={styles.subtitleText}>Your turn has arrived! Please enter the clinic room.</Text>
-
-          {/* Ticket Number Highlight */}
-          <View style={styles.ticketCard}>
-            <Text style={styles.ticketLabel}>TICKET NUMBER</Text>
-            <Text style={styles.ticketNumberText}>{activeTicket.ticketNumber}</Text>
-            <View style={styles.roomRow}>
-              <Ionicons name="location" size={15} color="#0D9488" />
-              <Text style={styles.roomText}>
-                {activeTicket.consultationRoom || 'Consultation Desk 1'}
-              </Text>
+          {/* Header bar */}
+          <View style={styles.headerBar}>
+            <View style={styles.headerLeft}>
+              <View style={styles.clinicLogo}>
+                <Ionicons name="medical" size={16} color={colors.primaryDark} />
+              </View>
+              <View style={styles.headerCopy}>
+                <Text style={styles.clinicName}>Carmen Central Clinic</Text>
+                <Text style={styles.clinicSub}>City Veterinary Office</Text>
+              </View>
             </View>
-            <Text style={styles.vetText}>
-              Attending: {activeTicket.servingVet || 'Dr. Helen Ann P. Tacandong, DVM'}
+
+            <Pressable
+              onPress={handleDismiss}
+              style={styles.closeBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss call alert"
+            >
+              <Ionicons name="close" size={18} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+
+          {/* Calling hero — direct, no nested ticket card */}
+          <View style={styles.hero}>
+            <View style={styles.bellOuterCircle}>
+              <Animated.View style={[styles.bellInnerCircle, animatedBellStyle]}>
+                <MaterialCommunityIcons name="bell-ring" size={34} color={colors.white} />
+              </Animated.View>
+            </View>
+
+            <View style={styles.callingBadge}>
+              <View style={styles.pulseDot} />
+              <Text style={styles.callingBadgeText}>NOW CALLING PATIENT</Text>
+            </View>
+
+            <Text style={styles.petNameText}>{appointment.petName}</Text>
+            <Text style={styles.subtitleText}>
+              Your turn has arrived. Please proceed to the clinic room.
             </Text>
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.buttonCol}>
-            <Pressable
-              onPress={handleDismiss}
-              style={({ pressed }) => [
-                styles.acknowledgeBtn,
-                pressed && { opacity: 0.9 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Acknowledge Calling and Stop Ringing"
-            >
-              <MaterialCommunityIcons name="volume-mute" size={18} color="#FFFFFF" />
-              <Text style={styles.acknowledgeBtnText}>I'm Going In (Stop Ringing)</Text>
-            </Pressable>
+          <View style={styles.divider} />
 
-            {onCompleteVisit && (
-              <Pressable
-                onPress={handleComplete}
-                style={({ pressed }) => [
-                  styles.completeBtn,
-                  pressed && { opacity: 0.8 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Mark Consultation as Completed and move to history"
-              >
-                <Ionicons name="checkmark-circle-outline" size={16} color="#0D9488" />
-                <Text style={styles.completeBtnText}>Mark as Done (Put in History)</Text>
-              </Pressable>
-            )}
+          {/* Ticket and visit details displayed directly */}
+          <View style={styles.details}>
+            <View style={styles.ticketBlock}>
+              <Text style={styles.ticketLabel}>TICKET NUMBER</Text>
+              <Text style={styles.ticketNumberText}>{activeTicket.ticketNumber}</Text>
+              <Text style={styles.positionText}>
+                Position #{activeTicket.queueSequence}
+              </Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Ionicons name="location-outline" size={17} color={colors.accentDark} />
+              <Text style={styles.detailLabel}>Room</Text>
+              <Text style={styles.detailValue} numberOfLines={1}>
+                {room}
+              </Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Ionicons name="medical-outline" size={17} color={colors.accentDark} />
+              <Text style={styles.detailLabel}>Service</Text>
+              <Text style={styles.detailValue} numberOfLines={1}>
+                {service?.name || 'Consultation'}
+              </Text>
+            </View>
+
+            <View style={styles.detailRowLast}>
+              <Ionicons name="person-outline" size={17} color={colors.accentDark} />
+              <Text style={styles.detailLabel}>Attending</Text>
+              <Text style={styles.detailValue} numberOfLines={2}>
+                {vet}
+              </Text>
+            </View>
           </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.noticeRow}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.accentDark} />
+            <Text style={styles.noticeText}>
+              Have your pet’s passport or QR ticket ready at the door.
+            </Text>
+          </View>
+
+          <Pressable
+            onPress={handleDismiss}
+            style={({ pressed }) => [
+              styles.acknowledgeBtn,
+              pressed && styles.pressedBtn,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Acknowledge calling and stop ringing"
+          >
+            <MaterialCommunityIcons name="volume-mute" size={18} color={colors.white} />
+            <Text style={styles.acknowledgeBtnText}>I’m Going In (Stop Ringing)</Text>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -191,156 +213,210 @@ export function PetCalledRingModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(7, 30, 38, 0.72)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 22,
+    paddingHorizontal: 20,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
   },
   dialogCard: {
     width: '100%',
-    backgroundColor: '#FFFFFF',
+    maxHeight: '92%',
+    backgroundColor: colors.surface,
     borderRadius: radius.xxl,
-    paddingHorizontal: 22,
-    paddingTop: 28,
-    paddingBottom: 22,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  headerBar: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    minWidth: 0,
+  },
+  clinicLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  clinicName: {
+    ...typography.captionBold,
+    fontSize: 13.5,
+    color: colors.textPrimary,
+  },
+  clinicSub: {
+    ...typography.small,
+    fontSize: 10.5,
+    color: colors.textMuted,
+  },
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hero: {
+    alignItems: 'center',
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
   },
   bellOuterCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: '#FFEDD5',
-    justifyContent: 'center',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: colors.accentLight,
     alignItems: 'center',
-    marginBottom: 14,
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
   },
   bellInnerCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#EA580C',
-    justifyContent: 'center',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.accentDark,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   callingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFEDD5',
-    paddingHorizontal: 12,
-    paddingVertical: 4.5,
+    backgroundColor: colors.accentLight,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: radius.pill,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   pulseDot: {
     width: 7,
     height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#EA580C',
+    borderRadius: 4,
+    backgroundColor: colors.accentDark,
   },
   callingBadgeText: {
-    ...typography.captionBold,
-    fontSize: 11,
-    color: '#C2410C',
-    letterSpacing: 0.6,
+    ...typography.smallBold,
+    fontSize: 10.5,
+    color: colors.accentDark,
+    letterSpacing: 0.8,
   },
   petNameText: {
-    ...typography.title,
+    ...typography.heading2,
     fontSize: 22,
-    fontFamily: typography.font.bold,
-    color: '#111827',
+    color: colors.textPrimary,
     textAlign: 'center',
   },
   subtitleText: {
     ...typography.caption,
     fontSize: 12.5,
-    color: '#6B7280',
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 16,
     lineHeight: 18,
+    marginTop: 4,
   },
-  ticketCard: {
-    width: '100%',
-    backgroundColor: '#F0FDFA',
-    borderRadius: radius.xl,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+  divider: {
+    height: 1,
+    backgroundColor: colors.surfaceMuted,
+    marginVertical: spacing.md,
+  },
+  details: {
+    gap: spacing.sm + 2,
+  },
+  ticketBlock: {
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
-    marginBottom: 18,
+    marginBottom: spacing.xs,
   },
   ticketLabel: {
-    ...typography.caption,
+    ...typography.smallBold,
     fontSize: 10,
-    fontFamily: typography.font.bold,
-    color: '#6B7280',
-    letterSpacing: 1,
+    letterSpacing: 1.3,
+    color: colors.textMuted,
   },
   ticketNumberText: {
-    fontSize: 42,
-    fontWeight: '900',
-    color: '#0D9488',
+    ...typography.display,
+    fontSize: 46,
+    lineHeight: 52,
+    color: colors.primary,
     letterSpacing: 1.5,
-    marginVertical: 2,
   },
-  roomRow: {
+  positionText: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    gap: spacing.sm,
   },
-  roomText: {
-    ...typography.body,
-    fontFamily: typography.font.bold,
-    fontSize: 13.5,
-    color: '#0F766E',
+  detailRowLast: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
-  vetText: {
+  detailLabel: {
     ...typography.caption,
-    fontSize: 11,
-    color: '#115E59',
-    marginTop: 2,
+    fontSize: 12.5,
+    color: colors.textMuted,
+    width: 70,
   },
-  buttonCol: {
-    width: '100%',
-    gap: 10,
+  detailValue: {
+    ...typography.captionBold,
+    fontSize: 13,
+    color: colors.textPrimary,
+    flex: 1,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  noticeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  noticeText: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    flex: 1,
   },
   acknowledgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#EA580C',
-    paddingVertical: 13,
+    backgroundColor: colors.accentDark,
+    paddingVertical: 14,
     borderRadius: radius.pill,
-    width: '100%',
+    marginTop: spacing.md,
+  },
+  pressedBtn: {
+    opacity: 0.85,
   },
   acknowledgeBtnText: {
-    ...typography.body,
-    fontFamily: typography.font.bold,
-    color: '#FFFFFF',
-    fontSize: 14,
-  },
-  completeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#99F6E4',
-    paddingVertical: 11,
-    borderRadius: radius.pill,
-    width: '100%',
-  },
-  completeBtnText: {
     ...typography.captionBold,
-    color: '#0D9488',
-    fontSize: 12.5,
+    fontSize: 14,
+    color: colors.white,
   },
 });

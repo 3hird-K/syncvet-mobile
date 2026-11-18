@@ -1,6 +1,111 @@
 import { supabase } from '@lib/supabase';
 import { todayISO } from '@lib/format';
-import type { Appointment, QueueTicketInfo } from '@services/data/types';
+import { normalizeServiceId } from '@lib/services';
+import { normalizeAppointmentStatus } from '@services/data/types';
+import type {
+  Appointment,
+  AppointmentStatus,
+  QueueTicketInfo,
+} from '@services/data/types';
+
+/** Canonical queue ticket statuses from queue-requirements.md. */
+export type ClinicQueueStatus =
+  | 'waiting'
+  | 'in-consultation'
+  | 'completed'
+  | 'skipped'
+  | 'overdue'
+  | 'called'
+  | 'serving';
+
+/**
+ * Older rows may use `called`/`serving`; normalize them to the canonical web
+ * status before applying any transition.
+ */
+export function normalizeQueueStatus(status?: string | null): ClinicQueueStatus | null {
+  const value = (status || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (value === 'waiting' || value === 'queued' || value === 'checked-in' || value === 'checked_in') {
+    return 'waiting';
+  }
+  if (value === 'in-consultation' || value === 'in_consultation' || value === 'inc-consultation') {
+    return 'in-consultation';
+  }
+  if (value === 'called' || value === 'serving') return value;
+  if (
+    value === 'completed' ||
+    value === 'complete' ||
+    value === 'done' ||
+    value === 'finished' ||
+    value === 'served' ||
+    value === 'visited'
+  ) {
+    return 'completed';
+  }
+  if (value === 'skipped' || value === 'missed' || value === 'no-show' || value === 'noshow') {
+    return 'skipped';
+  }
+  if (value === 'overdue') return value;
+  return null;
+}
+
+/** True when a queue ticket represents a finished visit. */
+export function isCompletedQueueTicket(ticket?: any): boolean {
+  if (!ticket) return false;
+  if (ticket.completed_at || ticket.completedAt) return true;
+  return normalizeQueueStatus(ticket.status) === 'completed';
+}
+
+/** Appointment status implied by the latest linked queue ticket. */
+export function getAppointmentStatusFromQueueTicket(ticket?: any): AppointmentStatus | null {
+  if (!ticket) return null;
+  const status = isCompletedQueueTicket(ticket) ? 'completed' : ticket.status;
+  return mapQueueStatusToAppointmentStatus(status);
+}
+
+/**
+ * Maps a canonical queue ticket status to the appointment status shown in the
+ * mobile UI. `in-consultation` is the staff "Call" transition.
+ */
+export function mapQueueStatusToAppointmentStatus(
+  status?: string | null,
+): AppointmentStatus | null {
+  const normalized = normalizeQueueStatus(status);
+  if (!normalized) return null;
+
+  switch (normalized) {
+    case 'waiting':
+      return 'queued';
+    case 'in-consultation':
+    case 'called':
+    case 'serving':
+      return 'called';
+    case 'completed':
+      return 'completed';
+    case 'skipped':
+      return 'missed';
+    case 'overdue':
+      return 'overdue';
+    default:
+      return null;
+  }
+}
+
+/** Builds the compact queue ticket object stored on an appointment. */
+export function toQueueTicketInfo(row: any): QueueTicketInfo {
+  return {
+    id: row.id,
+    ticketNumber: row.ticket_number,
+    queueSequence: row.queue_sequence,
+    status: normalizeQueueStatus(row.status) || row.status || 'waiting',
+    consultationRoom: row.consultation_room || 'Consultation Desk 1',
+    servingVet: row.serving_vet || 'Dr. Helen Ann P. Tacandong, DVM',
+    checkInTime: row.check_in_time || undefined,
+  };
+}
 
 export interface ClinicQueueQrPayload {
   valid: boolean;
@@ -91,9 +196,14 @@ export function parseClinicQueueQr(raw: string): ClinicQueueQrPayload {
         return { valid: false, raw: trimmed };
       }
 
+      // Appointment slips encode a JSON pass with only appointmentId + date;
+      // they belong to the queue family even without a station/token signal.
+      const appointmentPassId = parsed.appointmentId || parsed.appointment_id;
       const hasQueueSignal =
         parsed.type === 'clinic-queue' ||
+        parsed.type === 'appointment' ||
         Boolean(parsed.station) ||
+        Boolean(appointmentPassId) ||
         (typeof parsed.token === 'string' && parsed.token.toLowerCase().startsWith('cvo-queue'));
 
       if (
@@ -111,7 +221,7 @@ export function parseClinicQueueQr(raw: string): ClinicQueueQrPayload {
           token: parsed.token,
           appointmentId: parsed.appointmentId || parsed.appointment_id,
           petId: parsed.petId || parsed.pet_id,
-          serviceId: parsed.serviceId || parsed.service_id,
+          serviceId: normalizeServiceId(parsed.serviceId || parsed.service_id),
           raw: trimmed,
         };
       }
@@ -168,7 +278,8 @@ export function validateCheckInEligibility(
     };
   }
 
-  if (appointment.status === 'completed') {
+  const appointmentStatus = normalizeAppointmentStatus(appointment.status);
+  if (appointmentStatus === 'completed') {
     return {
       eligible: false,
       reason: 'completed',
@@ -176,7 +287,7 @@ export function validateCheckInEligibility(
     };
   }
 
-  if (appointment.status === 'cancelled') {
+  if (appointmentStatus === 'cancelled') {
     return {
       eligible: false,
       reason: 'cancelled',
@@ -184,7 +295,12 @@ export function validateCheckInEligibility(
     };
   }
 
-  if (appointment.status === 'overdue' || appointment.status === 'missed') {
+  // Per queue requirements, skipped/overdue tickets may rejoin at the end of
+  // the line by scanning again on the scheduled day.
+  if (
+    (appointmentStatus === 'overdue' || appointmentStatus === 'missed') &&
+    appointment.date !== qrDate
+  ) {
     return {
       eligible: false,
       reason: 'overdue',
@@ -217,10 +333,10 @@ export function validateCheckInEligibility(
 
   // If already queued or called
   if (
-    appointment.status === 'queued' ||
-    appointment.status === 'checked_in' ||
-    appointment.status === 'called' ||
-    appointment.status === 'serving'
+    appointmentStatus === 'queued' ||
+    appointmentStatus === 'checked_in' ||
+    appointmentStatus === 'called' ||
+    appointmentStatus === 'serving'
   ) {
     return {
       eligible: true,
@@ -265,21 +381,50 @@ export async function checkInAppointmentToQueue({
   user,
   pet,
 }: CheckInAppointmentParams): Promise<QueueTicketInfo> {
-  const today = appointment.date || todayISO();
+  const today = todayISO();
 
-  // 1. Determine next sequence number for today from queue_tickets
-  let nextSequence = 1;
+  // 1. Duplicate check-in is idempotent while a ticket is still active.
+  // Skipped/overdue rows are intentionally excluded so a rescan rejoins at the
+  // end of the line.
   try {
-    const { count, error } = await supabase
+    const { data: activeRows, error } = await supabase
       .from('queue_tickets')
-      .select('*', { count: 'exact', head: true })
-      .eq('date', today);
+      .select('*')
+      .eq('date', today)
+      .in('status', ['waiting', 'in-consultation']);
 
-    if (!error && typeof count === 'number') {
-      nextSequence = count + 1;
+    if (!error && Array.isArray(activeRows)) {
+      const existing = activeRows.find(
+        (row: any) =>
+          row.appointment_id === appointment.id ||
+          (Boolean(appointment.petId) && row.pet_id === appointment.petId),
+      );
+      if (existing) return toQueueTicketInfo(existing);
     }
   } catch (err) {
-    console.warn('Error counting queue tickets:', err);
+    console.warn('Error checking existing queue ticket:', err);
+  }
+
+  // 2. Allocate the sequence server-side when the RPC is deployed. The local
+  // count remains a compatibility fallback for older backends.
+  let nextSequence = 1;
+  try {
+    const { data: rpcSequence, error: rpcError } = await (supabase as any).rpc(
+      'allocate_queue_ticket_sequence',
+      { p_date: today },
+    );
+
+    if (!rpcError && typeof rpcSequence === 'number') {
+      nextSequence = rpcSequence;
+    } else {
+      const { count, error } = await supabase
+        .from('queue_tickets')
+        .select('*', { count: 'exact', head: true })
+        .eq('date', today);
+      if (!error && typeof count === 'number') nextSequence = count + 1;
+    }
+  } catch (err) {
+    console.warn('Error allocating queue sequence:', err);
   }
 
   const ticketNumber = `Q-${String(nextSequence).padStart(3, '0')}`;
@@ -305,7 +450,7 @@ export async function checkInAppointmentToQueue({
     checkInTime,
   };
 
-  // 2. Insert into queue_tickets table in Supabase
+  // 3. Insert into queue_tickets table in Supabase
   try {
     const { error: insertErr } = await supabase.from('queue_tickets').insert({
       id: ticketId,
@@ -341,7 +486,7 @@ export async function checkInAppointmentToQueue({
     console.warn('Queue ticket insert exception:', err);
   }
 
-  // 3. Update appointments table in Supabase
+  // 4. Update appointments table in Supabase
   try {
     const appendedNotes = appointment.notes
       ? `${appointment.notes} | [Checked in: Ticket ${ticketNumber}]`
@@ -420,7 +565,8 @@ export async function completeQueueAppointment(
 }
 
 /**
- * Updates status of queue ticket to 'called' in Supabase.
+ * Staff "Call" transition: waiting → in-consultation. The appointment is
+ * marked `called` for the owner UI while the ticket keeps the canonical status.
  */
 export async function callQueueAppointment(
   appointmentId: string,
@@ -440,7 +586,7 @@ export async function callQueueAppointment(
       await supabase
         .from('queue_tickets')
         .update({
-          status: 'called',
+          status: 'in-consultation',
           called_at: now,
           updated_at: now,
         })
@@ -448,6 +594,32 @@ export async function callQueueAppointment(
     }
   } catch (err) {
     console.warn('Error calling appointment in Supabase:', err);
+  }
+}
+
+/**
+ * Staff "Skip" transition: active → skipped; the linked appointment becomes
+ * `missed` and the owner can rescan to rejoin at the end of the line.
+ */
+export async function skipQueueAppointment(
+  appointmentId: string,
+  ticketNumber?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  try {
+    await supabase
+      .from('appointments')
+      .update({ status: 'missed', updated_at: now })
+      .eq('id', appointmentId);
+
+    if (ticketNumber) {
+      await supabase
+        .from('queue_tickets')
+        .update({ status: 'skipped', updated_at: now })
+        .eq('ticket_number', ticketNumber);
+    }
+  } catch (err) {
+    console.warn('Error skipping appointment in Supabase:', err);
   }
 }
 

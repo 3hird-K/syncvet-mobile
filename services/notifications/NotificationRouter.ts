@@ -1,4 +1,10 @@
 import { router } from 'expo-router';
+import {
+  QUEUE_CALL_ACKNOWLEDGE_ACTION,
+  QUEUE_CALL_CHIME_ACTION,
+  replayQueueCallChime,
+} from '@lib/sound';
+import { supabaseRealtimeService } from '@services/realtime/SupabaseRealtimeService';
 import { ExpoNotificationAdapter } from './ExpoNotificationAdapter';
 
 export class NotificationRouter {
@@ -56,7 +62,18 @@ export class NotificationRouter {
       const data = response?.notification?.request?.content?.data as Record<string, any> | undefined;
       if (!data) return;
 
-      const { pathname, params, petId } = data;
+      const { pathname, params, petId, kind, ticketNumber } = data;
+      const actionIdentifier = response?.actionIdentifier;
+
+      if (kind === 'queue-call' && actionIdentifier === QUEUE_CALL_CHIME_ACTION) {
+        void replayQueueCallChime(ticketNumber);
+        return;
+      }
+
+      if (kind === 'queue-call' && actionIdentifier === QUEUE_CALL_ACKNOWLEDGE_ACTION) {
+        supabaseRealtimeService.acknowledgeQueueCall();
+        return;
+      }
 
       if (pathname) {
         // Small delay to ensure router is ready

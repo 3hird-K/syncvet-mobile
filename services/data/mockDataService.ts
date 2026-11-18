@@ -149,6 +149,12 @@ export class MockDataService implements DataService {
     await this.save(ownerId, data);
   }
 
+  async deleteAppointment(ownerId: string, appointmentId: string): Promise<void> {
+    const data = await this.load(ownerId);
+    data.appointments = data.appointments.filter((a) => a.id !== appointmentId);
+    await this.save(ownerId, data);
+  }
+
   async getTransactions(ownerId: string): Promise<ServiceTransaction[]> {
     const data = await this.load(ownerId);
     return [...(data.transactions || [])].sort((a, b) => b.date.localeCompare(a.date));

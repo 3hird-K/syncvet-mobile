@@ -4,9 +4,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, typography } from '@theme';
 import { getService } from '@lib/services';
-import { formatWeekdayDate, todayISO } from '@lib/format';
+import { formatAppointmentTimeSlot, formatWeekdayDate, todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { useDataStore } from '@store/useDataStore';
+import { normalizeAppointmentStatus } from '@services/data/types';
 import type { Appointment } from '@services/data';
 import { PopoutPetAvatar } from './PopoutPetAvatar';
 import { StatusBadge } from './StatusBadge';
@@ -29,25 +30,21 @@ export function AppointmentCard({
   const formattedDate = formatWeekdayDate(appointment.date);
   const today = todayISO();
   const isToday = appointment.date === today;
-  const isOverdue =
-    appointment.status === 'overdue' ||
-  appointment.status === 'missed' ||
-    ((appointment.status === 'pending' || appointment.status === 'confirmed') &&
-      appointment.date < today);
-  const isQueued = appointment.status === 'queued' || appointment.status === 'checked_in';
-  const isCalled = appointment.status === 'called' || appointment.status === 'serving';
-  const isCompleted = appointment.status === 'completed';
-  const isCancelled = appointment.status === 'cancelled';
+  const status = normalizeAppointmentStatus(appointment.status);
+  const isOverdue = status === 'overdue';
+  const isMissed = status === 'missed';
+  const isInactive = isOverdue || isMissed;
+  const isQueued = status === 'queued' || status === 'checked_in';
+  const isCalled = status === 'called' || status === 'serving';
+  const isCompleted = status === 'completed';
+  const isCancelled = status === 'cancelled';
 
-  const effectiveStatus = isOverdue
-    ? 'overdue'
-    : isCalled
-      ? 'called'
-      : isQueued
-        ? 'queued'
-        : appointment.status;
+  const effectiveStatus = isCalled
+    ? 'called'
+    : isQueued
+      ? 'queued'
+      : status;
 
-  // Look up pet from data store for real avatar and species
   const localPets = useDataStore((state) => state.pets);
   const pet = localPets.find(
     (p: any) =>
@@ -76,124 +73,113 @@ export function AppointmentCard({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        isCalled && styles.cardCalled,
-        isToday && !isQueued && !isOverdue && !isCompleted && styles.cardToday,
-        pressed && styles.pressed,
-      ]}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
-      <View style={styles.cardInner}>
-        {/* 1. Left Avatar */}
+      <View style={styles.row}>
         <View style={styles.avatarCol}>
           {pet ? (
             <PopoutPetAvatar
               avatarId={pet.avatarId}
               species={pet.species}
               photoUrl={pet.photoUrl}
-              size={38}
-              scale={1.2}
+              size={36}
+              scale={1.05}
             />
           ) : (
             <View
               style={[
                 styles.fallbackAvatar,
-                { backgroundColor: isDog ? '#CCFBF1' : '#FCE7F3' },
+                { backgroundColor: isDog ? colors.primaryLight : colors.errorLight },
               ]}
             >
               <Ionicons
                 name="paw"
                 size={16}
-                color={isDog ? '#0D9488' : '#DB2777'}
+                color={isDog ? colors.primaryDark : colors.errorDark}
               />
             </View>
           )}
         </View>
 
-        {/* 2. Middle Info */}
         <View style={styles.infoCol}>
-          {/* Pet Name & Breed */}
-          <View style={styles.topNameRow}>
+          <View style={styles.nameRow}>
             <Text style={styles.petName} numberOfLines={1}>
               {appointment.petName}
             </Text>
             <Text style={styles.breedText} numberOfLines={1}>
-              · {breedText}
+              {breedText}
             </Text>
           </View>
 
-          {/* Service Name */}
           <Text style={styles.serviceName} numberOfLines={1}>
             {service?.name ?? 'Veterinary Service'}
           </Text>
 
-          {/* Schedule Date & Clinic Location */}
           <View style={styles.scheduleRow}>
             <Ionicons
               name="calendar-outline"
               size={11}
-              color={isToday ? '#0F766E' : '#6B7280'}
+              color={isToday ? colors.primaryDark : colors.textMuted}
             />
             <Text style={[styles.dateText, isToday && styles.dateTextToday]} numberOfLines={1}>
               {isToday ? `Today · ${formattedDate}` : formattedDate}
             </Text>
-            <Text style={styles.dotSeparator}>•</Text>
+            <Text style={styles.separator}>•</Text>
+            <Text style={styles.timeText} numberOfLines={1}>
+              {formatAppointmentTimeSlot(appointment.timeSlot)}
+            </Text>
+          </View>
+
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={11} color={colors.textDisabled} />
             <Text style={styles.locationText} numberOfLines={1}>
               {appointment.location || 'Carmen Clinic'}
             </Text>
           </View>
         </View>
 
-        {/* 3. Right Action Area: Status & Scan Icon */}
         <View style={styles.actionCol}>
           <StatusBadge status={effectiveStatus} />
 
-          <View style={styles.iconActionRow}>
+          <View style={styles.actionRow}>
             {isCalled ? (
-              /* When called: pulsating ring icon */
               <Pressable
                 onPress={handleTicketClick}
-                style={styles.calledIconBtn}
+                style={[styles.actionBtn, styles.calledBtn]}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="Pet is called! Tap to view details"
               >
-                <MaterialCommunityIcons name="bell-ring" size={17} color="#FFFFFF" />
+                <MaterialCommunityIcons name="bell-ring" size={15} color={colors.white} />
               </Pressable>
             ) : isQueued ? (
-              /* When in queue: ticket icon */
               <Pressable
                 onPress={handleTicketClick}
-                style={styles.queuedIconBtn}
+                style={styles.ticketBtn}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="View Queue Ticket"
               >
-                <MaterialCommunityIcons name="ticket-outline" size={17} color="#0D9488" />
-                <Text style={styles.ticketNumText}>
+                <MaterialCommunityIcons
+                  name="ticket-outline"
+                  size={14}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.ticketNumText} numberOfLines={1}>
                   {appointment.queueTicket?.ticketNumber || 'Q-001'}
                 </Text>
               </Pressable>
-            ): !isToday || isOverdue || isCompleted || isCancelled ? null : onScanPress ? (
-            /* Just an Icon for Scan QR Code — only shown on the scheduled date for active appointments */
-            <Pressable
-              onPress={handleScanClick}
-              style={({ pressed }) => [
-                styles.scanIconBtn,
-                isToday && styles.scanIconBtnToday,
-                pressed && { opacity: 0.8 },
-              ]}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Scan Clinic QR Code"
-            >
-              <MaterialCommunityIcons
-                name="qrcode-scan"
-                size={16}
-                color={isToday ? '#FFFFFF' : '#0D9488'}
-              />
-            </Pressable>
-            ) : null}
+            ) : !isToday || isInactive || isCompleted || isCancelled || !onScanPress ? null : (
+              <Pressable
+                onPress={handleScanClick}
+                style={({ pressed }) => [styles.actionBtn, styles.scanBtn, pressed && styles.pressedBtn]}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Scan Clinic QR Code"
+              >
+                <MaterialCommunityIcons name="qrcode-scan" size={15} color={colors.white} />
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
@@ -203,33 +189,24 @@ export function AppointmentCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.lg,
-    paddingVertical: 10,
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  cardToday: {
-    borderColor: '#99F6E4',
-    backgroundColor: '#FAFCFC',
-  },
-  cardCalled: {
-    borderColor: '#FDBA74',
-    backgroundColor: '#FFF7ED',
+    ...shadows.sm,
   },
   pressed: {
-    backgroundColor: '#F9FAFB',
-    transform: [{ scale: 0.995 }],
+    backgroundColor: colors.surfaceMuted,
   },
-  cardInner: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   avatarCol: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -242,103 +219,112 @@ const styles = StyleSheet.create({
   },
   infoCol: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
-    justifyContent: 'center',
   },
-  topNameRow: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    minWidth: 0,
   },
   petName: {
     ...typography.title,
-    fontSize: 14.5,
+    fontSize: 14,
     fontFamily: typography.font.bold,
-    color: '#111827',
+    color: colors.textPrimary,
+    flexShrink: 1,
   },
   breedText: {
     ...typography.caption,
-    fontSize: 11,
-    color: '#6B7280',
+    fontSize: 10.5,
+    color: colors.textMuted,
     flexShrink: 1,
   },
   serviceName: {
     ...typography.captionBold,
-    fontSize: 12,
-    color: '#0D9488',
+    fontSize: 11.5,
+    color: colors.primaryDark,
   },
   scheduleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 1,
+    marginTop: 2,
+    minWidth: 0,
   },
   dateText: {
     ...typography.caption,
-    fontSize: 11,
-    color: '#4B5563',
+    fontSize: 10.5,
+    color: colors.textSecondary,
+    flexShrink: 1,
   },
   dateTextToday: {
     ...typography.captionBold,
-    color: '#0F766E',
+    color: colors.primaryDark,
     fontFamily: typography.font.bold,
   },
-  dotSeparator: {
+  separator: {
     fontSize: 9,
-    color: '#9CA3AF',
+    color: colors.textDisabled,
+  },
+  timeText: {
+    ...typography.captionBold,
+    fontSize: 10.5,
+    color: colors.textSecondary,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
   },
   locationText: {
     ...typography.caption,
-    fontSize: 10.5,
-    color: '#9CA3AF',
+    fontSize: 10,
+    color: colors.textMuted,
     flexShrink: 1,
   },
   actionCol: {
+    width: 100,
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: 6,
+    gap: 10,
+    flexShrink: 0,
   },
-  iconActionRow: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'flex-end',
   },
-  scanIconBtn: {
+  actionBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scanIconBtnToday: {
-    backgroundColor: '#0D9488',
-    borderColor: '#0D9488',
+  scanBtn: {
+    backgroundColor: colors.primary,
   },
-  calledIconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#EA580C',
-    alignItems: 'center',
-    justifyContent: 'center',
+  calledBtn: {
+    backgroundColor: colors.accentDark,
   },
-  queuedIconBtn: {
+  pressedBtn: {
+    opacity: 0.85,
+  },
+  ticketBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F0FDFA',
+    gap: 3,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.sm,
     paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
+    paddingVertical: 6,
   },
   ticketNumText: {
     ...typography.captionBold,
-    fontSize: 10.5,
-    color: '#0D9488',
+    fontSize: 10,
+    color: colors.primaryDark,
   },
 });

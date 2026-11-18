@@ -3,6 +3,7 @@ export type ReminderType =
   | 'appointment_same_day'
   | 'vaccination_due_week'
   | 'vaccination_due_day'
+  | 'vaccination_due_today'
   | 'sync_pending'
   | 'general';
 

@@ -40,6 +40,44 @@ export type AppointmentStatus =
   | 'called'
   | 'serving';
 
+const APPOINTMENT_STATUS_ALIASES: Record<string, AppointmentStatus> = {
+  pending: 'pending',
+  booked: 'confirmed',
+  confirmed: 'confirmed',
+  approved: 'confirmed',
+  waiting: 'queued',
+  queued: 'queued',
+  checked_in: 'queued',
+  checkin: 'queued',
+  called: 'called',
+  serving: 'called',
+  in_consultation: 'called',
+  'in-consultation': 'called',
+  'in consultation': 'called',
+  completed: 'completed',
+  complete: 'completed',
+  done: 'completed',
+  finished: 'completed',
+  served: 'completed',
+  visited: 'completed',
+  cancelled: 'cancelled',
+  canceled: 'cancelled',
+  skipped: 'missed',
+  missed: 'missed',
+  no_show: 'missed',
+  'no-show': 'missed',
+  noshow: 'missed',
+  overdue: 'overdue',
+};
+
+/** Normalizes staff/admin status values (e.g. `done`) to the mobile status enum. */
+export function normalizeAppointmentStatus(status?: string | null): AppointmentStatus {
+  const value = (status || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (value === 'in_consultation') return 'called';
+  if (value === 'no_show') return 'missed';
+  return APPOINTMENT_STATUS_ALIASES[value] ?? 'pending';
+}
+
 export interface QueueTicketInfo {
   id: string;
   ticketNumber: string;

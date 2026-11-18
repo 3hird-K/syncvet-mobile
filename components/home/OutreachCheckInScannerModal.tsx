@@ -20,8 +20,13 @@ import { useUser } from '@clerk/expo';
 
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
+import { todayISO } from '@lib/format';
 import { playWebChime } from '@lib/sound';
 import { getPetAvatarSource } from '@lib/petAvatars';
+import {
+  isActiveQueueAppointment,
+  validateFieldOpQr,
+} from '@lib/qrValidation';
 import { useDataStore } from '@store/useDataStore';
 import { useAuthStore } from '@store/useAuthStore';
 import { toast } from '@components/ui/Sonner';
@@ -60,6 +65,7 @@ export function OutreachCheckInScannerModal({
   const ownerPhone = authUser?.mobileNumber || '';
 
   const localPets = useDataStore((s) => s.pets);
+  const localAppointments = useDataStore((s) => s.appointments);
   const userPets: Pet[] = localPets || [];
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -113,6 +119,21 @@ export function OutreachCheckInScannerModal({
       haptic.medium();
 
       try {
+        // Classify first so a clinic queue QR can never be recorded as outreach
+        // attendance, even if it happens to contain similar-looking fields.
+        const family = validateFieldOpQr(rawData);
+        if (!family.valid) {
+          haptic.warning();
+          setErrorMessage(
+            family.displayMessage || family.message || 'Invalid Attendance QR.',
+          );
+          setIsProcessing(false);
+          setTimeout(() => {
+            isScanningRef.current = true;
+          }, 1500);
+          return;
+        }
+
         const parsed = parseOutreachAdminQr(rawData);
         const validation = validateOutreachQrForEvent(
           parsed,
@@ -131,6 +152,26 @@ export function OutreachCheckInScannerModal({
           }
 
           const effectiveService: OutreachServiceType = validation.service;
+
+          // A pet already holding a clinic queue ticket must finish that visit
+          // before it can be recorded at an outreach/field operation.
+          const alreadyQueued = localAppointments.some(
+            (a) =>
+              a.petId === activePet.id &&
+              a.date === todayISO() &&
+              isActiveQueueAppointment(a),
+          );
+          if (alreadyQueued) {
+            haptic.warning();
+            setErrorMessage(
+              `${activePet.name} is already in Today's Clinic Queue. Complete or cancel that queue ticket before scanning an outreach visit.`,
+            );
+            setIsProcessing(false);
+            setTimeout(() => {
+              isScanningRef.current = true;
+            }, 1500);
+            return;
+          }
 
           // Execute municipal service record registration
           const recordResult = await recordOutreachService({
@@ -165,7 +206,17 @@ export function OutreachCheckInScannerModal({
           isScanningRef.current = true;
         }
       },
-      [activePet, onClose, onSuccess, outreachInfo, ownerId, ownerName, ownerPhone, selectedService],
+      [
+        activePet,
+        localAppointments,
+        onClose,
+        onSuccess,
+        outreachInfo,
+        ownerId,
+        ownerName,
+        ownerPhone,
+        selectedService,
+      ],
   );
 
   const handleBarcodeScanned = useCallback(

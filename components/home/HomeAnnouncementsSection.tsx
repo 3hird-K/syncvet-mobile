@@ -10,10 +10,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { colors, radius, typography } from '@theme';
+import { cacheAnnouncementMedia } from '@lib/announcementImageCache';
 import { supabase } from '@lib/supabase';
 import { haptic } from '@lib/haptics';
 import { useOfflineQuery } from '@hooks/useOfflineQuery';
@@ -43,6 +44,10 @@ export interface AnnouncementItem {
   is_pinned: boolean;
   is_active: boolean;
   image_url: string | null;
+  /** Locally downloaded copy of image_url, available without a connection. */
+  localImageUrl?: string | null;
+  /** Locally downloaded copy of the author avatar, available without a connection. */
+  localAuthorAvatarUrl?: string | null;
   created_at: string;
   updated_at: string;
   author?: {
@@ -211,16 +216,28 @@ export function HomeAnnouncementsSection() {
         (a: any) => !a.title?.startsWith('[CVO_') && a.title !== '[CVO_PROCEDURE_QUOTA_CONFIG]',
       );
 
-      return visible.map((a: any) => {
-        const opId = extractOutreachOpId(a.content);
-        const fieldOperation = opId
-          ? fieldOpsByOpId.get(opId.toUpperCase()) ?? null
-          : null;
-        return {
-          ...a,
-          fieldOperation,
-        };
-      });
+      return Promise.all(
+        visible.map(async (a: any) => {
+          const opId = extractOutreachOpId(a.content);
+          const fieldOperation = opId
+            ? fieldOpsByOpId.get(opId.toUpperCase()) ?? null
+            : null;
+
+          // Download post media while online so the whole feed remains readable
+          // offline. Unchanged images reuse their cached local file.
+          const media = await cacheAnnouncementMedia({
+            image_url: a.image_url,
+            author: a.author,
+          });
+
+          return {
+            ...a,
+            fieldOperation,
+            localImageUrl: media.imageUrl,
+            localAuthorAvatarUrl: media.avatarUrl,
+          };
+        }),
+      );
     },
   });
 
@@ -233,11 +250,12 @@ export function HomeAnnouncementsSection() {
     );
   }, [selectedCategory, announcements]);
 
-  const handleOpenImage = (item: AnnouncementItem) => {
-    if (!item.image_url) return;
+  const handleOpenImage = (item: AnnouncementItem, url?: string) => {
+    const imageUrl = url || item.localImageUrl || item.image_url;
+    if (!imageUrl) return;
     haptic.light();
     setMaximizedImage({
-      url: item.image_url,
+      url: imageUrl,
       title: item.title,
       authorName: item.author_name,
       authorRole: item.author_role,
@@ -345,7 +363,7 @@ export function HomeAnnouncementsSection() {
             key={item.id}
             item={item}
             isFirst={index === 0}
-            onImagePress={() => handleOpenImage(item)}
+            onImagePress={(url) => handleOpenImage(item, url)}
             onScanOutreach={(details) => {
               if (details.canScanQr) {
                 setScannerOutreach(details);
@@ -426,11 +444,13 @@ function FacebookPostCard({
 }: {
   item: AnnouncementItem;
   isFirst: boolean;
-  onImagePress: () => void;
+  onImagePress: (url: string) => void;
   onScanOutreach: (details: OutreachDetails) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [useRemotePostImage, setUseRemotePostImage] = useState(false);
+  const [postImageUnavailable, setPostImageUnavailable] = useState(false);
 
   // Outreach post detection & metadata
   const outreachDetails = useMemo(
@@ -438,7 +458,16 @@ function FacebookPostCard({
     [item],
   );
 
-  const avatarUrl = useMemo(() => getAuthorAvatarUrl(item), [item]);
+  const avatarUrl = useMemo(
+    () => item.localAuthorAvatarUrl || getAuthorAvatarUrl(item),
+    [item],
+  );
+  // Prefer the downloaded copy; fall back to the remote URL if the local file
+  // was removed or failed to load.
+  const postImageUrl = useMemo(() => {
+    if (useRemotePostImage) return item.image_url;
+    return item.localImageUrl || item.image_url;
+  }, [item.image_url, item.localImageUrl, useRemotePostImage]);
   const initials = useMemo(() => getAuthorInitials(item), [item]);
   const avatarBgColor = useMemo(
     () => getAvatarBgColor(item.author_name || initials),
@@ -526,7 +555,7 @@ function FacebookPostCard({
         <View style={[styles.fbTextWrap, outreachDetails && styles.fbTextWrapOutreach]}>
           {outreachDetails ? (
             <View style={styles.outreachKicker}>
-              <Ionicons name="medical" size={12} color={colors.primary} />
+              <MaterialCommunityIcons name="stethoscope" size={13} color={colors.primary} />
               <Text style={styles.outreachKickerText}>OFFICIAL OUTREACH VISIT</Text>
             </View>
           ) : null}
@@ -565,20 +594,32 @@ function FacebookPostCard({
         </View>
 
         {/* Full Width Edge-to-Edge Media: Tap to Maximize in Fullscreen */}
-        {item.image_url ? (
+        {postImageUrl && !postImageUnavailable ? (
           <Pressable
             accessibilityRole="imagebutton"
             accessibilityLabel="Maximize Image"
-            onPress={onImagePress}
+            onPress={() => onImagePress(postImageUrl)}
             style={({ pressed }) => [
               styles.fbFullWidthImageWrap,
               pressed && styles.imagePressed,
             ]}
           >
             <Image
-              source={{ uri: item.image_url }}
+              source={{ uri: postImageUrl }}
               style={styles.fbFullWidthImage}
               resizeMode="cover"
+              onError={() => {
+                if (
+                  !useRemotePostImage &&
+                  item.localImageUrl &&
+                  item.image_url &&
+                  item.localImageUrl !== item.image_url
+                ) {
+                  setUseRemotePostImage(true);
+                } else {
+                  setPostImageUnavailable(true);
+                }
+              }}
             />
           </Pressable>
         ) : null}

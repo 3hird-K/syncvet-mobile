@@ -47,16 +47,26 @@ try {
       '[ExpoNotificationAdapter] Running in Android Expo Go: Using resilient local reminder scheduler fallback.',
     );
   } else {
-    nativeNotifications = require('expo-notifications');
-    if (nativeNotifications?.setNotificationHandler) {
-      nativeNotifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
+    const expoNotifications = require('expo-notifications');
+    nativeNotifications = expoNotifications;
+    if (expoNotifications?.setNotificationHandler) {
+      expoNotifications.setNotificationHandler({
+        handleNotification: async (notification: any) => {
+          const data = notification?.request?.content?.data as Record<string, any> | undefined;
+          const isQueueChime = data?.kind === 'queue-call-chime';
+          const isQueueCall = data?.kind === 'queue-call';
+
+          return {
+            shouldShowAlert: !isQueueChime,
+            shouldPlaySound: true,
+            shouldSetBadge: !isQueueChime,
+            shouldShowBanner: !isQueueChime,
+            shouldShowList: !isQueueChime,
+            priority: isQueueCall
+              ? expoNotifications.AndroidNotificationPriority.MAX
+              : undefined,
+          };
+        },
       });
     }
   }

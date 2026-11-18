@@ -83,7 +83,7 @@ export function OutreachPostAction({ outreachInfo, onScanPress }: OutreachPostAc
 
         {purpose ? (
           <View style={styles.purposeRow}>
-            <Ionicons name="medical" size={12} color={palette.text} />
+            <MaterialCommunityIcons name="stethoscope" size={13} color={palette.text} />
             <Text style={[styles.purposeText, { color: palette.text }]} numberOfLines={1}>
               For: {purpose}
             </Text>

@@ -5,6 +5,20 @@ function queueKey(ownerId: string): string {
   return `syncvet.mutation_queue.${ownerId}`;
 }
 
+// An app kill during a sync can leave an operation stuck in `syncing`. Treat it
+// as pending again once it is clearly stale so it is not lost forever.
+const STALE_SYNCING_MS = 2 * 60 * 1000;
+const RETRY_DELAYS_MS = [0, 5_000, 30_000, 120_000];
+
+function timestampMs(value?: string): number {
+  const parsed = Date.parse(value || '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function retryDelayMs(retryCount: number): number {
+  return RETRY_DELAYS_MS[Math.min(Math.max(retryCount, 0), RETRY_DELAYS_MS.length - 1)];
+}
+
 export class SyncQueue {
   private static instance: SyncQueue;
 
@@ -20,10 +34,40 @@ export class SyncQueue {
     try {
       const raw = await AsyncStorage.getItem(queueKey(ownerId));
       if (!raw) return [];
-      return JSON.parse(raw) as SyncOperation[];
+      const parsed = JSON.parse(raw) as SyncOperation[];
+      return await this.recoverStaleOperations(
+        ownerId,
+        Array.isArray(parsed) ? parsed : [],
+      );
     } catch {
       return [];
     }
+  }
+
+  private async recoverStaleOperations(
+    ownerId: string,
+    queue: SyncOperation[],
+  ): Promise<SyncOperation[]> {
+    const now = Date.now();
+    let changed = false;
+
+    const recovered = queue.map((op) => {
+      if (
+        op.status === 'syncing' &&
+        now - timestampMs(op.updatedAt || op.createdAt) > STALE_SYNCING_MS
+      ) {
+        changed = true;
+        return {
+          ...op,
+          status: 'pending' as const,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return op;
+    });
+
+    if (changed) await this.saveQueue(ownerId, recovered);
+    return recovered;
   }
 
   private async saveQueue(ownerId: string, queue: SyncOperation[]): Promise<void> {
@@ -68,10 +112,14 @@ export class SyncQueue {
     );
 
     if (existingIndex >= 0 && operation !== 'BOOK_APPOINTMENT') {
+      // Shallow-merge so a later small profile edit does not erase fields from
+      // an earlier onboarding payload waiting in the same pending operation.
       queue[existingIndex] = {
         ...queue[existingIndex],
-        payload,
+        payload: { ...(queue[existingIndex].payload || {}), ...payload },
         updatedAt: now,
+        status: 'pending',
+        lastError: undefined,
       };
     } else {
       queue.push(newOp);
@@ -83,9 +131,30 @@ export class SyncQueue {
 
   public async getPending(ownerId: string): Promise<SyncOperation[]> {
     const queue = await this.getQueue(ownerId);
+    const now = Date.now();
     return queue.filter(
-      (op) => op.status === 'pending' || (op.status === 'failed' && op.retryCount < op.maxRetries),
+      (op) =>
+        op.status === 'pending' ||
+        (op.status === 'failed' &&
+          op.retryCount < op.maxRetries &&
+          now - timestampMs(op.updatedAt || op.createdAt) >= retryDelayMs(op.retryCount)),
     );
+  }
+
+  /** Returns the shortest remaining backoff among retryable failures. */
+  public async getNextRetryDelay(ownerId: string): Promise<number | null> {
+    const queue = await this.getQueue(ownerId);
+    const now = Date.now();
+    const delays = queue
+      .filter((op) => op.status === 'failed' && op.retryCount < op.maxRetries)
+      .map((op) =>
+        Math.max(
+          0,
+          timestampMs(op.updatedAt || op.createdAt) + retryDelayMs(op.retryCount) - now,
+        ),
+      );
+
+    return delays.length ? Math.min(...delays) : null;
   }
 
   public async getPendingCount(ownerId: string): Promise<number> {

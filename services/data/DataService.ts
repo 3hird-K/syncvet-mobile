@@ -23,6 +23,7 @@ export interface DataService {
   getAppointments(ownerId: string): Promise<Appointment[]>;
   bookAppointment(ownerId: string, input: BookingInput): Promise<Appointment>;
   cancelAppointment(ownerId: string, appointmentId: string): Promise<void>;
+  deleteAppointment(ownerId: string, appointmentId: string): Promise<void>;
 
   getTransactions(ownerId: string): Promise<ServiceTransaction[]>;
   logTransaction(

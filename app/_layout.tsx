@@ -22,6 +22,7 @@ import { useAuthStore } from '@store/useAuthStore';
 import { tokenCache } from '@lib/tokenCache';
 import { Toaster } from '@components/ui/Sonner';
 import { NetworkToastListener } from '@components/ui/NetworkToastListener';
+import { QueueCallAlert } from '@components/queue/QueueCallAlert';
 import { notificationService, notificationRouter } from '@services/notifications';
 
 import { SupabaseAuthBridge } from '../components/auth/SupabaseAuthBridge';
@@ -128,6 +129,7 @@ export default function RootLayout() {
             ) : null}
             <Toaster />
             <NetworkToastListener />
+            <QueueCallAlert />
           </SafeAreaProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>

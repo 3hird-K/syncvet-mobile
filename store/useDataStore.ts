@@ -16,6 +16,7 @@ import type {
 } from '@services/data';
 import { queryClient, queryKeys } from '@lib/queryClient';
 import { generateMicrochipNumber, generateUUID } from '@lib/uuid';
+import { normalizeServiceId } from '@lib/services';
 
 interface DataState {
   pets: Pet[];
@@ -35,6 +36,7 @@ interface DataState {
   deletePet: (ownerId: string, petId: string, clerkUser?: any) => Promise<void>;
   bookAppointment: (ownerId: string, input: BookingInput, clerkUser?: any) => Promise<Appointment>;
   cancelAppointment: (ownerId: string, appointmentId: string, clerkUser?: any) => Promise<void>;
+  deleteAppointment: (ownerId: string, appointmentId: string, clerkUser?: any) => Promise<void>;
   updateAppointmentStatus: (
     ownerId: string,
     appointmentId: string,
@@ -47,7 +49,7 @@ interface DataState {
   reset: () => void;
 }
 
-interface DataSnapshot {
+export interface DataSnapshot {
   pets: Pet[];
   appointments: Appointment[];
   transactions: ServiceTransaction[];
@@ -242,7 +244,7 @@ function mergePendingLocalState(
   };
 }
 
-async function persistSnapshot(ownerId: string, snapshot: DataSnapshot): Promise<void> {
+export async function persistSnapshot(ownerId: string, snapshot: DataSnapshot): Promise<void> {
   await AsyncStorage.setItem(
     dataCacheKey(ownerId),
     JSON.stringify({
@@ -574,8 +576,12 @@ export const useDataStore = create<DataState>((set, get) => {
 
     bookAppointment: async (ownerId, input, clerkUser) => {
       const now = new Date().toISOString();
+      // Canonicalize at the write boundary so every booking path (wizard,
+      // passport clinical form, offline replay) persists the same service ID.
+      // A consultation must never be rewritten into another service downstream.
       const appointment: Appointment = {
         ...input,
+        serviceId: normalizeServiceId(input.serviceId),
         id: (input as any).id || `apt-${Date.now()}`,
         ownerId,
         status: 'pending',
@@ -641,7 +647,10 @@ export const useDataStore = create<DataState>((set, get) => {
 
       reminderEngine.reconcile(currentPets, currentAppts, undefined, ownerId).catch(() => {});
 
-      await syncQueue.enqueue(ownerId, 'appointment', appointmentId, 'CANCEL_APPOINTMENT', { id: appointmentId });
+      await syncQueue.enqueue(ownerId, 'appointment', appointmentId, 'CANCEL_APPOINTMENT', {
+        id: appointmentId,
+        ticketNumber: get().appointments.find((a) => a.id === appointmentId)?.queueTicket?.ticketNumber,
+      });
       const pendingCount = await syncQueue.getPendingCount(ownerId);
       set({ pendingCount });
 
@@ -649,6 +658,38 @@ export const useDataStore = create<DataState>((set, get) => {
       queryClient.setQueryData<Appointment[]>(queryKeys.appointments(ownerId), (old = []) => {
         return old.map((a) => (a.id === appointmentId ? { ...a, status: 'cancelled' } : a));
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
+
+      syncEngine.sync(ownerId, clerkUser).catch(() => {});
+    },
+
+    deleteAppointment: async (ownerId, appointmentId, clerkUser) => {
+      const ticketNumber = get().appointments.find((a) => a.id === appointmentId)?.queueTicket?.ticketNumber;
+
+      set((state) => ({
+        appointments: state.appointments.filter((a) => a.id !== appointmentId),
+      }));
+
+      const currentPets = get().pets;
+      const currentAppts = get().appointments;
+      const currentTransactions = get().transactions;
+      await persistSnapshot(ownerId, {
+        pets: currentPets,
+        appointments: currentAppts,
+        transactions: currentTransactions,
+      });
+
+      reminderEngine.reconcile(currentPets, currentAppts, undefined, ownerId).catch(() => {});
+
+      await syncQueue.enqueue(ownerId, 'appointment', appointmentId, 'DELETE_APPOINTMENT', {
+        id: appointmentId,
+        ticketNumber,
+      });
+      set({ pendingCount: await syncQueue.getPendingCount(ownerId) });
+
+      queryClient.setQueryData<Appointment[]>(queryKeys.appointments(ownerId), (old = []) =>
+        old.filter((a) => a.id !== appointmentId),
+      );
       queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
 
       syncEngine.sync(ownerId, clerkUser).catch(() => {});

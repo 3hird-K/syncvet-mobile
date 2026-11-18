@@ -82,10 +82,9 @@ const styles = StyleSheet.create({
   },
   preventiveCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    borderRadius: radius.sm,
     padding: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(10, 110, 100, 0.12)',
+    ...shadows.sm,
     gap: spacing.sm,
   },
   cardHeaderRow: {

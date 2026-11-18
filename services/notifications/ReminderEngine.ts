@@ -4,6 +4,7 @@ import type { NotificationPreferences, ReminderPayload } from './types';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './types';
 import { notificationService } from './NotificationService';
 import { SERVICES, slotToHour } from '@lib/services';
+import { getVaccinationDueDate } from '@lib/petHealth';
 import { formatWeekdayDate } from '@lib/format';
 
 /**
@@ -135,19 +136,11 @@ export class ReminderEngine {
     // 2. Pet Vaccination Due Date Reminders
     if (preferences.vaccinesEnabled) {
       for (const pet of pets) {
-        let vaxDueDateStr = pet.nextVaccinationDate;
-        if (!vaxDueDateStr && pet.isVaccinated) {
-          const lastDate = pet.lastVaccinationDate || (pet.createdAt ? pet.createdAt.split('T')[0] : undefined);
-          if (lastDate) {
-            const parts = lastDate.split('-');
-            if (parts.length === 3) {
-              const yr = parseInt(parts[0], 10);
-              if (!isNaN(yr)) {
-                vaxDueDateStr = `${yr + 1}-${parts[1]}-${parts[2]}`;
-              }
-            }
-          }
-        }
+        // Only vaccinated pets are due for an annual booster. The shared helper
+        // derives the 1-year anniversary when the clinic did not store one.
+        if (!pet.isVaccinated) continue;
+
+        const vaxDueDateStr = getVaccinationDueDate(pet);
         if (!vaxDueDateStr) continue;
 
         const vaxDate = parseDateAt9AM(vaxDueDateStr);
@@ -212,6 +205,33 @@ export class ReminderEngine {
               },
             });
           }
+        }
+
+        // C. Due date / 1-year anniversary. This is independent of the optional
+        // "days before" preferences so owners are always alerted on the day the
+        // booster becomes due.
+        if (vaxTimeMs > now + 5000) {
+          reminders.push({
+            id: `rem_vax_${pet.id}_due`,
+            userId: ownerId,
+            petId: pet.id,
+            petName: pet.name,
+            type: 'vaccination_due_today',
+            title: `${pet.name} Needs Vaccination`,
+            body: `${pet.name} has been vaccinated for a year. The annual anti-rabies booster is due today (${dateFormatted}). Book a slot at City Vet.`,
+            scheduledAt: vaxDate.toISOString(),
+            channelId: 'pet-health',
+            sourceEntity: 'pet',
+            sourceEntityId: pet.id,
+            enabled: true,
+            data: {
+              pathname: `/pets/${pet.id}`,
+              params: { id: pet.id },
+              type: 'vaccination_due_today',
+              petId: pet.id,
+              sourceId: pet.id,
+            },
+          });
         }
       }
     }

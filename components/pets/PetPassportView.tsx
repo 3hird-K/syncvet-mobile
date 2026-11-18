@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -26,6 +26,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { ageFromBirthYear, formatDateWithYear } from '@lib/format';
+import {
+  getServiceUnavailableMessage,
+  getVaccinationDueDate,
+  isServiceUnavailableForPet,
+  isVaccinationCurrent,
+} from '@lib/petHealth';
 import { getAvatarPath, getPetAvatarSource } from '@lib/petAvatars';
 import { buildPetTagString, downloadPetTag } from '@lib/petQrTag';
 import { useAuthStore } from '@store/useAuthStore';
@@ -143,6 +149,10 @@ export function PetPassportView({
   const qrRef = useRef<any>(null);
   const scrollBodyRef = useRef<any>(null);
   const editScrollRef = useRef<any>(null);
+  const symptomsInputRef = useRef<any>(null);
+  const symptomsFocusedRef = useRef(false);
+  const bodyScrollOffsetRef = useRef(0);
+  const keyboardTopRef = useRef<number | null>(null);
 
   const { height: windowHeight } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -152,9 +162,11 @@ export function PetPassportView({
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
+      keyboardTopRef.current = e.endCoordinates.screenY;
       setKeyboardHeight(e.endCoordinates.height);
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardTopRef.current = null;
       setKeyboardHeight(0);
     });
 
@@ -163,6 +175,36 @@ export function PetPassportView({
       hideSub.remove();
     };
   }, []);
+
+  // Keep the clinical symptoms field visible above the keyboard. Measuring the
+  // input in page coordinates works with both adjustResize and adjustPan.
+  const revealSymptomsInput = useCallback(() => {
+    const input = symptomsInputRef.current;
+    const scroller = scrollBodyRef.current;
+    if (!input || !scroller) return;
+
+    input.measure(
+      (_x: number, _y: number, _width: number, height: number, _pageX: number, pageY: number) => {
+        const keyboardTop = keyboardTopRef.current ?? windowHeight;
+        const inputBottom = pageY + height;
+        const safeBottom = keyboardTop - 16;
+        if (!Number.isFinite(inputBottom) || inputBottom <= safeBottom) return;
+
+        const targetY = Math.max(0, bodyScrollOffsetRef.current + (inputBottom - safeBottom) + 12);
+        scroller.scrollTo({ y: targetY, animated: true });
+      },
+    );
+  }, [windowHeight]);
+
+  // On Android keyboardDidShow can arrive after the focus handler runs, so
+  // scroll again once the keyboard height is committed.
+  useEffect(() => {
+    if (keyboardHeight > 0 && symptomsFocusedRef.current) {
+      const timer = setTimeout(revealSymptomsInput, 60);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [keyboardHeight, revealSymptomsInput]);
 
   const [activeTab, setActiveTab] = useState<PetDetailTab>('overview');
   const [isEditing, setIsEditing] = useState(false);
@@ -212,7 +254,23 @@ export function PetPassportView({
     }
   }, [pet]);
 
+  // Keep the procedure selection on an eligible service when the pet is
+  // already vaccinated or already spayed/neutered.
+  React.useEffect(() => {
+    const vaccinationUnavailable = isVaccinationCurrent(pet);
+    const spayUnavailable = Boolean(pet.isSpayedNeutered);
+    if (selectedProcedure === 'vaccination' && vaccinationUnavailable && !spayUnavailable) {
+      setSelectedProcedure('kapon');
+    }
+    if (selectedProcedure === 'kapon' && spayUnavailable && !vaccinationUnavailable) {
+      setSelectedProcedure('vaccination');
+    }
+  }, [pet, selectedProcedure]);
+
   const isDog = pet.species?.toLowerCase() === 'dog';
+  const isVaccinationUnavailable = isVaccinationCurrent(pet);
+  const vaccinationDueDate = getVaccinationDueDate(pet);
+  const isSpayNeuterUnavailable = Boolean(pet.isSpayedNeutered);
   const age = pet.birthYear ? ageFromBirthYear(pet.birthYear) : 1;
 
   // Format weight for header: e.g. "48 kg"
@@ -304,13 +362,15 @@ export function PetPassportView({
   // Check required fields for Procedure Booking (Procedure + Valid Weekday Date + Prep Checkbox)
   const isProcedureFormValid = useMemo(() => {
     if (!selectedProcedure) return false;
+    const serviceId = selectedProcedure === 'vaccination' ? 'vaccination' : 'spay-neuter';
+    if (isServiceUnavailableForPet(pet, serviceId)) return false;
     if (!procedureDate) return false;
     const now = new Date();
     const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (procedureDate === todayISO && now.getHours() >= 16) return false;
     if (!prepConfirmed) return false;
     return true;
-  }, [selectedProcedure, procedureDate, prepConfirmed]);
+  }, [pet, selectedProcedure, procedureDate, prepConfirmed]);
 
   // 1. Save Edited Pet Info
   const handleSaveEdit = async () => {
@@ -452,12 +512,7 @@ export function PetPassportView({
         .filter(Boolean)
         .join(' | ');
 
-      const now = new Date();
-      const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const isToday = clinicalDate === todayISO;
-      const timeSlot = isToday
-        ? '8:30 AM - 11:30 AM (Morning Session)'
-        : '8:00 AM - 5:00 PM (Walk-in anytime)';
+      const timeSlot = '8:00 AM - 5:00 PM';
 
       const input: BookingInput = {
         petId: pet.id,
@@ -491,10 +546,23 @@ export function PetPassportView({
       return;
     }
 
+    const serviceId = selectedProcedure === 'vaccination' ? 'vaccination' : 'spay-neuter';
+    if (isServiceUnavailableForPet(pet, serviceId)) {
+      haptic.warning();
+      toast.info(
+        serviceId === 'vaccination' ? 'Already Vaccinated' : 'Already Spayed / Neutered',
+        {
+          description:
+            getServiceUnavailableMessage(pet, serviceId) ||
+            'This procedure is no longer needed for your pet.',
+        },
+      );
+      return;
+    }
+
     setSubmittingProcedure(true);
     try {
       haptic.success();
-      const serviceId = selectedProcedure === 'vaccination' ? 'vaccination' : 'kapon';
       const procedureTitle = selectedProcedure === 'vaccination' ? 'Anti-Rabies & Core Immunization' : 'Spay & Neuter Surgery';
       const notesDetail = [
         `Procedure: ${procedureTitle}`,
@@ -503,12 +571,7 @@ export function PetPassportView({
         .filter(Boolean)
         .join(' | ');
 
-      const now = new Date();
-      const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const isToday = procedureDate === todayISO;
-      const timeSlot = isToday
-        ? '8:30 AM - 11:30 AM (Morning Session)'
-        : '8:00 AM - 5:00 PM (Walk-in anytime)';
+      const timeSlot = '8:00 AM - 5:00 PM';
 
       const input: BookingInput = {
         petId: pet.id,
@@ -799,6 +862,10 @@ export function PetPassportView({
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        onScroll={(e) => {
+          bodyScrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
       >
         {/* ----------------- TAB 0: OVERVIEW ----------------- */}
         {activeTab === 'overview' && (
@@ -811,9 +878,11 @@ export function PetPassportView({
                 </View>
                 <View style={styles.vaxAlertTextCol}>
                   <Text style={styles.vaxAlertTitle}>
-                    {pet.isVaccinated
+                    {!pet.isVaccinated
+                      ? 'Anti-Rabies Vaccination Needed'
+                      : isVaccinationUnavailable
                       ? 'Anti-Rabies Vaccination Protected'
-                      : 'Anti-Rabies Vaccination Needed'}
+                      : 'Annual Rabies Booster Due'}
                   </Text>
                   <Text style={styles.vaxAlertSubtitle}>
                     Annual vaccination is free at the CVO City Clinic
@@ -822,13 +891,17 @@ export function PetPassportView({
                 <View
                   style={[
                     styles.vaxAlertBadge,
-                    pet.isVaccinated
+                    isVaccinationUnavailable
                       ? styles.vaxAlertBadgeProtected
                       : styles.vaxAlertBadgeNeeded,
                   ]}
                 >
                   <Text style={styles.vaxAlertBadgeText}>
-                    {pet.isVaccinated ? 'Vaccinated' : 'Unvaccinated'}
+                    {!pet.isVaccinated
+                      ? 'Unvaccinated'
+                      : isVaccinationUnavailable
+                      ? 'Vaccinated'
+                      : 'Booster Due'}
                   </Text>
                 </View>
               </View>
@@ -844,9 +917,14 @@ export function PetPassportView({
                 </View>
                 <View style={styles.vaxDateItem}>
                   <Text style={styles.vaxDateLabel}>Next Due:</Text>
-                  <Text style={[styles.vaxDateValue, !pet.isVaccinated && styles.vaxDueUrgent]}>
-                    {pet.isVaccinated && pet.nextVaccinationDate
-                      ? formatDateWithYear(pet.nextVaccinationDate)
+                  <Text
+                    style={[
+                      styles.vaxDateValue,
+                      (!pet.isVaccinated || !isVaccinationUnavailable) && styles.vaxDueUrgent,
+                    ]}
+                  >
+                    {vaccinationDueDate
+                      ? formatDateWithYear(vaccinationDueDate)
                       : 'Immediate schedule required'}
                   </Text>
                 </View>
@@ -1198,6 +1276,7 @@ export function PetPassportView({
                 </View>
               </View>
               <TextInput
+                ref={symptomsInputRef}
                 value={clinicalSymptoms}
                 onChangeText={setClinicalSymptoms}
                 placeholder="Describe your pet's condition, observed symptoms (e.g. vomiting, lethargy, coughing, loss of appetite)..."
@@ -1207,9 +1286,14 @@ export function PetPassportView({
                 style={styles.multilineInput}
                 textAlignVertical="top"
                 onFocus={() => {
-                  setTimeout(() => {
-                    scrollBodyRef.current?.scrollToEnd({ animated: true });
-                  }, 120);
+                  symptomsFocusedRef.current = true;
+                  setTimeout(revealSymptomsInput, 80);
+                }}
+                onBlur={() => {
+                  symptomsFocusedRef.current = false;
+                }}
+                onContentSizeChange={() => {
+                  if (symptomsFocusedRef.current) revealSymptomsInput();
                 }}
               />
             </View>
@@ -1274,12 +1358,23 @@ export function PetPassportView({
             {/* Option 1: Vaccination */}
             <Pressable
               onPress={() => {
+                if (isVaccinationUnavailable) {
+                  haptic.warning();
+                  toast.info('Already Vaccinated', {
+                    description:
+                      getServiceUnavailableMessage(pet, 'vaccination') ||
+                      `${pet.name} is not due for a booster yet.`,
+                  });
+                  return;
+                }
                 haptic.light();
                 setSelectedProcedure('vaccination');
               }}
+              disabled={isVaccinationUnavailable}
               style={[
                 styles.procedureOptionCard,
                 selectedProcedure === 'vaccination' && styles.procedureCardActive,
+                isVaccinationUnavailable && styles.procedureCardDisabled,
               ]}
             >
               <View style={styles.procedureCardTop}>
@@ -1291,23 +1386,39 @@ export function PetPassportView({
                   <Text style={styles.procSub}>Anti-Rabies & Core Immunization</Text>
                 </View>
                 <View style={styles.procSlotBadgeGreen}>
-                  <Text style={styles.procSlotBadgeTextGreen}>🟢 10 Slots</Text>
+                  <Text style={styles.procSlotBadgeTextGreen}>
+                    {isVaccinationUnavailable ? 'Up to Date' : '🟢 10 Slots'}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.procDesc}>
-                Annual rabies vaccine & health certificate validation.
+                {isVaccinationUnavailable
+                  ? getServiceUnavailableMessage(pet, 'vaccination') ||
+                    `${pet.name} is already vaccinated.`
+                  : 'Annual rabies vaccine & health certificate validation.'}
               </Text>
             </Pressable>
 
             {/* Option 2: Spay & Neuter */}
             <Pressable
               onPress={() => {
+                if (isSpayNeuterUnavailable) {
+                  haptic.warning();
+                  toast.info('Already Spayed / Neutered', {
+                    description:
+                      getServiceUnavailableMessage(pet, 'spay-neuter') ||
+                      `${pet.name} is already recorded as spayed/neutered.`,
+                  });
+                  return;
+                }
                 haptic.light();
                 setSelectedProcedure('kapon');
               }}
+              disabled={isSpayNeuterUnavailable}
               style={[
                 styles.procedureOptionCard,
                 selectedProcedure === 'kapon' && styles.procedureCardActivePurple,
+                isSpayNeuterUnavailable && styles.procedureCardDisabled,
               ]}
             >
               <View style={styles.procedureCardTop}>
@@ -1319,11 +1430,16 @@ export function PetPassportView({
                   <Text style={styles.procSub}>Kapon / Sterilization Surgery</Text>
                 </View>
                 <View style={styles.procSlotBadgePurple}>
-                  <Text style={styles.procSlotBadgeTextPurple}>🟣 7 Slots</Text>
+                  <Text style={styles.procSlotBadgeTextPurple}>
+                    {isSpayNeuterUnavailable ? 'Completed' : '🟣 7 Slots'}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.procDesc}>
-                Surgical procedure with licensed veterinary anesthesia team.
+                {isSpayNeuterUnavailable
+                  ? getServiceUnavailableMessage(pet, 'spay-neuter') ||
+                    `${pet.name} is already spayed/neutered.`
+                  : 'Surgical procedure with licensed veterinary anesthesia team.'}
               </Text>
             </Pressable>
 
@@ -2563,6 +2679,11 @@ const styles = StyleSheet.create({
     borderColor: '#7C3AED',
     borderWidth: 1.5,
     backgroundColor: '#FAF5FF',
+  },
+  procedureCardDisabled: {
+    opacity: 0.55,
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
   },
   procedureCardTop: {
     flexDirection: 'row',

@@ -84,7 +84,7 @@ export function QueueTicketModal({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            {/* Ticket Hero Banner */}
+            {/* Ticket number — displayed directly, no card */}
             <View style={styles.heroSection}>
               <View style={styles.liveBadgeRow}>
                 <View style={styles.pulsingDot} />
@@ -93,13 +93,9 @@ export function QueueTicketModal({
 
               <Text style={styles.ticketLabel}>YOUR TICKET NUMBER</Text>
               <Text style={styles.ticketNumber}>{activeTicket.ticketNumber}</Text>
-
-              <View style={styles.positionBadge}>
-                <MaterialCommunityIcons name="account-clock" size={15} color="#0D9488" />
-                <Text style={styles.positionText}>
-                  Position in Queue: #{activeTicket.queueSequence}
-                </Text>
-              </View>
+              <Text style={styles.positionText}>
+                Position in Queue · #{activeTicket.queueSequence}
+              </Text>
             </View>
 
             {/* Perforated Divider */}
@@ -109,49 +105,38 @@ export function QueueTicketModal({
               <View style={styles.cutoutRight} />
             </View>
 
-            {/* Ticket Details Grid */}
-            <View style={styles.detailsGrid}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>PATIENT PET</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {appointment.petName}
-                </Text>
+            {/* Details — plain rows */}
+            <View style={styles.detailsList}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Patient</Text>
+                <Text style={styles.detailValue}>{appointment.petName}</Text>
               </View>
-
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>SERVICE</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {service?.name || 'Clinical Care'}
-                </Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Service</Text>
+                <Text style={styles.detailValue}>{service?.name || 'Clinical Care'}</Text>
               </View>
-
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>CONSULTATION ROOM</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Consultation Room</Text>
+                <Text style={styles.detailValue}>
                   {activeTicket.consultationRoom || 'Consultation Desk 1'}
                 </Text>
               </View>
-
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>CHECK-IN TIME</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {activeTicket.checkInTime || 'Today'}
-                </Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Check-in Time</Text>
+                <Text style={styles.detailValue}>{activeTicket.checkInTime || 'Today'}</Text>
               </View>
-
-              <View style={[styles.detailItem, { width: '100%' }]}>
-                <Text style={styles.detailLabel}>SCHEDULED DATE</Text>
-                <Text style={styles.detailValue} numberOfLines={1}>
-                  {formattedDate} • Carmen Clinic
-                </Text>
+              <View style={styles.detailRowLast}>
+                <Text style={styles.detailLabel}>Appointment Date</Text>
+                <Text style={styles.detailValue}>{formattedDate}</Text>
               </View>
             </View>
 
-            {/* Instruction Notice */}
-            <View style={styles.noticeCard}>
-              <Ionicons name="information-circle-outline" size={18} color="#0D9488" />
+            {/* Plain instruction text */}
+            <View style={styles.noticeRow}>
+              <Ionicons name="information-circle-outline" size={16} color={colors.primary} />
               <Text style={styles.noticeText}>
-                Please proceed to the patient waiting area. Watch the clinic display screens or listen for your ticket number ({activeTicket.ticketNumber}) to be announced.
+                Proceed to the waiting area. Watch the clinic screens or listen for ticket{' '}
+                {activeTicket.ticketNumber} to be announced.
               </Text>
             </View>
 
@@ -217,7 +202,7 @@ export function QueueTicketModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(7, 30, 38, 0.65)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
@@ -240,7 +225,7 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceMuted,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -275,68 +260,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    gap: 14,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   heroSection: {
     alignItems: 'center',
-    backgroundColor: '#F0FDFA',
-    borderRadius: radius.xl,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
+    paddingVertical: spacing.sm,
   },
   liveBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 8,
+    marginBottom: spacing.md,
   },
   pulsingDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
   },
   liveBadgeText: {
-    ...typography.captionBold,
-    fontSize: 10.5,
-    letterSpacing: 0.5,
-    color: '#0D9488',
+    ...typography.smallBold,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: colors.primary,
   },
   ticketLabel: {
-    ...typography.caption,
-    fontSize: 11,
-    letterSpacing: 1,
-    color: '#6B7280',
-    fontFamily: typography.font.bold,
-    marginTop: 2,
+    ...typography.smallBold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.textMuted,
   },
   ticketNumber: {
-    fontSize: 52,
-    fontWeight: '900',
-    color: '#0F766E',
+    ...typography.display,
+    fontSize: 54,
+    lineHeight: 62,
+    color: colors.primary,
     letterSpacing: 2,
-    lineHeight: 60,
-  },
-  positionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: '#99F6E4',
-    marginTop: 8,
+    marginVertical: 2,
   },
   positionText: {
-    ...typography.captionBold,
-    fontSize: 12,
-    color: '#0F766E',
+    ...typography.caption,
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
   },
   perforationRow: {
     flexDirection: 'row',
@@ -348,7 +316,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: 'rgba(7, 30, 38, 0.65)',
+    backgroundColor: colors.overlay,
     marginLeft: -28,
   },
   dashLine: {
@@ -363,62 +331,63 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: 'rgba(7, 30, 38, 0.65)',
+    backgroundColor: colors.overlay,
     marginRight: -28,
   },
-  detailsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: radius.xl,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+  detailsList: {
+    gap: 0,
   },
-  detailItem: {
-    width: '47%',
-    gap: 3,
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceMuted,
+  },
+  detailRowLast: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: 12,
   },
   detailLabel: {
     ...typography.caption,
-    fontSize: 10,
-    fontFamily: typography.font.bold,
-    color: '#9CA3AF',
-    letterSpacing: 0.5,
+    fontSize: 13,
+    color: colors.textMuted,
   },
   detailValue: {
-    ...typography.body,
-    fontFamily: typography.font.bold,
-    fontSize: 13,
+    ...typography.captionBold,
+    fontSize: 14,
     color: colors.textPrimary,
+    textAlign: 'right',
+    flexShrink: 1,
   },
-  noticeCard: {
+  noticeRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 10,
-    backgroundColor: '#F0FDFA',
-    borderRadius: radius.md,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
+    marginTop: spacing.lg,
   },
   noticeText: {
     ...typography.caption,
-    fontSize: 11.5,
-    color: '#115E59',
-    lineHeight: 16,
+    fontSize: 12.5,
+    color: colors.textSecondary,
+    lineHeight: 18,
     flex: 1,
   },
   doneBtn: {
-    backgroundColor: '#0D9488',
+    backgroundColor: colors.primary,
     borderRadius: radius.pill,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginTop: spacing.lg,
   },
   doneBtnPressed: {
-    backgroundColor: '#0F766E',
+    backgroundColor: colors.primaryDark,
     transform: [{ scale: 0.99 }],
   },
   doneBtnText: {

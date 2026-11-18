@@ -15,6 +15,7 @@ import type {
   PetInput,
 } from '@services/data/types';
 import { queryClient, queryKeys } from '@lib/queryClient';
+import { normalizeServiceId } from '@lib/services';
 
 function lastSyncKey(ownerId: string): string {
   return `syncvet.last_sync.${ownerId}`;
@@ -35,6 +36,9 @@ export class SyncEngine {
   private activeOwnerId: string | null = null;
   private clerkUserRef: any = null;
   private isProcessing = false;
+  private wasOnline = networkService.isOnline();
+  private deferredSync: { ownerId: string; clerkUser?: any } | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   public static getInstance(): SyncEngine {
     if (!SyncEngine.instance) {
@@ -48,11 +52,14 @@ export class SyncEngine {
   }
 
   private init() {
-    // 1. Auto-sync on network reconnect
+    // 1. Auto-sync only on a true offline → online transition. `syncing` and
+    // `online` status changes caused by setSyncing(false) must not re-trigger.
     networkService.subscribe((netState) => {
-      if (netState.isConnected && netState.isInternetReachable && this.activeOwnerId) {
+      const online = netState.isConnected && netState.isInternetReachable;
+      if (online && !this.wasOnline && this.activeOwnerId) {
         this.sync(this.activeOwnerId, this.clerkUserRef).catch(() => {});
       }
+      this.wasOnline = online;
     });
 
     // 2. Auto-sync on App returning to foreground
@@ -138,6 +145,9 @@ export class SyncEngine {
     }
 
     if (this.isProcessing) {
+      // Remember the latest request and run it after the current pass finishes
+      // instead of silently dropping writes triggered during a sync.
+      this.deferredSync = { ownerId, clerkUser: userToUse };
       return { success: true, processedCount: 0, failedCount: 0, errors: [] };
     }
 
@@ -192,9 +202,31 @@ export class SyncEngine {
     } finally {
       this.isProcessing = false;
       networkService.setSyncing(false);
+
+      if (result.failedCount > 0) {
+        const delay = await syncQueue.getNextRetryDelay(ownerId);
+        if (delay !== null) this.scheduleRetry(ownerId, delay);
+      }
+
+      const deferred = this.deferredSync;
+      this.deferredSync = null;
+      if (deferred && networkService.isOnline()) {
+        this.sync(deferred.ownerId, deferred.clerkUser).catch(() => {});
+      }
     }
 
     return result;
+  }
+
+  private scheduleRetry(ownerId: string, delayMs: number): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    const boundedDelay = Math.min(Math.max(delayMs, 1_000), 60_000);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (this.activeOwnerId === ownerId && networkService.isOnline()) {
+        this.sync(ownerId, this.clerkUserRef).catch(() => {});
+      }
+    }, boundedDelay);
   }
 
   /**
@@ -293,7 +325,7 @@ export class SyncEngine {
           id: newAppt.id,
           petId: newAppt.petId,
           petName: newAppt.petName,
-          serviceId: newAppt.serviceId,
+          serviceId: normalizeServiceId(newAppt.serviceId),
           date: newAppt.date,
           timeSlot: newAppt.timeSlot,
           location: newAppt.location,
@@ -305,6 +337,28 @@ export class SyncEngine {
       case 'CANCEL_APPOINTMENT': {
         const apptId = op.entityId;
         await dataService.cancelAppointment(op.ownerId, apptId);
+
+        const payload = op.payload as { ticketNumber?: string };
+        if (payload?.ticketNumber) {
+          const { error } = await supabase
+            .from('queue_tickets')
+            .update({ status: 'skipped', updated_at: new Date().toISOString() })
+            .eq('ticket_number', payload.ticketNumber);
+          if (error) throw error;
+        }
+        break;
+      }
+
+      case 'DELETE_APPOINTMENT': {
+        await dataService.deleteAppointment(op.ownerId, op.entityId);
+
+        const payload = op.payload as { ticketNumber?: string };
+        if (payload?.ticketNumber) {
+          await supabase
+            .from('queue_tickets')
+            .delete()
+            .eq('ticket_number', payload.ticketNumber);
+        }
         break;
       }
 
@@ -349,16 +403,40 @@ export class SyncEngine {
       }
 
       case 'UPDATE_PROFILE': {
-        const profile = op.payload as { mobileNumber?: string; address?: string; fullName?: string };
-        await supabase
-          .from('users')
-          .update({
-            ...(profile.mobileNumber ? { phone_number: profile.mobileNumber } : {}),
-            ...(profile.address ? { address: profile.address } : {}),
-            ...(profile.fullName ? { full_name: profile.fullName } : {}),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', op.ownerId);
+        const profile = op.payload as {
+          email?: string;
+          firstName?: string | null;
+          lastName?: string | null;
+          fullName?: string;
+          mobileNumber?: string;
+          address?: string;
+          profileCompleted?: boolean;
+          avatarUrl?: string | null;
+          role?: string;
+          metadata?: Record<string, any>;
+        };
+
+        // Upsert so a profile completed while offline still creates the row if
+        // the remote user does not exist yet. Replaying is idempotent.
+        const row: Record<string, any> = {
+          id: op.ownerId,
+          email: profile.email || `${op.ownerId}@resident.syncvet.app`,
+          role: profile.role || 'Pet Owner',
+          updated_at: new Date().toISOString(),
+        };
+        if (profile.mobileNumber !== undefined) row.phone_number = profile.mobileNumber;
+        if (profile.address !== undefined) row.address = profile.address;
+        if (profile.fullName !== undefined) row.full_name = profile.fullName;
+        if (profile.firstName !== undefined) row.first_name = profile.firstName || null;
+        if (profile.lastName !== undefined) row.last_name = profile.lastName || null;
+        if (profile.profileCompleted !== undefined) row.profile_completed = profile.profileCompleted;
+        if (profile.avatarUrl !== undefined) row.avatar_url = profile.avatarUrl || null;
+        if (profile.metadata !== undefined) row.raw_user_meta_data = profile.metadata;
+
+        const { error } = await (supabase.from('users') as any).upsert(row, {
+          onConflict: 'id',
+        });
+        if (error) throw error;
         break;
       }
     }

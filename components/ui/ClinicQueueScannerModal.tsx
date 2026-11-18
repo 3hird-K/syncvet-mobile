@@ -20,6 +20,7 @@ import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
 import { todayISO, formatDateWithYear } from '@lib/format';
 import { getService } from '@lib/services';
+import { isOutreachAppointment, validateQueueQr } from '@lib/qrValidation';
 import { useDataStore } from '@store/useDataStore';
 import { useAuthStore } from '@store/useAuthStore';
 import { networkService } from '@services/network';
@@ -83,6 +84,39 @@ export function ClinicQueueScannerModal({
   const processQrData = useCallback(
     async (rawData: string) => {
       if (!appointment || !isScanningRef.current) return;
+
+      // Classify first. A field-operation QR must never fall through to queue
+      // check-in, even if it contains a date or appointment-looking fields.
+      const family = validateQueueQr(rawData);
+      if (!family.valid) {
+        isScanningRef.current = false;
+        haptic.warning();
+        setErrorMessage(
+          family.displayMessage || family.message || 'Invalid Clinic Check-in QR.',
+        );
+        setTimeout(() => {
+          isScanningRef.current = true;
+        }, 1500);
+        return;
+      }
+
+      // An outreach visit is already a completed field record, not a clinic
+      // queue entry. It cannot be converted into a Q-NNN ticket.
+      if (isOutreachAppointment(appointment)) {
+        isScanningRef.current = false;
+        haptic.warning();
+        toast.warning('Outreach visit cannot be queued', {
+          description:
+            'This visit was already recorded at a Barangay Field Operation and cannot join Today’s Clinic Queue.',
+        });
+        setErrorMessage(
+          'This visit was already recorded at a Barangay Field Operation and cannot join Today’s Clinic Queue.',
+        );
+        setTimeout(() => {
+          isScanningRef.current = true;
+        }, 1500);
+        return;
+      }
 
       // Queue tickets are allocated by the clinic backend, so check-in cannot
       // be honestly completed or faked while offline.

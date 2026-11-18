@@ -9,6 +9,55 @@ import {
   useAppointmentsQuery,
   useTransactionsQuery,
 } from './queries';
+import type { Appointment } from '@services/data/types';
+
+/**
+ * Merge server rows with the local-first snapshot. Realtime queue updates can
+ * complete an appointment before the server appointment row catches up, so a
+ * locally newer status must win over a stale query result with the same ID.
+ */
+function mergeAppointments(
+  server: Appointment[] | undefined,
+  local: Appointment[],
+): Appointment[] {
+  if (!server || server.length === 0) return local;
+  if (local.length === 0) return server;
+
+  const byId = new Map<string, Appointment>();
+  for (const appointment of server) byId.set(appointment.id, appointment);
+
+  for (const appointment of local) {
+    const serverAppointment = byId.get(appointment.id);
+    if (!serverAppointment) {
+      byId.set(appointment.id, appointment);
+      continue;
+    }
+
+    // Finished/missed outcomes are terminal: a stale server row must never pull
+    // them back into Upcoming as pending or confirmed.
+    const localFinished =
+      appointment.status === 'completed' ||
+      appointment.status === 'cancelled' ||
+      appointment.status === 'missed' ||
+      appointment.status === 'overdue';
+    const serverUnfinished =
+      serverAppointment.status === 'pending' ||
+      serverAppointment.status === 'confirmed' ||
+      serverAppointment.status === 'queued' ||
+      serverAppointment.status === 'called';
+    if (localFinished && serverUnfinished) {
+      byId.set(appointment.id, appointment);
+      continue;
+    }
+
+    const localTime = Date.parse(appointment.updatedAt || appointment.createdAt || '') || 0;
+    const serverTime =
+      Date.parse(serverAppointment.updatedAt || serverAppointment.createdAt || '') || 0;
+    if (localTime >= serverTime) byId.set(appointment.id, appointment);
+  }
+
+  return Array.from(byId.values());
+}
 
 /**
  * Loads the signed-in resident's pets, appointments, and official service transactions feed.
@@ -56,9 +105,21 @@ export function useResidentData() {
   }, [petsQuery.data]);
 
   useEffect(() => {
-    if (appointmentsQuery.data && appointmentsQuery.data.length > 0) {
-      useDataStore.setState({ appointments: appointmentsQuery.data });
+    if (!appointmentsQuery.data) return;
+
+    const server = appointmentsQuery.data;
+    const local = useDataStore.getState().appointments || [];
+
+    // An empty server result is meaningful — it means every remote appointment
+    // was deleted. Keep only optimistic local rows that are still waiting to sync.
+    if (server.length === 0) {
+      useDataStore.setState({
+        appointments: local.filter((a) => a._pendingSync || a.id.startsWith('apt-')),
+      });
+      return;
     }
+
+    useDataStore.setState({ appointments: mergeAppointments(server, local) });
   }, [appointmentsQuery.data]);
 
   useEffect(() => {
@@ -106,21 +167,10 @@ export function useResidentData() {
     return merged;
   }, [petsQuery.data, storePets]);
 
-  const activeAppointments = useMemo(() => {
-    const server = appointmentsQuery.data;
-    const local = storeAppointments || [];
-    if (!server || server.length === 0) return local;
-    if (local.length === 0) return server;
-
-    const serverIds = new Set(server.map((a) => a.id));
-    const merged = [...server];
-    for (const item of local) {
-      if (!serverIds.has(item.id)) {
-        merged.unshift(item);
-      }
-    }
-    return merged;
-  }, [appointmentsQuery.data, storeAppointments]);
+  const activeAppointments = useMemo(
+    () => mergeAppointments(appointmentsQuery.data, storeAppointments || []),
+    [appointmentsQuery.data, storeAppointments],
+  );
 
   const activeTransactions = useMemo(() => {
     const server = transactionsQuery.data;

@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useUser } from '@clerk/expo';
 
+import { todayISO } from '@lib/format';
+import { normalizeAppointmentStatus } from '@services/data/types';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useNotificationStore } from '@store/useNotificationStore';
@@ -13,15 +15,24 @@ import { HomeScreenSkeleton } from '@components/ui/Skeleton';
 import {
   HomeHeader,
   HomePetsSection,
+  HomeNextUpSection,
   HomeAnnouncementsSection,
 } from '@components/home';
 import type { Pet } from '@services/data';
+
+function timeSlotMinutes(timeSlot: string): number {
+  const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec((timeSlot || '').trim());
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  const hour = Number(match[1]) % 12 + (match[3].toUpperCase() === 'PM' ? 12 : 0);
+  return hour * 60 + Number(match[2]);
+}
 
 export default function HomeScreen() {
   const { user: clerkUser } = useUser();
   const user = useAuthStore((state) => state.user);
   const {
     pets: storePets,
+    appointments: storeAppointments,
     loading,
     loaded,
     syncNow,
@@ -46,6 +57,34 @@ export default function HomeScreen() {
 
   // Pure Supabase source of truth
   const allPets: Pet[] = storePets || [];
+
+  // Live Realtime updates flow through useResidentData(); derive the nearest
+  // active appointment from that same source so Home never shows stale data.
+  const upcomingAppointments = useMemo(() => {
+    const today = todayISO();
+    return (storeAppointments || [])
+      .map((appointment) => ({
+        ...appointment,
+        status: normalizeAppointmentStatus(appointment.status),
+      }))
+      .filter((appointment) => {
+        if (
+          appointment.status === 'completed' ||
+          appointment.status === 'cancelled' ||
+          appointment.status === 'missed' ||
+          appointment.status === 'overdue'
+        ) {
+          return false;
+        }
+        return appointment.date >= today;
+      })
+      .sort((a, b) => {
+        const dateCmp = a.date.localeCompare(b.date);
+        return dateCmp !== 0 ? dateCmp : timeSlotMinutes(a.timeSlot) - timeSlotMinutes(b.timeSlot);
+      });
+  }, [storeAppointments]);
+
+  const nextAppointment = upcomingAppointments[0] || null;
 
   const handleRefresh = useCallback(async () => {
     haptic.light();
@@ -83,7 +122,15 @@ export default function HomeScreen() {
         {/* 2. Official CVO Pet Registry Section (Facebook Stories style) */}
         <HomePetsSection pets={allPets} userPhotoUrl={displayPhoto} />
 
-        {/* 3. Live Community Announcements Feed from Supabase */}
+        {/* 3. Live Appointment Updates — hidden when nothing is active/upcoming */}
+        {upcomingAppointments.length > 0 ? (
+          <HomeNextUpSection
+            nextAppointment={nextAppointment}
+            totalAppointmentsCount={upcomingAppointments.length}
+          />
+        ) : null}
+
+        {/* 4. Live Community Announcements Feed from Supabase */}
         <HomeAnnouncementsSection />
       </Screen>
     </AnimatedScreen>

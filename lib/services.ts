@@ -16,6 +16,35 @@ export interface ServiceDef {
   cta: string;
 }
 
+const SERVICE_ID_ALIASES: Record<string, string> = {
+  consult: 'consultation',
+  consultation: 'consultation',
+  clinical: 'consultation',
+  'clinical-care': 'consultation',
+  checkup: 'consultation',
+  wellness: 'consultation',
+  vaccine: 'vaccination',
+  vaccination: 'vaccination',
+  immunization: 'vaccination',
+  'anti-rabies': 'vaccination',
+  kapon: 'spay-neuter',
+  spay: 'spay-neuter',
+  neuter: 'spay-neuter',
+  spay_neuter: 'spay-neuter',
+  'spay-neuter': 'spay-neuter',
+  surgery: 'spay-neuter',
+};
+
+/** Canonicalizes legacy/vendor service IDs to the mobile service enum. */
+export function normalizeServiceId(serviceId?: string | null): string {
+  const value = (serviceId || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return SERVICE_ID_ALIASES[value] ?? value;
+}
+
 export const SERVICES: ServiceDef[] = [
   {
     id: 'consultation',
@@ -53,7 +82,8 @@ export const SERVICES: ServiceDef[] = [
 ];
 
 export function getService(serviceId: string): ServiceDef | undefined {
-  return SERVICES.find((s) => s.id === serviceId);
+  const canonicalId = normalizeServiceId(serviceId);
+  return SERVICES.find((s) => s.id === canonicalId);
 }
 
 export const MORNING_SLOTS = [

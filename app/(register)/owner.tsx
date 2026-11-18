@@ -33,7 +33,7 @@ import { useAuthStore } from '@store/useAuthStore';
 import { DropdownSelect } from '@components/ui/DropdownSelect';
 import { Button } from '@components/ui/Button';
 import { supabase } from '@lib/supabase';
-import { syncQueue, syncEngine } from '@services/sync';
+import { networkService } from '@services/network';
 import { toast } from '@components/ui/Sonner';
 
 type OnboardingStep = 1 | 2 | 3;
@@ -475,28 +475,7 @@ export default function ResidentOnboardingScreen() {
       const cleanMobile = mobileNumber.replace(/[\s\-]/g, '');
       const cleanEmergency = emergencyPhone.replace(/[\s\-]/g, '');
       const cleanStreet = street.trim();
-      const fullAddress = buildCDOAddress(cleanStreet, finalBarangay, landmark);
-      const petTypes = caredAnimals.map((a) => (a === 'dogs' ? 'Dogs' : 'Cats'));
       const consentTimestamp = smsConsentUpdatedAt || new Date().toISOString();
-
-      const cleanRelation = relationship === 'Spouse / Partner' ? 'Spouse' : relationship;
-      const metadata = {
-        address: fullAddress,
-        barangay: finalBarangay,
-        landmark: landmark.trim(),
-        petTypes,
-        roleTitle: 'Pet Owner',
-        smsConsent,
-        smsConsentUpdatedAt: consentTimestamp,
-        accountType: 'pet_owner',
-        phoneNumber: cleanMobile,
-        mobileNumber: cleanMobile,
-        streetAddress: cleanStreet,
-        profileCompleted: true,
-        emergencyContactName: emergencyContact.trim(),
-        emergencyContactPhone: cleanEmergency,
-        emergencyContactRelation: cleanRelation,
-      };
 
       await completeResidentOnboarding({
         email: userEmail,
@@ -517,41 +496,6 @@ export default function ResidentOnboardingScreen() {
         explicitUserId: ownerId,
       });
 
-      const persistedOwnerId = ownerId || useAuthStore.getState().user?.id || '';
-
-      // Confirm the authoritative write actually landed before celebrating.
-      const { data: dbUser, error: verifyError } = await supabase
-        .from('users')
-        .select(
-          'id, email, first_name, last_name, full_name, phone_number, address, role, profile_completed, raw_user_meta_data, updated_at',
-        )
-        .eq('id', persistedOwnerId)
-        .maybeSingle();
-
-      if (verifyError) throw verifyError;
-
-      const dbMeta = (dbUser?.raw_user_meta_data as Record<string, any> | null) || {};
-      const isProfileComplete =
-        dbUser?.profile_completed === true &&
-        dbUser.phone_number === cleanMobile &&
-        dbUser.address === fullAddress &&
-        Boolean(dbUser.email?.trim()) &&
-        Boolean(dbUser.first_name?.trim()) &&
-        (dbUser.last_name ?? '') === lastName.trim() &&
-        Boolean(dbUser.full_name?.trim()) &&
-        Boolean(dbUser.role?.trim()) &&
-        dbMeta.barangay === finalBarangay &&
-        dbMeta.streetAddress === cleanStreet &&
-        dbMeta.smsConsent === smsConsent &&
-        dbMeta.smsConsentUpdatedAt === consentTimestamp &&
-        dbMeta.emergencyContactName === emergencyContact.trim() &&
-        dbMeta.emergencyContactPhone === cleanEmergency &&
-        Array.isArray(dbMeta.petTypes) && dbMeta.petTypes.length === 2;
-
-      if (!isProfileComplete) {
-        throw new Error('Supabase profile is missing required onboarding fields.');
-      }
-
       // Ensure Clerk unsafeMetadata is completely wiped; pure Supabase architecture
       if (clerkUser) {
         try {
@@ -559,22 +503,11 @@ export default function ResidentOnboardingScreen() {
         } catch {}
       }
 
-      // Enqueue to offline synchronization engine
-      if (persistedOwnerId) {
-        await syncQueue.enqueue(persistedOwnerId, 'profile', persistedOwnerId, 'UPDATE_PROFILE', {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          mobileNumber: cleanMobile,
-          address: fullAddress,
-          metadata,
-          timestamp: Date.now(),
-        });
-        syncEngine.sync(persistedOwnerId, clerkUser).catch(() => {});
-      }
-
       haptic.success();
       toast.success('Registration Complete', {
-        description: 'Welcome to SyncVet City Veterinary Office Cagayan de Oro!',
+        description: networkService.isOnline()
+          ? 'Welcome to SyncVet City Veterinary Office Cagayan de Oro!'
+          : 'Saved offline. Your details will sync when you reconnect.',
       });
 
       router.replace('/(main)');

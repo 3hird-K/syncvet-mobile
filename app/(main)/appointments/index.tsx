@@ -30,7 +30,6 @@ import { todayISO } from '@lib/format';
 import { haptic } from '@lib/haptics';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
-import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { AppointmentSwitch, AppointmentTab } from '@components/ui/AppointmentSwitch';
@@ -38,11 +37,10 @@ import { AppointmentCard } from '@components/ui/AppointmentCard';
 import { AppointmentDetailModal } from '@components/ui/AppointmentDetailModal';
 import { ClinicQueueScannerModal } from '@components/ui/ClinicQueueScannerModal';
 import { QueueTicketModal } from '@components/ui/QueueTicketModal';
-import { PetCalledRingModal } from '@components/ui/PetCalledRingModal';
 import { AppointmentsScreenSkeleton } from '@components/ui/Skeleton';
 import { toast } from '@components/ui/Sonner';
-import { supabase } from '@lib/supabase';
 import { networkService } from '@services/network';
+import { normalizeAppointmentStatus } from '@services/data/types';
 import type { Appointment, QueueTicketInfo } from '@services/data';
 
 const TAB_PAGES: AppointmentTab[] = ['upcoming', 'past'];
@@ -62,12 +60,12 @@ function SlideWrapper({ children, index, scrollX, width }: SlideWrapperProps) {
 
   const animatedStyle = useAnimatedStyle(() => {
     if (reducedMotion) return { width };
-    const opacity = interpolate(scrollX.value, inputRange, [0.4, 1, 0.4], Extrapolation.CLAMP);
-    const scale = interpolate(scrollX.value, inputRange, [0.96, 1, 0.96], Extrapolation.CLAMP);
+    // Keep slides full-width at all times. Scaling the active slide made card
+    // edges bleed into the paging container and looked like overflow.
+    const opacity = interpolate(scrollX.value, inputRange, [0.55, 1, 0.55], Extrapolation.CLAMP);
     return {
       width,
       opacity,
-      transform: [{ scale }],
     };
   });
 
@@ -82,7 +80,6 @@ export default function AppointmentsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { user: clerkUser } = useUser();
-  const { isOnline } = useNetworkStatus();
   const {
     pets: storePets,
     appointments: storeAppointments,
@@ -95,11 +92,6 @@ export default function AppointmentsScreen() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [scannerAppointment, setScannerAppointment] = useState<Appointment | null>(null);
   const [ticketModalData, setTicketModalData] = useState<{
-    visible: boolean;
-    appointment: Appointment | null;
-    ticket: QueueTicketInfo | null;
-  }>({ visible: false, appointment: null, ticket: null });
-  const [calledModalData, setCalledModalData] = useState<{
     visible: boolean;
     appointment: Appointment | null;
     ticket: QueueTicketInfo | null;
@@ -131,7 +123,6 @@ export default function AppointmentsScreen() {
           'completed',
           ticket ?? appointment.queueTicket ?? undefined,
         );
-        setCalledModalData({ visible: false, appointment: null, ticket: null });
         setTicketModalData({ visible: false, appointment: null, ticket: null });
         toast.success('Consultation Completed', {
           description: networkService.isOnline()
@@ -147,104 +138,6 @@ export default function AppointmentsScreen() {
     },
     [ownerId, updateAppointmentStatus],
   );
-
-  const handleSimulateCall = useCallback(
-    async (appointment: Appointment, ticket?: QueueTicketInfo | null) => {
-      haptic.medium();
-      const ticketInfo = ticket || appointment.queueTicket || {
-        id: `ticket_${appointment.id}`,
-        ticketNumber: 'Q-001',
-        queueSequence: 1,
-        status: 'called',
-        consultationRoom: 'Consultation Desk 1',
-        servingVet: 'Dr. Helen Ann P. Tacandong, DVM',
-      };
-
-      await updateAppointmentStatus(ownerId, appointment.id, 'called', ticketInfo);
-
-      setCalledModalData({
-        visible: true,
-        appointment: { ...appointment, status: 'called', queueTicket: ticketInfo },
-        ticket: ticketInfo,
-      });
-    },
-    [ownerId, updateAppointmentStatus],
-  );
-
-  // Supabase Realtime Listener on queue_tickets and appointments
-  useEffect(() => {
-    if (!ownerId || !isOnline) return;
-
-    const channelName = `realtime-queue-${ownerId}-${Math.random().toString(36).slice(2, 7)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'queue_tickets',
-        },
-        async (payload: any) => {
-          const row = payload.new;
-          if (!row) return;
-
-          const matchedAppt = storeAppointments?.find(
-            (a) => a.id === row.appointment_id || a.petName === row.pet_name,
-          );
-          if (!matchedAppt) return;
-
-          if (row.status === 'called' || row.status === 'serving') {
-            const ticketInfo: QueueTicketInfo = {
-              id: row.id,
-              ticketNumber: row.ticket_number,
-              queueSequence: row.queue_sequence,
-              status: row.status,
-              consultationRoom: row.consultation_room || 'Consultation Desk 1',
-              servingVet: row.serving_vet || 'Dr. Helen Ann P. Tacandong, DVM',
-            };
-            await updateAppointmentStatus(ownerId, matchedAppt.id, 'called', ticketInfo, undefined, {
-              queueForSync: false,
-            });
-            setCalledModalData({
-              visible: true,
-              appointment: { ...matchedAppt, status: 'called', queueTicket: ticketInfo },
-              ticket: ticketInfo,
-            });
-          } else if (row.status === 'completed') {
-            await updateAppointmentStatus(ownerId, matchedAppt.id, 'completed', undefined, undefined, {
-              queueForSync: false,
-            });
-            setCalledModalData({ visible: false, appointment: null, ticket: null });
-            toast.success('Visit Completed', {
-              description: `${matchedAppt.petName}'s visit was completed and placed in History.`,
-            });
-          }
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appointments',
-        },
-        async (payload: any) => {
-          const row = payload.new;
-          if (!row) return;
-          if (row.status === 'completed' && row.owner_id === ownerId) {
-            await updateAppointmentStatus(ownerId, row.id, 'completed', undefined, undefined, {
-              queueForSync: false,
-            });
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isOnline, ownerId, storeAppointments, updateAppointmentStatus]);
 
   const listRef = useRef<FlatList<AppointmentTab>>(null);
   const scrollX = useSharedValue(0);
@@ -269,33 +162,25 @@ export default function AppointmentsScreen() {
       return !a.petId || matchesId || matchesName || a.ownerId === clerkUser?.id;
     });
 
-    // Map overdue status: if scheduled date is prior to today and still pending/confirmed
-    const mappedAppts = filteredAppts.map((a) => {
-      const isPastDate = a.date < today;
-      const isPending = a.status === 'pending' || a.status === 'confirmed';
-      if (isPastDate && isPending) {
-        return { ...a, status: 'overdue' as const };
-      }
-      return a;
-    });
+    const mappedAppts = filteredAppts.map((a) => ({
+      ...a,
+      status: normalizeAppointmentStatus(a.status),
+    }));
 
-    // Upcoming list includes active upcoming visits (today or future) + any overdue visits needing attention
+    // Upcoming is strictly today/future and active. Missed and overdue visits
+    // are historical outcomes and must only appear in History.
+    const isClosedStatus = (a: Appointment) =>
+      a.status === 'completed' ||
+      a.status === 'cancelled' ||
+      a.status === 'missed' ||
+      a.status === 'overdue';
+
     const upcomingList = mappedAppts
-      .filter(
-        (a) =>
-          a.status !== 'cancelled' &&
-          a.status !== 'completed' &&
-          (a.date >= today || a.status === 'overdue'),
-      )
-      .sort((a, b) => {
-        // Prioritize overdue, then chronological date
-        if (a.status === 'overdue' && b.status !== 'overdue') return -1;
-        if (b.status === 'overdue' && a.status !== 'overdue') return 1;
-        return a.date.localeCompare(b.date);
-      });
+      .filter((a) => !isClosedStatus(a) && a.date >= today)
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     const pastList = mappedAppts
-      .filter((a) => a.status === 'completed' || a.status === 'cancelled' || (a.date < today && a.status !== 'overdue'))
+      .filter((a) => isClosedStatus(a) || a.date < today)
       .sort((a, b) => b.date.localeCompare(a.date));
 
     return { upcoming: upcomingList, past: pastList };
@@ -467,12 +352,12 @@ export default function AppointmentsScreen() {
           style={styles.flatList}
         />
 
-        {/* Appointment Details & Cancellation Modal */}
+        {/* Appointment Details & Delete Action */}
         <AppointmentDetailModal
           visible={Boolean(selectedAppointment)}
           appointment={selectedAppointment}
           onClose={() => setSelectedAppointment(null)}
-          onCancelled={() => setSelectedAppointment(null)}
+          onDeleted={() => setSelectedAppointment(null)}
         />
 
         {/* Clinic Queue QR Scanner Modal */}
@@ -480,18 +365,12 @@ export default function AppointmentsScreen() {
           visible={Boolean(scannerAppointment)}
           appointment={scannerAppointment}
           onClose={() => setScannerAppointment(null)}
-          onSuccess={(ticket) => {
-            if (scannerAppointment) {
-              setTicketModalData({
-                visible: true,
-                appointment: scannerAppointment,
-                ticket,
-              });
-            }
-          }}
+          // Check-in success is confirmed by toast + the card's live "In Queue"
+          // state. The ticket dialog is opened manually from the ticket icon.
+          onSuccess={() => {}}
         />
 
-        {/* Boarding-Pass Style Queue Ticket Modal */}
+        {/* Queue Ticket Modal — opened manually from the card ticket icon */}
         <QueueTicketModal
           visible={ticketModalData.visible}
           appointment={ticketModalData.appointment}
@@ -503,37 +382,9 @@ export default function AppointmentsScreen() {
               ticket: null,
             })
           }
-          onSimulateCall={
-            __DEV__
-              ? () => {
-                  if (ticketModalData.appointment) {
-                    handleSimulateCall(ticketModalData.appointment, ticketModalData.ticket);
-                  }
-                }
-              : undefined
-          }
           onCompleteVisit={() => {
             if (ticketModalData.appointment) {
               handleCompleteVisit(ticketModalData.appointment, ticketModalData.ticket);
-            }
-          }}
-        />
-
-        {/* Ringing Calling Dialog when pet is called */}
-        <PetCalledRingModal
-          visible={calledModalData.visible}
-          appointment={calledModalData.appointment}
-          ticket={calledModalData.ticket}
-          onAcknowledge={() =>
-            setCalledModalData({
-              visible: false,
-              appointment: null,
-              ticket: null,
-            })
-          }
-          onCompleteVisit={() => {
-            if (calledModalData.appointment) {
-              handleCompleteVisit(calledModalData.appointment, calledModalData.ticket);
             }
           }}
         />
@@ -579,7 +430,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabScrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingTop: 4,
     paddingBottom: 90,
   },
@@ -597,13 +448,12 @@ const styles = StyleSheet.create({
   },
   // Empty State
   emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
     padding: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    ...shadows.sm,
     gap: 6,
   },
   emptyIconCircle: {
@@ -629,6 +479,7 @@ const styles = StyleSheet.create({
     maxWidth: 280,
   },
   cardList: {
-    gap: 10,
+    width: '100%',
+    gap: 12,
   },
 });

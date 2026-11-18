@@ -40,6 +40,25 @@ export function formatDateWithYear(iso: string): string {
   return `${names[month - 1]} ${day}, ${year}`;
 }
 
+const CLINIC_HOURS_LABEL = '8:00 AM - 5:00 PM';
+
+/**
+ * Appointment cards may contain legacy session labels from older bookings.
+ * Show the current clinic-hours label instead of morning/afternoon session text.
+ */
+export function formatAppointmentTimeSlot(timeSlot?: string | null): string {
+  const raw = (timeSlot || '').trim();
+  if (!raw) return 'Time TBD';
+
+  const withoutParentheses = raw.replace(/\s*\([^)]*\)/g, '').trim();
+  const isLegacySession =
+    /\b(morning|afternoon)\s+session\b/i.test(raw) ||
+    /\b8:30\s*AM\s*[-–—]\s*11:30\s*AM\b/i.test(withoutParentheses) ||
+    /\b1:30\s*PM\s*[-–—]\s*4:30\s*PM\b/i.test(withoutParentheses);
+
+  return isLegacySession ? CLINIC_HOURS_LABEL : withoutParentheses || raw;
+}
+
 /** "Monday, Aug 20" from YYYY-MM-DD. */
 export function formatWeekdayDate(iso: string): string {
   const date = new Date(`${iso}T12:00:00`);

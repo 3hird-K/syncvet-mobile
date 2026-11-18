@@ -1,23 +1,113 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
+
+export interface QueueCallAlert {
+  appointment: Appointment;
+  ticket: QueueTicketInfo;
+}
+
 import { supabase } from '@lib/supabase';
 import { queryClient, queryKeys } from '@lib/queryClient';
-import { useDataStore } from '@store/useDataStore';
+import { persistSnapshot, useDataStore } from '@store/useDataStore';
 import { useAuthStore } from '@store/useAuthStore';
 import {
   toPetModel,
   toAppointmentModel,
   toActivityModel,
 } from '@services/data/supabaseDataService';
-import type { Pet, Appointment, ActivityItem } from '@services/data/types';
+import { normalizeAppointmentStatus } from '@services/data/types';
+import type {
+  Pet,
+  Appointment,
+  AppointmentStatus,
+  ActivityItem,
+  QueueTicketInfo,
+} from '@services/data/types';
+import {
+  mapQueueStatusToAppointmentStatus,
+  normalizeQueueStatus,
+  toQueueTicketInfo,
+} from '@services/queue/queueService';
+import { toast } from '@components/ui/Sonner';
+import { replayQueueCallChime, startQueueRing, stopQueueRing } from '@lib/sound';
 
 class SupabaseRealtimeService {
   private static instance: SupabaseRealtimeService;
   private activeChannel: RealtimeChannel | null = null;
   private currentOwnerId: string | null = null;
   private onAccountDeletedCallback?: () => Promise<void>;
+  private queueCallAlert: QueueCallAlert | null = null;
+  private queueCallListeners = new Set<(alert: QueueCallAlert | null) => void>();
+  private lastAppliedQueueStatus = new Map<string, string>();
 
   public setOnAccountDeleted(callback?: () => Promise<void>): void {
     this.onAccountDeletedCallback = callback;
+  }
+
+  /** Global call alert subscribers receive the active call (or null when cleared). */
+  public addQueueCallListener(
+    listener: (alert: QueueCallAlert | null) => void,
+  ): () => void {
+    this.queueCallListeners.add(listener);
+    listener(this.queueCallAlert);
+    return () => {
+      this.queueCallListeners.delete(listener);
+    };
+  }
+
+  private emitQueueCallAlert(): void {
+    this.queueCallListeners.forEach((listener) => listener(this.queueCallAlert));
+  }
+
+  public acknowledgeQueueCall(): void {
+    if (!this.queueCallAlert) return;
+    this.queueCallAlert = null;
+    stopQueueRing();
+    this.emitQueueCallAlert();
+  }
+
+  private clearQueueCallAlert(ticketId?: string): void {
+    if (!this.queueCallAlert) return;
+    if (ticketId && this.queueCallAlert.ticket.id !== ticketId) return;
+    this.queueCallAlert = null;
+    stopQueueRing();
+    this.emitQueueCallAlert();
+  }
+
+  private raiseQueueCall(appointment: Appointment, ticket: QueueTicketInfo): void {
+    this.queueCallAlert = { appointment, ticket };
+    this.emitQueueCallAlert();
+
+    startQueueRing(
+      appointment.petName,
+      ticket.ticketNumber,
+      ticket.consultationRoom || 'Consultation Desk 1',
+    );
+
+    toast.warning('Now Calling You!', {
+      description: `Ticket ${ticket.ticketNumber} is called. Please proceed to the clinic desk with ${appointment.petName}.`,
+      duration: 14_000,
+      id: `queue-call-${ticket.id}`,
+      action: {
+        label: 'Hear Chime',
+        onClick: () => replayQueueCallChime(ticket.ticketNumber),
+      },
+    });
+  }
+
+  /** Polling fallback for owners whose Realtime socket was missed or dropped. */
+  public async syncQueueStatus(ownerId: string): Promise<void> {
+    if (!ownerId) return;
+    const { data, error } = await supabase
+      .from('queue_tickets')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('updated_at', { ascending: false })
+      .limit(50);
+
+    if (error || !data?.length) return;
+    for (const ticket of data) {
+      this.handleQueueTicketChange(ownerId, { eventType: 'UPDATE', new: ticket });
+    }
   }
 
   public static getInstance(): SupabaseRealtimeService {
@@ -73,7 +163,20 @@ class SupabaseRealtimeService {
           this.handleAppointmentChange(ownerId, payload);
         },
       )
-      // 3. SERVICE TRANSACTIONS REALTIME LISTENER
+      // 3. CLINIC QUEUE REALTIME LISTENER — all canonical ticket statuses.
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'queue_tickets',
+          filter: `owner_id=eq.${ownerId}`,
+        },
+        (payload) => {
+          this.handleQueueTicketChange(ownerId, payload);
+        },
+      )
+      // 4. SERVICE TRANSACTIONS REALTIME LISTENER
       .on(
         'postgres_changes',
         {
@@ -231,7 +334,121 @@ class SupabaseRealtimeService {
       }
     }
 
+    // Keep the offline snapshot aligned with the live row so a cold start or
+    // airplane-mode session sees the same upcoming appointments.
+    this.persistCurrentSnapshot(ownerId);
     queryClient.invalidateQueries({ queryKey: queryKeys.appointments(ownerId) });
+  }
+
+  /**
+   * Applies every canonical queue ticket status to the linked appointment:
+   * waiting → queued, in-consultation → called, completed → completed,
+   * skipped → missed, overdue → overdue.
+   */
+  private handleQueueTicketChange(ownerId: string, payload: any): void {
+    if (payload.eventType === 'DELETE') return;
+
+    const row = payload.new as any;
+    if (!row) return;
+    if (row.owner_id && row.owner_id !== ownerId) return;
+
+    const queueStatus = normalizeQueueStatus(row.status);
+    const appointmentStatus = mapQueueStatusToAppointmentStatus(row.status);
+    if (!queueStatus || !appointmentStatus) return;
+
+    if (!row.appointment_id) return;
+
+    const cached = queryClient.getQueryData<Appointment[]>(queryKeys.appointments(ownerId)) || [];
+    const local = useDataStore.getState().appointments || [];
+    const appointment = [...local, ...cached].find((a) => a.id === row.appointment_id);
+
+    // A stale ticket linked only by pet identity must never change a new visit.
+    if (!appointment) return;
+
+    const ticketCreatedAt = row.created_at ? new Date(row.created_at).getTime() : 0;
+    const appointmentCreatedAt = appointment.createdAt
+      ? new Date(appointment.createdAt).getTime()
+      : 0;
+    if (ticketCreatedAt && appointmentCreatedAt && ticketCreatedAt < appointmentCreatedAt) {
+      return;
+    }
+
+    // Never move a finished/cancelled appointment back into Upcoming because of
+    // an older or out-of-order queue event.
+    const currentStatus = normalizeAppointmentStatus(appointment.status);
+    if (
+      (currentStatus === 'completed' || currentStatus === 'cancelled') &&
+      appointmentStatus !== 'completed'
+    ) {
+      return;
+    }
+
+    const ticket = toQueueTicketInfo(row);
+    const previousStatus = this.lastAppliedQueueStatus.get(ticket.id);
+
+    // A refetch can replace the cache with an older appointment row even after
+    // a ticket status was applied. Re-apply when either source is still stale.
+    const cachedAppointment = cached.find((a) => a.id === appointment.id);
+    const localAppointment = local.find((a) => a.id === appointment.id);
+    const needsStatusPatch =
+      normalizeAppointmentStatus(cachedAppointment?.status) !== appointmentStatus ||
+      normalizeAppointmentStatus(localAppointment?.status) !== appointmentStatus;
+    if (previousStatus === queueStatus && !needsStatusPatch) return;
+    this.lastAppliedQueueStatus.set(ticket.id, queueStatus);
+
+    const updatedAppointment: Appointment = {
+      ...appointment,
+      status: appointmentStatus,
+      queueTicket: ticket,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Patch TanStack immediately. The store helper below patches it again after
+    // its async persistence step, which is too late for the current render.
+    queryClient.setQueryData<Appointment[]>(queryKeys.appointments(ownerId), (old = []) =>
+      old.map((a) => (a.id === updatedAppointment.id ? updatedAppointment : a)),
+    );
+    useDataStore.setState((state) => ({
+      appointments: state.appointments.map((a) =>
+        a.id === updatedAppointment.id ? updatedAppointment : a,
+      ),
+    }));
+
+    useDataStore
+      .getState()
+      .updateAppointmentStatus(
+        ownerId,
+        appointment.id,
+        appointmentStatus,
+        ticket,
+        undefined,
+        { queueForSync: false },
+      )
+      .catch((err) => {
+        console.warn('[SupabaseRealtime] Queue status apply note:', err);
+      });
+
+    if (appointmentStatus === 'called' && previousStatus !== 'called') {
+      this.raiseQueueCall(updatedAppointment, ticket);
+    } else {
+      this.clearQueueCallAlert(ticket.id);
+      if (appointmentStatus === 'completed') {
+        toast.success('Visit Completed', {
+          description: `${appointment.petName}'s visit was completed and placed in History.`,
+        });
+      }
+    }
+  }
+
+  private persistCurrentSnapshot(ownerId: string): void {
+    const state = useDataStore.getState();
+    persistSnapshot(ownerId, {
+      pets: state.pets,
+      appointments: state.appointments,
+      transactions: state.transactions,
+    }).catch((err) => {
+      console.warn('[SupabaseRealtime] Snapshot persist note:', err);
+    });
   }
 
   /**
@@ -268,6 +485,8 @@ class SupabaseRealtimeService {
       this.activeChannel = null;
     }
     this.currentOwnerId = null;
+    this.lastAppliedQueueStatus.clear();
+    this.clearQueueCallAlert();
   }
 }
 

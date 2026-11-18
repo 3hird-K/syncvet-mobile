@@ -30,11 +30,10 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import {
   SERVICES,
   SERVICE_LOCATION,
-  MORNING_SLOTS,
-  AFTERNOON_SLOTS,
   TIME_SLOTS,
   isSlotAvailable,
   getService,
+  normalizeServiceId,
 } from '@lib/services';
 import {
   addDays,
@@ -48,6 +47,13 @@ import {
   todayISO,
 } from '@lib/format';
 import { haptic } from '@lib/haptics';
+import {
+  getServiceUnavailableMessage,
+  getVaccinationDueDate,
+  isServiceUnavailableForPet,
+  isVaccinationCurrent,
+} from '@lib/petHealth';
+import { normalizeAppointmentStatus } from '@services/data/types';
 import { useAuthStore } from '@store/useAuthStore';
 import { useDataStore } from '@store/useDataStore';
 import { PopoutPetAvatar } from '@components/ui/PopoutPetAvatar';
@@ -103,37 +109,31 @@ function calculatePetVaccineTimeline(
   pet: any,
   appointments: any[] = [],
 ): PetVaccinationTimeline {
+  // Only completed visits count as vaccination. A future booking must not make
+  // the pet look already vaccinated and disable its own service.
   const vaxAppts = (appointments || [])
     .filter(
-      (a) => a.petId === pet.id && a.serviceId === 'vaccination' && a.status !== 'cancelled',
+      (a) =>
+        a.petId === pet.id &&
+        normalizeServiceId(a.serviceId) === 'vaccination' &&
+        normalizeAppointmentStatus(a.status) === 'completed',
     )
-    .sort((a, b) => b.date.localeCompare(a.date));
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 
   const doseCountFromAppts = vaxAppts.length;
   const isVaccinated = Boolean(pet.isVaccinated) || doseCountFromAppts > 0;
   const totalDoses = Math.max(isVaccinated ? 1 : 0, doseCountFromAppts, pet.vaccinationDoses || 0);
 
-  let lastVaccineDate = vaxAppts[0]?.date || pet.lastVaccinationDate;
-  if (!lastVaccineDate && isVaccinated) {
-    lastVaccineDate = pet.createdAt ? pet.createdAt.split('T')[0] : '2025-08-14';
-  }
+  const lastVaccineDate =
+    vaxAppts[0]?.date ||
+    pet.lastVaccinationDate ||
+    (isVaccinated && pet.createdAt ? String(pet.createdAt).split('T')[0] : undefined);
 
-  let nextBoosterDate: string | undefined = pet.nextVaccinationDate;
-  if (!nextBoosterDate && isVaccinated && lastVaccineDate) {
-    try {
-      const parts = lastVaccineDate.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parts[1];
-        const day = parts[2];
-        if (!isNaN(year)) {
-          nextBoosterDate = `${year + 1}-${month}-${day}`;
-        }
-      }
-    } catch {
-      nextBoosterDate = undefined;
-    }
-  }
+  const nextBoosterDate = getVaccinationDueDate({
+    ...pet,
+    isVaccinated,
+    lastVaccinationDate: lastVaccineDate,
+  });
 
   return {
     isVaccinated,
@@ -211,7 +211,9 @@ export default function NewAppointmentScreen() {
 
   // Initial form values derived from params
   const initialPetId = params.petId || (allPets.length > 0 ? allPets[0].id : undefined);
-  const initialServiceId = params.serviceId || 'vaccination';
+  const initialServiceId = params.serviceId
+    ? normalizeServiceId(params.serviceId)
+    : 'vaccination';
 
   const [step, setStep] = useState<BookingStepIndex>(1);
   const [selectedPetId, setSelectedPetId] = useState<string | undefined>(initialPetId);
@@ -245,7 +247,8 @@ export default function NewAppointmentScreen() {
 
     return pool.filter((a) => {
       if (!a) return false;
-      const isFinished = a.status === 'cancelled' || a.status === 'completed';
+      const status = normalizeAppointmentStatus(a.status);
+      const isFinished = status === 'cancelled' || status === 'completed';
       if (isFinished) return false;
       const matchesId = a.petId === selectedPetId;
       const matchesName = selectedPet?.name
@@ -260,31 +263,15 @@ export default function NewAppointmentScreen() {
     const map = new Map<string, any>();
     for (const appt of activePetAppointments) {
       if (appt.serviceId) {
-        map.set(appt.serviceId, appt);
+        map.set(normalizeServiceId(appt.serviceId), appt);
       }
     }
     return map;
   }, [activePetAppointments]);
 
-  // If selected service is invalid for this pet (already spayed/neutered or already has an active appointment), automatically switch to an available service
-  useEffect(() => {
-    const isSpayNeuterBlocked = selectedPet?.isSpayedNeutered && selectedServiceId === 'spay-neuter';
-    const isAlreadyScheduled = activeServiceAppointmentsMap.has(selectedServiceId);
-
-    if (isSpayNeuterBlocked || isAlreadyScheduled) {
-      const validService = SERVICES.find((s) => {
-        if (selectedPet?.isSpayedNeutered && s.id === 'spay-neuter') return false;
-        if (activeServiceAppointmentsMap.has(s.id)) return false;
-        return true;
-      });
-
-      if (validService && validService.id !== selectedServiceId) {
-        setSelectedServiceId(validService.id);
-        setClinicalReason('');
-      }
-    }
-  }, [selectedPet?.isSpayedNeutered, selectedServiceId, activeServiceAppointmentsMap]);
-
+  // Keep the service the resident explicitly chose. Duplicate or ineligible
+  // services are blocked by validation instead of silently switching to another
+  // service (e.g. consultation turning into vaccination).
   const selectedService = useMemo(
     () => getService(selectedServiceId) || SERVICES[0],
     [selectedServiceId],
@@ -347,6 +334,30 @@ export default function NewAppointmentScreen() {
     }
   }, [dateISO, timeSlot]);
 
+  // A pet can have multiple visits. Only reject a real conflict: the same
+  // service on the same date, or two visits in the same time slot.
+  const findScheduleConflict = useCallback(
+    (targetDate: string, targetTimeSlot: string) => {
+      const petName = (selectedPet?.name || '').trim().toLowerCase();
+      const targetService = normalizeServiceId(selectedServiceId);
+
+      return (appointments || []).find((a) => {
+        const status = normalizeAppointmentStatus(a.status);
+        if (status === 'completed' || status === 'cancelled') return false;
+
+        const matchesPet =
+          (Boolean(selectedPetId) && a.petId === selectedPetId) ||
+          (Boolean(petName) && (a.petName || '').trim().toLowerCase() === petName);
+        if (!matchesPet || a.date !== targetDate) return false;
+
+        const sameService = normalizeServiceId(a.serviceId) === targetService;
+        const sameTimeSlot = a.timeSlot === targetTimeSlot;
+        return sameService || sameTimeSlot;
+      });
+    },
+    [appointments, selectedPetId, selectedPet?.name, selectedServiceId],
+  );
+
   const canAdvanceFromStep = useCallback(
     (currentStep: number): boolean => {
       if (currentStep === 1) {
@@ -386,14 +397,18 @@ export default function NewAppointmentScreen() {
           }
           return false;
         }
-        if (activeServiceAppointmentsMap.has(selectedServiceId)) {
-          const existing = activeServiceAppointmentsMap.get(selectedServiceId);
+        if (
+          normalizeServiceId(selectedServiceId) === 'vaccination' &&
+          isVaccinationCurrent(selectedPet)
+        ) {
           haptic.warning();
           if (Date.now() - lastToastTimeRef.current > 1200) {
             lastToastTimeRef.current = Date.now();
-            toast.error('Service Already Scheduled', {
-              id: 'booking-duplicate-service-disabled',
-              description: `${selectedPet?.name || 'This pet'} already has an active ${selectedService?.name || 'service'} appointment on ${existing?.date ? formatWeekdayDate(existing.date) : 'file'}.`,
+            toast.error('Vaccination Unavailable', {
+              id: 'booking-vaccination-disabled',
+              description:
+                getServiceUnavailableMessage(selectedPet, 'vaccination') ||
+                'This pet is already vaccinated and is not due for a booster yet.',
             });
           }
           return false;
@@ -412,11 +427,33 @@ export default function NewAppointmentScreen() {
           }
           return false;
         }
+
+        const conflict = findScheduleConflict(dateISO, timeSlot);
+        if (conflict) {
+          haptic.warning();
+          if (Date.now() - lastToastTimeRef.current > 1200) {
+            lastToastTimeRef.current = Date.now();
+            const conflictService = getService(conflict.serviceId)?.name || 'another visit';
+            toast.error('Schedule Conflict', {
+              id: 'booking-schedule-conflict',
+              description: `${selectedPet?.name || 'This pet'} already has ${conflictService} on ${formatShortDate(dateISO)} at ${conflict.timeSlot}. Choose another date or time.`,
+            });
+          }
+          return false;
+        }
         return true;
       }
       return true;
     },
-    [selectedPetId, selectedPet, selectedServiceId, selectedService, activeServiceAppointmentsMap, dateISO, timeSlot],
+    [
+      selectedPetId,
+      selectedPet,
+      selectedServiceId,
+      selectedService,
+      dateISO,
+      timeSlot,
+      findScheduleConflict,
+    ],
   );
 
   const goToSlide = useCallback(
@@ -497,6 +534,21 @@ export default function NewAppointmentScreen() {
       return;
     }
 
+    if (isServiceUnavailableForPet(selectedPet, selectedService.id)) {
+      haptic.warning();
+      setError(
+        getServiceUnavailableMessage(selectedPet, selectedService.id) ||
+          'This service is no longer needed for the selected pet.',
+      );
+      return;
+    }
+
+    if (findScheduleConflict(dateISO, timeSlot)) {
+      haptic.warning();
+      setError('That date or time is already booked for this pet. Choose another slot.');
+      return;
+    }
+
     setSubmitting(true);
     setError(undefined);
     try {
@@ -507,7 +559,7 @@ export default function NewAppointmentScreen() {
         {
           petId: selectedPet.id,
           petName: selectedPet.name,
-          serviceId: selectedService.id,
+          serviceId: normalizeServiceId(selectedService.id),
           date: dateISO,
           timeSlot,
           location: SERVICE_LOCATION,
@@ -552,6 +604,7 @@ export default function NewAppointmentScreen() {
     ownerId,
     bookAppointment,
     clerkUser,
+    findScheduleConflict,
   ]);
 
   const renderItem = useCallback(
@@ -713,31 +766,37 @@ export default function NewAppointmentScreen() {
               {SERVICES.map((s) => {
                 const isSelected = s.id === selectedServiceId;
                 const isVaccine = s.id === 'vaccination';
+                const isVaccinationDisabled = Boolean(
+                  selectedPet && s.id === 'vaccination' && isVaccinationCurrent(selectedPet),
+                );
                 const isSpayNeuterDisabled = Boolean(
                   selectedPet?.isSpayedNeutered && s.id === 'spay-neuter',
                 );
+                const isCompletedService = isVaccinationDisabled || isSpayNeuterDisabled;
+                const completedBadge = isVaccinationDisabled
+                  ? 'Vaccinated'
+                  : isSpayNeuterDisabled
+                  ? 'Kapon'
+                  : undefined;
                 const existingAppt = activeServiceAppointmentsMap.get(s.id);
-                const isDuplicateScheduled = Boolean(existingAppt);
-                const isDisabled = isSpayNeuterDisabled || isDuplicateScheduled;
+                const isAlreadyScheduled = Boolean(existingAppt);
+                const isDisabled = isCompletedService;
 
                 return (
                   <Pressable
                     key={s.id}
                     onPress={() => {
-                      if (isSpayNeuterDisabled) {
+                      if (isCompletedService) {
                         haptic.warning();
-                        toast.info('Already Spayed / Neutered', {
-                          id: 'booking-spay-disabled-toast',
-                          description: `${selectedPet?.name || 'This pet'} is already recorded as spayed/neutered.`,
-                        });
-                        return;
-                      }
-                      if (isDuplicateScheduled) {
-                        haptic.warning();
-                        toast.info('Service Already Scheduled', {
-                          id: 'booking-duplicate-scheduled-toast',
-                          description: `${selectedPet?.name || 'This pet'} already has an active ${s.name} appointment on ${existingAppt?.date ? formatWeekdayDate(existingAppt.date) : 'file'}.`,
-                        });
+                        toast.info(
+                          isVaccinationDisabled ? 'Already Vaccinated' : 'Already Spayed / Neutered',
+                          {
+                            id: `booking-${s.id}-disabled-toast`,
+                            description:
+                              getServiceUnavailableMessage(selectedPet, s.id) ||
+                              'This service is no longer needed for the selected pet.',
+                          },
+                        );
                         return;
                       }
                       haptic.light();
@@ -757,9 +816,9 @@ export default function NewAppointmentScreen() {
                       style={[
                         styles.serviceIconWrap,
                         {
-                          backgroundColor: isSpayNeuterDisabled
+                          backgroundColor: isCompletedService
                             ? '#F1F5F9'
-                            : isDuplicateScheduled
+                            : isAlreadyScheduled
                             ? 'rgba(14, 116, 144, 0.08)'
                             : s.bg,
                         },
@@ -767,17 +826,17 @@ export default function NewAppointmentScreen() {
                     >
                       <Ionicons
                         name={
-                          isSpayNeuterDisabled
+                          isCompletedService
                             ? 'checkmark-circle'
-                            : isDuplicateScheduled
+                            : isAlreadyScheduled
                             ? 'calendar'
                             : s.icon
                         }
                         size={24}
                         color={
-                          isSpayNeuterDisabled
+                          isCompletedService
                             ? colors.success
-                            : isDuplicateScheduled
+                            : isAlreadyScheduled
                             ? colors.info
                             : s.color
                         }
@@ -799,13 +858,13 @@ export default function NewAppointmentScreen() {
                             <Text style={styles.freeBadgeText}>Free Ordinance</Text>
                           </View>
                         )}
-                        {isSpayNeuterDisabled && (
+                        {completedBadge && (
                           <View style={styles.alreadyKaponBadge}>
                             <Ionicons name="checkmark" size={10} color={colors.success} />
-                            <Text style={styles.alreadyKaponBadgeText}>Kapon</Text>
+                            <Text style={styles.alreadyKaponBadgeText}>{completedBadge}</Text>
                           </View>
                         )}
-                        {isDuplicateScheduled && (
+                        {isAlreadyScheduled && (
                           <View style={styles.alreadyScheduledBadge}>
                             <Ionicons name="calendar-outline" size={10} color={colors.info} />
                             <Text style={styles.alreadyScheduledBadgeText}>Scheduled</Text>
@@ -813,9 +872,12 @@ export default function NewAppointmentScreen() {
                         )}
                       </View>
                       <Text style={styles.serviceOptionDesc}>
-                        {isSpayNeuterDisabled
+                        {isVaccinationDisabled
+                          ? getServiceUnavailableMessage(selectedPet, 'vaccination') ||
+                            `${selectedPet?.name || 'Pet'} is already vaccinated.`
+                          : isSpayNeuterDisabled
                           ? `${selectedPet?.name || 'Pet'} is already spayed/neutered. Procedure not needed.`
-                          : isDuplicateScheduled
+                          : isAlreadyScheduled
                           ? `Already scheduled on ${formatShortDate(existingAppt.date)}${existingAppt.timeSlot ? ` (${existingAppt.timeSlot})` : ''}. Choose another service.`
                           : s.tagline}
                       </Text>
@@ -966,13 +1028,13 @@ export default function NewAppointmentScreen() {
               })}
             </ScrollView>
 
-            {/* Morning Session Time Slots */}
+            {/* Clinic Hours: 8:00 AM – 5:00 PM */}
             <View style={styles.sessionHeaderRow}>
-              <Ionicons name="sunny-outline" size={16} color={colors.warning} />
-              <Text style={styles.sessionHeaderTitle}>Morning Session (8:30 AM – 11:30 AM)</Text>
+              <Ionicons name="time-outline" size={16} color={colors.primary} />
+              <Text style={styles.sessionHeaderTitle}>Available Time Slots · 8:00 AM – 5:00 PM</Text>
             </View>
             <View style={styles.timeSlotsGrid}>
-              {MORNING_SLOTS.map((slot) => {
+              {TIME_SLOTS.map((slot) => {
                 const isSelected = slot === timeSlot;
                 const available = isSlotAvailable(dateISO || '', slot);
 
@@ -1025,64 +1087,6 @@ export default function NewAppointmentScreen() {
               })}
             </View>
 
-            {/* Afternoon Session Time Slots */}
-            <View style={[styles.sessionHeaderRow, { marginTop: spacing.sm }]}>
-              <Ionicons name="partly-sunny-outline" size={16} color={colors.primary} />
-              <Text style={styles.sessionHeaderTitle}>Afternoon Session (1:30 PM – 4:30 PM)</Text>
-            </View>
-            <View style={styles.timeSlotsGrid}>
-              {AFTERNOON_SLOTS.map((slot) => {
-                const isSelected = slot === timeSlot;
-                const available = isSlotAvailable(dateISO || '', slot);
-
-                return (
-                  <Pressable
-                    key={slot}
-                    onPress={() => {
-                      if (!available) {
-                        haptic.warning();
-                        return;
-                      }
-                      haptic.light();
-                      setTimeSlot(slot);
-                      setError(undefined);
-                    }}
-                    style={[
-                      styles.timeSlotCard,
-                      isSelected && styles.timeSlotCardActive,
-                      !available && styles.timeSlotCardDisabled,
-                      shadows.sm,
-                    ]}
-                  >
-                    <Ionicons
-                      name={available ? 'time-outline' : 'close-circle-outline'}
-                      size={16}
-                      color={
-                        !available
-                          ? colors.textDisabled
-                          : isSelected
-                          ? colors.primary
-                          : colors.textSecondary
-                      }
-                    />
-                    <View style={styles.slotTextWrap}>
-                      <Text
-                        style={[
-                          styles.timeSlotText,
-                          isSelected && styles.timeSlotTextActive,
-                          !available && styles.timeSlotTextDisabled,
-                        ]}
-                      >
-                        {slot}
-                      </Text>
-                      {!available && (
-                        <Text style={styles.slotUnavailableTag}>Passed</Text>
-                      )}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
 
             {/* Continue to Review Details */}
             <Pressable
@@ -1220,17 +1224,25 @@ export default function NewAppointmentScreen() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Confirmation Ticket Slip */}
+            {/* Confirmation Slip */}
             <Animated.View entering={ZoomIn.duration(260)} style={styles.ticketCard}>
-              <View style={styles.ticketHeader}>
-                <View style={styles.ticketBadge}>
-                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                  <Text style={styles.ticketBadgeText}>Confirmed Reservation</Text>
+              <View style={styles.ticketHero}>
+                <View style={styles.ticketSuccessIcon}>
+                  <Ionicons name="checkmark" size={30} color={colors.white} />
                 </View>
-                <Text style={styles.ticketRef}>{confirmedTicket.refNumber}</Text>
+                <Text style={styles.ticketHeroTitle}>Booking Confirmed</Text>
+                <Text style={styles.ticketHeroSubtitle}>
+                  Your visit is reserved. Present this slip at the clinic desk.
+                </Text>
+                <View style={styles.ticketRefWrap}>
+                  <Text style={styles.ticketRefLabel}>REFERENCE NUMBER</Text>
+                  <Text style={styles.ticketRefValue}>{confirmedTicket.refNumber}</Text>
+                </View>
               </View>
 
-              <View style={styles.ticketBody}>
+              <View style={styles.ticketDivider} />
+
+              <View style={styles.ticketDetails}>
                 <View style={styles.ticketRow}>
                   <Text style={styles.ticketLabel}>Patient</Text>
                   <Text style={styles.ticketValue}>{confirmedTicket.petName}</Text>
@@ -1245,27 +1257,33 @@ export default function NewAppointmentScreen() {
                     {formatLongDate(confirmedTicket.date)} · {confirmedTicket.timeSlot}
                   </Text>
                 </View>
-                <View style={styles.ticketRow}>
+                <View style={styles.ticketRowLast}>
                   <Text style={styles.ticketLabel}>Location</Text>
                   <Text style={styles.ticketValue}>{SERVICE_LOCATION}, CDO</Text>
                 </View>
               </View>
 
-              {/* Veterinary Checklist Notice */}
-              <View style={styles.vetNoticeBox}>
-                <View style={styles.vetNoticeHeader}>
-                  <Ionicons name="medical" size={15} color={colors.primary} />
-                  <Text style={styles.vetNoticeTitle}>Pre-Visit Instructions</Text>
+              {/* Plain pre-visit reminders — no nested card */}
+              <View style={styles.noticeSection}>
+                <Text style={styles.noticeTitle}>Before Your Visit</Text>
+                <View style={styles.noticeItemRow}>
+                  <Ionicons name="checkmark-circle-outline" size={15} color={colors.primary} />
+                  <Text style={styles.noticeItemText}>
+                    Bring your pet on a leash (dogs) or in a secure ventilated carrier (cats).
+                  </Text>
                 </View>
-                <Text style={styles.vetNoticeItem}>
-                  • Bring your pet on a leash (dogs) or in a secure ventilated carrier (cats).
-                </Text>
-                <Text style={styles.vetNoticeItem}>
-                  • Arrive 10 minutes before your scheduled time slot for triage assessment.
-                </Text>
-                <Text style={styles.vetNoticeItem}>
-                  • Anti-Rabies vaccination is free under City Health Ordinance.
-                </Text>
+                <View style={styles.noticeItemRow}>
+                  <Ionicons name="checkmark-circle-outline" size={15} color={colors.primary} />
+                  <Text style={styles.noticeItemText}>
+                    Arrive 10 minutes before your scheduled time slot for triage assessment.
+                  </Text>
+                </View>
+                <View style={styles.noticeItemRow}>
+                  <Ionicons name="checkmark-circle-outline" size={15} color={colors.primary} />
+                  <Text style={styles.noticeItemText}>
+                    Anti-Rabies vaccination is free under City Health Ordinance.
+                  </Text>
+                </View>
               </View>
 
               {/* Ticket Actions */}
@@ -1984,88 +2002,120 @@ const styles = StyleSheet.create({
   ticketCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xxl,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(7, 30, 38, 0.08)',
-    gap: 14,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
     ...shadows.md,
   },
-  ticketHeader: {
-    flexDirection: 'row',
+  ticketHero: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(7, 30, 38, 0.08)',
   },
-  ticketBadge: {
-    flexDirection: 'row',
+  ticketSuccessIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.primary,
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
-  ticketBadgeText: {
-    ...typography.captionBold,
-    color: colors.success,
-    fontSize: 13,
-    fontWeight: '700',
+  ticketHeroTitle: {
+    ...typography.heading3,
+    color: colors.textPrimary,
+    textAlign: 'center',
   },
-  ticketRef: {
-    ...typography.captionBold,
-    color: colors.textSecondary,
-    fontSize: 12,
-    letterSpacing: 0.5,
+  ticketHeroSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 20,
   },
-  ticketBody: {
-    gap: 10,
+  ticketRefWrap: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: 3,
+  },
+  ticketRefLabel: {
+    ...typography.smallBold,
+    color: colors.textMuted,
+    fontSize: 10,
+    letterSpacing: 1.2,
+  },
+  ticketRefValue: {
+    ...typography.title,
+    color: colors.primary,
+    fontFamily: typography.font.bold,
+    fontSize: 18,
+    letterSpacing: 0.6,
+  },
+  ticketDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.lg,
+  },
+  ticketDetails: {
+    gap: 0,
   },
   ticketRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.surfaceMuted,
+  },
+  ticketRowLast: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: 12,
   },
   ticketLabel: {
     ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 12.5,
+    color: colors.textMuted,
+    fontSize: 13,
   },
   ticketValue: {
     ...typography.captionBold,
     color: colors.textPrimary,
-    fontSize: 13.5,
+    fontSize: 14,
+    textAlign: 'right',
+    flexShrink: 1,
   },
   ticketValueHighlight: {
     ...typography.captionBold,
     color: colors.primary,
-    fontSize: 13.5,
-    fontWeight: '700',
+    fontSize: 14,
+    textAlign: 'right',
+    flexShrink: 1,
   },
-  vetNoticeBox: {
-    backgroundColor: '#F0FAF8',
-    borderRadius: radius.lg,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 168, 150, 0.15)',
-    gap: 6,
+  noticeSection: {
+    marginTop: spacing.lg,
+    gap: 10,
   },
-  vetNoticeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  vetNoticeTitle: {
+  noticeTitle: {
     ...typography.captionBold,
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  vetNoticeItem: {
-    ...typography.small,
     color: colors.textPrimary,
-    fontSize: 11.5,
-    lineHeight: 16,
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  noticeItemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  noticeItemText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontSize: 12.5,
+    lineHeight: 18,
+    flex: 1,
   },
   ticketActions: {
-    gap: 8,
-    marginTop: 6,
+    gap: 10,
+    marginTop: spacing.xl,
   },
 });

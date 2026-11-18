@@ -13,13 +13,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { colors, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
+import { getServiceUnavailableMessage, isServiceUnavailableForPet } from '@lib/petHealth';
+import { toast } from '@components/ui/Sonner';
+import { useDataStore } from '@store/useDataStore';
 
 const STORAGE_KEY = '@syncvet_care_cards_visible';
 
 export function HomeCareActionCards() {
   const router = useRouter();
+  const pets = useDataStore((state) => state.pets) || [];
   const [visible, setVisible] = useState(true);
   const [procedureModalVisible, setProcedureModalVisible] = useState(false);
+
+  const vaccinationUnavailable =
+    pets.length > 0 && pets.every((pet) => isServiceUnavailableForPet(pet, 'vaccination'));
+  const spayNeuterUnavailable =
+    pets.length > 0 && pets.every((pet) => isServiceUnavailableForPet(pet, 'spay-neuter'));
 
   // Restore saved hide/show preference
   useEffect(() => {
@@ -48,6 +57,17 @@ export function HomeCareActionCards() {
   };
 
   const handleProcedureSelect = (serviceId: 'vaccination' | 'spay-neuter') => {
+    const blockedPet = pets.find((pet) => isServiceUnavailableForPet(pet, serviceId));
+    if (pets.length > 0 && blockedPet && pets.every((pet) => isServiceUnavailableForPet(pet, serviceId))) {
+      haptic.warning();
+      toast.info(serviceId === 'vaccination' ? 'Already Vaccinated' : 'Already Spayed / Neutered', {
+        description:
+          getServiceUnavailableMessage(blockedPet, serviceId) ||
+          'This procedure is no longer needed for your pets.',
+      });
+      return;
+    }
+
     haptic.light();
     setProcedureModalVisible(false);
     router.push({
@@ -215,9 +235,11 @@ export function HomeCareActionCards() {
             {/* Option 1: Vaccination */}
             <Pressable
               onPress={() => handleProcedureSelect('vaccination')}
+              disabled={vaccinationUnavailable}
               style={({ pressed }) => [
                 styles.optionItem,
-                pressed && styles.optionPressed,
+                vaccinationUnavailable && styles.optionDisabled,
+                pressed && !vaccinationUnavailable && styles.optionPressed,
               ]}
             >
               <View style={[styles.optionIconBox, { backgroundColor: '#EFF6FF' }]}>
@@ -226,23 +248,37 @@ export function HomeCareActionCards() {
               <View style={{ flex: 1 }}>
                 <View style={styles.optionTitleRow}>
                   <Text style={styles.optionTitle}>Anti-Rabies Vaccination</Text>
-                  <View style={styles.freeBadge}>
-                    <Text style={styles.freeBadgeText}>FREE</Text>
+                  <View style={vaccinationUnavailable ? styles.doneBadge : styles.freeBadge}>
+                    <Text
+                      style={
+                        vaccinationUnavailable ? styles.doneBadgeText : styles.freeBadgeText
+                      }
+                    >
+                      {vaccinationUnavailable ? 'UP TO DATE' : 'FREE'}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.optionDescription}>
-                  Annual immunization against canine & feline rabies virus
+                  {vaccinationUnavailable
+                    ? 'All registered pets are already vaccinated.'
+                    : 'Annual immunization against canine & feline rabies virus'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons
+                name={vaccinationUnavailable ? 'checkmark-circle' : 'chevron-forward'}
+                size={18}
+                color={vaccinationUnavailable ? '#047857' : colors.textMuted}
+              />
             </Pressable>
 
             {/* Option 2: Spay / Neuter (Kapon) */}
             <Pressable
               onPress={() => handleProcedureSelect('spay-neuter')}
+              disabled={spayNeuterUnavailable}
               style={({ pressed }) => [
                 styles.optionItem,
-                pressed && styles.optionPressed,
+                spayNeuterUnavailable && styles.optionDisabled,
+                pressed && !spayNeuterUnavailable && styles.optionPressed,
               ]}
             >
               <View style={[styles.optionIconBox, { backgroundColor: '#FAF5FF' }]}>
@@ -251,15 +287,27 @@ export function HomeCareActionCards() {
               <View style={{ flex: 1 }}>
                 <View style={styles.optionTitleRow}>
                   <Text style={styles.optionTitle}>Spay & Neuter (Kapon)</Text>
-                  <View style={styles.quotaBadge}>
-                    <Text style={styles.quotaBadgeText}>QUOTA SLOTS</Text>
+                  <View style={spayNeuterUnavailable ? styles.doneBadge : styles.quotaBadge}>
+                    <Text
+                      style={
+                        spayNeuterUnavailable ? styles.doneBadgeText : styles.quotaBadgeText
+                      }
+                    >
+                      {spayNeuterUnavailable ? 'COMPLETED' : 'QUOTA SLOTS'}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.optionDescription}>
-                  Surgical population control and health procedure by licensed vets
+                  {spayNeuterUnavailable
+                    ? 'All registered pets are already spayed/neutered.'
+                    : 'Surgical population control and health procedure by licensed vets'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons
+                name={spayNeuterUnavailable ? 'checkmark-circle' : 'chevron-forward'}
+                size={18}
+                color={spayNeuterUnavailable ? '#047857' : colors.textMuted}
+              />
             </Pressable>
           </Pressable>
         </Pressable>
@@ -517,6 +565,23 @@ const styles = StyleSheet.create({
   optionPressed: {
     backgroundColor: '#F1F5F9',
     transform: [{ scale: 0.99 }],
+  },
+  optionDisabled: {
+    opacity: 0.6,
+    backgroundColor: '#F8FAFC',
+  },
+  doneBadge: {
+    marginLeft: 7,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  doneBadgeText: {
+    fontFamily: typography.font.bold,
+    fontSize: 9.5,
+    color: '#047857',
+    letterSpacing: 0.4,
   },
   optionIconBox: {
     width: 44,

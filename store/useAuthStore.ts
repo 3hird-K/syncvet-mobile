@@ -4,6 +4,7 @@ import { getAuthService, AuthError } from '@services/auth';
 import { supabase } from '@lib/supabase';
 import { buildCDOAddress } from '@lib/philippineAddresses';
 import { networkService } from '@services/network';
+import { syncEngine, syncQueue } from '@services/sync';
 import { useDataStore } from './useDataStore';
 import type {
   AuthUser,
@@ -212,32 +213,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       cleanName = user.fullName;
     }
 
-    // Persist directly to Supabase public.users
-    try {
-      await supabase
-        .from('users')
-        .update({
-          phone_number: cleanMobile,
-          address: cleanAddress,
-          full_name: cleanName,
-          first_name: cleanFirst || null,
-          last_name: cleanLast || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-    } catch (err: any) {
-      console.warn('Supabase saveOwnerProfile note:', err?.message);
-    }
-
+    // Persist locally first. The durable queue delivers the change to Supabase
+    // when connectivity returns, so profile edits work in airplane mode too.
     const updated: AuthUser = {
       ...user,
       fullName: cleanName,
+      firstName: cleanFirst ?? user.firstName,
+      lastName: cleanLast ?? user.lastName,
       mobileNumber: cleanMobile,
       address: cleanAddress,
       updatedAt: new Date().toISOString(),
     };
     await getAuthService().updateUser(updated);
     set({ user: updated });
+
+    await syncQueue.enqueue(user.id, 'profile', user.id, 'UPDATE_PROFILE', {
+      mobileNumber: cleanMobile,
+      address: cleanAddress,
+      fullName: cleanName,
+      firstName: cleanFirst,
+      lastName: cleanLast,
+      profileCompleted: user.profileCompleted,
+    });
+    syncEngine.sync(user.id).catch(() => {});
   },
 
   completeResidentOnboarding: async (payload) => {
@@ -289,35 +287,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       emergencyContactRelation: cleanRelation,
     };
 
-    // Single authoritative write for onboarding: upsert every persisted field
-    // in one call and fail loudly if Supabase does not confirm the row.
-    const now = new Date().toISOString();
-    const { data: savedRows, error: saveError } = await supabase
-      .from('users')
-      .upsert(
-        {
-          id: targetUserId,
-          email: payload.email?.trim() || user?.email || `${targetUserId}@resident.syncvet.app`,
-          phone_number: cleanMobile,
-          address: cleanAddress,
-          full_name: cleanName,
-          first_name: cleanFirst || null,
-          last_name: cleanLast || null,
-          avatar_url: user?.photoUrl || null,
-          role: 'Pet Owner',
-          profile_completed: true,
-          raw_user_meta_data: metadata,
-          updated_at: now,
-        },
-        { onConflict: 'id' },
-      )
-      .select('id');
+    // Online sessions get an immediate best-effort write so the profile is
+    // available to other devices right away. Offline sessions skip it entirely;
+    // the durable queue below is the single source of truth in both cases.
+    if (networkService.isOnline()) {
+      const now = new Date().toISOString();
+      const { data: savedRows, error: saveError } = await supabase
+        .from('users')
+        .upsert(
+          {
+            id: targetUserId,
+            email: payload.email?.trim() || user?.email || `${targetUserId}@resident.syncvet.app`,
+            phone_number: cleanMobile,
+            address: cleanAddress,
+            full_name: cleanName,
+            first_name: cleanFirst || null,
+            last_name: cleanLast || null,
+            avatar_url: user?.photoUrl || null,
+            role: 'Pet Owner',
+            profile_completed: true,
+            raw_user_meta_data: metadata,
+            updated_at: now,
+          },
+          { onConflict: 'id' },
+        )
+        .select('id');
 
-    if (saveError) {
-      throw new AuthError('UNKNOWN', `Could not save profile: ${saveError.message}`);
-    }
-    if (!savedRows || savedRows.length === 0) {
-      throw new AuthError('UNKNOWN', 'Profile was not saved to the database.');
+      if (saveError) {
+        throw new AuthError('UNKNOWN', `Could not save profile: ${saveError.message}`);
+      }
+      if (!savedRows || savedRows.length === 0) {
+        throw new AuthError('UNKNOWN', 'Profile was not saved to the database.');
+      }
     }
 
     const updated: AuthUser = {
@@ -341,24 +342,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
     await getAuthService().updateUser(updated);
     set({ user: updated });
+
+    // Queue the complete onboarding payload. If the app was offline, this is
+    // applied by SyncEngine as soon as connectivity returns.
+    await syncQueue.enqueue(targetUserId, 'profile', targetUserId, 'UPDATE_PROFILE', {
+      email: updated.email,
+      firstName: cleanFirst,
+      lastName: cleanLast,
+      fullName: cleanName,
+      mobileNumber: cleanMobile,
+      address: cleanAddress,
+      profileCompleted: true,
+      avatarUrl: user?.photoUrl,
+      role: 'Pet Owner',
+      metadata,
+    });
+    syncEngine.sync(targetUserId).catch(() => {});
   },
 
   markRegistrationComplete: async () => {
     const user = get().user;
     if (!user || user.profileCompleted) return;
-
-    // Persist directly to Supabase public.users
-    try {
-      await supabase
-        .from('users')
-        .update({
-          profile_completed: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-    } catch (err: any) {
-      console.warn('Supabase markRegistrationComplete note:', err?.message);
-    }
 
     const updated: AuthUser = {
       ...user,
@@ -367,6 +371,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
     await getAuthService().updateUser(updated);
     set({ user: updated });
+
+    // The completion flag is part of the same durable profile queue as edits,
+    // so a pet registration finished offline still syncs its profile state.
+    await syncQueue.enqueue(user.id, 'profile', user.id, 'UPDATE_PROFILE', {
+      profileCompleted: true,
+    });
+    syncEngine.sync(user.id).catch(() => {});
   },
 
   signOut: async () => {

@@ -1,8 +1,13 @@
 import { supabase } from '@lib/supabase';
 import { generateMicrochipNumber, generateUUID } from '@lib/uuid';
 import { getAvatarPath } from '@lib/petAvatars';
-import { todayISO } from '@lib/format';
+import { normalizeServiceId } from '@lib/services';
+import {
+  getAppointmentStatusFromQueueTicket,
+  toQueueTicketInfo,
+} from '@services/queue/queueService';
 import type { DataService } from './DataService';
+import { normalizeAppointmentStatus } from './types';
 import type {
   Appointment,
   BookingInput,
@@ -38,13 +43,7 @@ export function toPetModel(row: any): Pet {
 
 export function toAppointmentModel(row: any): Appointment {
   const petName = row.pets?.name || row.pet_name || 'Companion';
-  let status = (row.status || 'pending') as any;
-  const today = todayISO();
-
-  // If status is still pending/confirmed but scheduled date has passed, it is overdue
-  if ((status === 'pending' || status === 'confirmed') && row.date && row.date < today) {
-    status = 'overdue';
-  }
+  let status = normalizeAppointmentStatus(row.status);
 
   // Parse queue ticket if present in notes
   let queueTicket: any = undefined;
@@ -72,7 +71,7 @@ export function toAppointmentModel(row: any): Appointment {
     ownerId: row.owner_id,
     petId: row.pet_id || '',
     petName,
-    serviceId: row.service_id,
+    serviceId: normalizeServiceId(row.service_id),
     status,
     date: row.date,
     timeSlot: row.time_slot,
@@ -101,6 +100,51 @@ export function toTransactionModel(row: any): ServiceTransaction {
 
 // Backward compatibility alias
 export const toActivityModel = toTransactionModel;
+
+/**
+ * The clinic can finish a visit by completing its queue ticket without updating
+ * the appointment row. Derive the appointment status from the linked ticket so
+ * completed visits never remain in Upcoming.
+ */
+export function applyQueueTicketStatuses(
+  appointments: Appointment[],
+  tickets: any[] | null,
+): Appointment[] {
+  if (!tickets?.length) return appointments;
+
+  return appointments.map((appointment) => {
+    const currentStatus = normalizeAppointmentStatus(appointment.status);
+    if (currentStatus === 'completed' || currentStatus === 'cancelled') return appointment;
+
+    const appointmentId = String(appointment.id || '');
+    if (!appointmentId) return appointment;
+
+    // Only an explicit appointment link may change an appointment's status.
+    // Matching by pet name/date let stale tickets mark new visits overdue.
+    const ticket = tickets.find(
+      (t) => String(t.appointment_id || '') === appointmentId,
+    );
+    if (!ticket) return appointment;
+
+    // Ignore tickets created before this appointment existed.
+    const ticketCreatedAt = ticket.created_at ? new Date(ticket.created_at).getTime() : 0;
+    const appointmentCreatedAt = appointment.createdAt
+      ? new Date(appointment.createdAt).getTime()
+      : 0;
+    if (ticketCreatedAt && appointmentCreatedAt && ticketCreatedAt < appointmentCreatedAt) {
+      return appointment;
+    }
+
+    const queueStatus = getAppointmentStatusFromQueueTicket(ticket);
+    if (!queueStatus) return appointment;
+
+    return {
+      ...appointment,
+      status: queueStatus,
+      queueTicket: toQueueTicketInfo(ticket),
+    };
+  });
+}
 
 export class SupabaseDataService implements DataService {
   async getPets(ownerId: string): Promise<Pet[]> {
@@ -309,6 +353,13 @@ export class SupabaseDataService implements DataService {
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false });
 
+    const { data: queueTickets } = await supabase
+      .from('queue_tickets')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('updated_at', { ascending: false })
+      .limit(50);
+
     if (error) {
       console.warn('Error fetching appointments with pets join from Supabase:', error.message);
       // Fallback query if join has any syntax difference
@@ -322,9 +373,13 @@ export class SupabaseDataService implements DataService {
         console.warn('Error fetching fallback appointments from Supabase:', fallbackError.message);
         return [];
       }
-      return (fallbackData || []).map(toAppointmentModel);
+      return applyQueueTicketStatuses(
+        (fallbackData || []).map(toAppointmentModel),
+        queueTickets,
+      );
     }
-    return (data || []).map(toAppointmentModel);
+
+    return applyQueueTicketStatuses((data || []).map(toAppointmentModel), queueTickets);
   }
 
   /**
@@ -373,7 +428,7 @@ export class SupabaseDataService implements DataService {
         owner_id: ownerId,
         pet_id: input.petId || null,
         pet_name: input.petName,
-        service_id: input.serviceId,
+        service_id: normalizeServiceId(input.serviceId),
         status: 'pending',
         date: input.date,
         time_slot: input.timeSlot,
@@ -435,6 +490,19 @@ export class SupabaseDataService implements DataService {
       });
     } catch (txErr: any) {
       console.warn('Note logging cancellation transaction:', txErr?.message);
+    }
+  }
+
+  async deleteAppointment(ownerId: string, appointmentId: string): Promise<void> {
+    const { error } = await supabase
+      .from('appointments')
+      .delete()
+      .eq('id', appointmentId)
+      .eq('owner_id', ownerId);
+
+    if (error) {
+      console.error('Error deleting appointment in Supabase:', error.message);
+      throw error;
     }
   }
 

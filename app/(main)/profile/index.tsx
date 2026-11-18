@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
 import { todayISO } from '@lib/format';
+import { normalizeAppointmentStatus } from '@services/data/types';
 import { haptic } from '@lib/haptics';
 import { phoneRule } from '@lib/validation';
 import { useAuthStore } from '@store/useAuthStore';
@@ -36,7 +37,6 @@ import { AddressPicker } from '@components/ui/AddressPicker';
 import { supabase } from '@lib/supabase';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { useNotificationPreferences } from '@hooks/useNotificationPreferences';
-import { syncQueue, syncEngine } from '@services/sync';
 import { toast } from '@components/ui/Sonner';
 import { ProfileScreenSkeleton } from '@components/ui/Skeleton';
 import { PawLoadingOverlay } from '@components/ui/PawLoading';
@@ -153,10 +153,13 @@ export default function ProfileScreen() {
     const today = todayISO();
     const appts = storeAppts || [];
 
-    const upcoming = (appts as any[]).filter(
-      (a: any) => a.status !== 'cancelled' && a.status !== 'completed' && a.date >= today,
+    const upcoming = (appts as any[]).filter((a: any) => {
+      const status = normalizeAppointmentStatus(a.status);
+      return status !== 'cancelled' && status !== 'completed' && a.date >= today;
+    }).length;
+    const completed = (appts as any[]).filter(
+      (a: any) => normalizeAppointmentStatus(a.status) === 'completed',
     ).length;
-    const completed = (appts as any[]).filter((a: any) => a.status === 'completed').length;
     return { pets: residentPets.length, upcoming, completed };
   }, [residentPets, storeAppts]);
 
@@ -303,8 +306,6 @@ export default function ProfileScreen() {
       const lastName = editLastName.trim();
       const combinedFullName = `${firstName} ${lastName}`.trim();
 
-      const ownerId = user?.id || clerkUser?.id || '';
-
       await useAuthStore.getState().saveOwnerProfile(
         editPhone.trim(),
         editAddress.trim(),
@@ -319,15 +320,6 @@ export default function ProfileScreen() {
         } catch (clerkErr) {
           console.log('Clerk update note:', clerkErr);
         }
-      }
-
-      if (ownerId) {
-        await syncQueue.enqueue(ownerId, 'profile', ownerId, 'UPDATE_PROFILE', {
-          mobileNumber: editPhone.trim(),
-          address: editAddress.trim(),
-          fullName: combinedFullName,
-        });
-        syncEngine.sync(ownerId, clerkUser).catch(() => {});
       }
 
       setEditModalVisible(false);
@@ -672,7 +664,7 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.prefRowTextWrap}>
                 <Text style={styles.prefRowTitle}>Vaccine Due Alerts</Text>
-                <Text style={styles.prefRowSub}>7 days & 1 day before due date</Text>
+                <Text style={styles.prefRowSub}>7 days, 1 day & on the due date</Text>
               </View>
             </View>
 
@@ -689,7 +681,7 @@ export default function ProfileScreen() {
                 } else if (val) {
                   toast.success('Vaccine Alerts Enabled', {
                     id: 'notif-pref-vaccine',
-                    description: 'You’ll receive alerts 7 days and 1 day before booster due dates.',
+                    description: 'You’ll receive alerts 7 days, 1 day, and on annual booster due dates.',
                   });
                 } else {
                   toast.info('Vaccine Alerts Turned Off', {
