@@ -21,7 +21,11 @@ import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, spacing, typography } from '@theme';
-import { detectPhilippineTelco } from '@lib/validation';
+import {
+  detectPhilippineTelco,
+  formatPhilippineMobileInput,
+  isPhilippineMobile,
+} from '@lib/validation';
 import {
   buildCDOAddress,
   CDO_BARANGAYS,
@@ -37,34 +41,6 @@ import { networkService } from '@services/network';
 import { toast } from '@components/ui/Sonner';
 
 type OnboardingStep = 1 | 2 | 3;
-
-/**
- * Strict Philippine Mobile Number Formatter & Validator:
- * - Must start with 09
- * - Must have exactly 11 digits (09XX-XXX-XXXX)
- */
-export function isPhilippineMobile(value: string): boolean {
-  const digits = value.replace(/\D/g, '');
-  return digits.startsWith('09') && digits.length === 11;
-}
-
-export function formatPhilippineMobileInput(raw: string): string {
-  let digits = raw.replace(/\D/g, '');
-
-  // Strip international prefix +63 / 63 if pasted or typed
-  if (digits.startsWith('63') && digits.length > 2) {
-    digits = '0' + digits.slice(2);
-  } else if (digits.startsWith('9')) {
-    digits = '09' + digits.slice(1);
-  }
-
-  // Cap at 11 digits
-  digits = digits.slice(0, 11);
-
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 7) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7, 11)}`;
-}
 
 const RELATIONSHIP_OPTIONS = [
   'Spouse / Partner',

@@ -6,6 +6,29 @@ export type ValidationRule = {
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const PH_PHONE_RE = /^(09|\+639|639)\d{9}$/;
 
+/** Strict PH mobile check: 11 digits starting with 09. */
+export function isPhilippineMobile(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.startsWith('09') && digits.length === 11;
+}
+
+/** Formats pasted/typed numbers as 09XX-XXX-XXXX and strips +63/63 prefixes. */
+export function formatPhilippineMobileInput(raw: string): string {
+  let digits = raw.replace(/\D/g, '');
+
+  if (digits.startsWith('63') && digits.length > 2) {
+    digits = `0${digits.slice(2)}`;
+  } else if (digits.startsWith('9')) {
+    digits = `09${digits.slice(1)}`;
+  }
+
+  digits = digits.slice(0, 11);
+
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7, 11)}`;
+}
+
 export function detectPhilippineTelco(phone: string): string | null {
   const digits = phone.replace(/\D/g, '');
   let prefix = '';

@@ -14,7 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors, radius, shadows, typography } from '@theme';
 import { haptic } from '@lib/haptics';
-import { phoneRule } from '@lib/validation';
+import {
+  detectPhilippineTelco,
+  formatPhilippineMobileInput,
+  isPhilippineMobile,
+} from '@lib/validation';
 import { useAuthStore } from '@store/useAuthStore';
 import { useProfileEditStore } from '@store/useProfileEditStore';
 import { Input } from '@components/ui/Input';
@@ -65,7 +69,8 @@ export function EditProfileSheet() {
 
   const [firstName, setFirstName] = useState(initialNames.firstName);
   const [lastName, setLastName] = useState(initialNames.lastName);
-  const [phone, setPhone] = useState(mobileNumber);
+  const [phone, setPhone] = useState(() => formatPhilippineMobileInput(mobileNumber));
+  const [phoneFocused, setPhoneFocused] = useState(false);
   const [residence, setResidence] = useState(address);
   const [saving, setSaving] = useState(false);
   const [addressPickerOpen, setAddressPickerOpen] = useState(false);
@@ -74,13 +79,17 @@ export function EditProfileSheet() {
   const [phoneError, setPhoneError] = useState<string | undefined>();
   const [editError, setEditError] = useState<string | undefined>();
 
+  const isPhoneValid = useMemo(() => isPhilippineMobile(phone), [phone]);
+  const detectedTelco = useMemo(() => detectPhilippineTelco(phone), [phone]);
+
   // Reload the latest profile values each time the sheet is opened.
   useEffect(() => {
     if (!visible) return;
     const names = parseNames(fullName, clerkUser);
     setFirstName(names.firstName);
     setLastName(names.lastName);
-    setPhone(mobileNumber);
+    setPhone(formatPhilippineMobileInput(mobileNumber));
+    setPhoneFocused(false);
     setResidence(address);
     setAddressPickerOpen(false);
     setFirstNameError(undefined);
@@ -106,12 +115,18 @@ export function EditProfileSheet() {
       setPhoneError('Enter your mobile number.');
       return false;
     }
-    if (!phoneRule.validate(trimmed)) {
-      setPhoneError(phoneRule.message);
+    if (!isPhilippineMobile(trimmed)) {
+      setPhoneError('Enter a valid 11-digit Philippine mobile number starting with 09.');
       return false;
     }
     setPhoneError(undefined);
     return true;
+  }, []);
+
+  const handlePhoneChange = useCallback((text: string) => {
+    setPhone(formatPhilippineMobileInput(text));
+    setPhoneError(undefined);
+    setEditError(undefined);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -154,7 +169,7 @@ export function EditProfileSheet() {
       const combinedFullName = `${trimmedFirst} ${trimmedLast}`.trim();
 
       await useAuthStore.getState().saveOwnerProfile(
-        phone.trim(),
+        phone.replace(/[\s-]/g, ''),
         residence.trim(),
         combinedFullName,
         trimmedFirst,
@@ -286,21 +301,58 @@ export function EditProfileSheet() {
             </View>
 
             <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>Mobile Number</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.fieldLabel}>Mobile Number</Text>
+                {phone.length > 0 ? (
+                  isPhoneValid ? (
+                    <View style={styles.verifiedBadge}>
+                      <Ionicons name="checkmark-circle" size={12} color={colors.primary} />
+                      <Text style={styles.verifiedText} numberOfLines={1}>
+                        {detectedTelco || 'PH Verified'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.warningBadge}>
+                      <Ionicons name="alert-circle" size={12} color={colors.warning} />
+                      <Text style={styles.warningText}>09 · 11 digits</Text>
+                    </View>
+                  )
+                ) : null}
+              </View>
+
               <Input
                 compact
                 value={phone}
-                onChangeText={(text) => {
-                  setPhone(text);
-                  if (phoneError) setPhoneError(undefined);
-                  if (editError) setEditError(undefined);
+                onChangeText={handlePhoneChange}
+                onFocus={() => setPhoneFocused(true)}
+                onBlur={() => {
+                  setPhoneFocused(false);
+                  validatePhone(phone);
                 }}
-                onBlur={() => validatePhone(phone)}
                 error={phoneError}
+                helper={
+                  phone.length === 0
+                    ? 'Alerts and vaccination reminders will be sent here.'
+                    : isPhoneValid
+                      ? undefined
+                      : 'Must be 11 digits and start with 09.'
+                }
                 keyboardType="phone-pad"
                 maxLength={13}
-                placeholder="09XXXXXXXXX"
-                leftIcon={<Ionicons name="call-outline" size={17} color={colors.primary} />}
+                placeholder="09XX-XXX-XXXX"
+                leftIcon={
+                  <Ionicons
+                    name="call-outline"
+                    size={17}
+                    color={phoneFocused || isPhoneValid ? colors.primary : colors.textMuted}
+                  />
+                }
+                rightIcon={
+                  phone.length > 0 && !saving ? (
+                    <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                  ) : undefined
+                }
+                onRightIconPress={() => handlePhoneChange('')}
                 editable={!saving}
               />
             </View>
@@ -426,6 +478,41 @@ const styles = StyleSheet.create({
     ...typography.captionBold,
     color: colors.textPrimary,
     fontSize: 12,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    maxWidth: '60%',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryLight,
+  },
+  verifiedText: {
+    ...typography.captionBold,
+    color: colors.primaryDark,
+    fontSize: 10,
+  },
+  warningBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.warningLight,
+  },
+  warningText: {
+    ...typography.captionBold,
+    color: colors.warning,
+    fontSize: 10,
   },
   errorWrap: {
     flexDirection: 'row',
