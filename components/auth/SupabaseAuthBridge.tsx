@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useAuth, useUser } from '@clerk/expo';
 import { setSupabaseTokenProvider, supabase } from '@lib/supabase';
 import { withTimeout } from '@lib/asyncUtils';
+import { clerkSignOutSafely } from '@lib/sessionGate';
 import { useAuthStore } from '@store/useAuthStore';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { supabaseRealtimeService } from '@services/realtime/SupabaseRealtimeService';
@@ -68,7 +69,7 @@ export function SupabaseAuthBridge() {
       if (prevState.status === 'authenticated' && state.status === 'unauthenticated') {
         if (isSignedIn) {
           console.log('[SupabaseAuthBridge] Local store unauthenticated. Terminating Clerk session.');
-          clerkSignOut().catch(() => {});
+          void clerkSignOutSafely(clerkSignOut);
         }
       }
     });
@@ -82,7 +83,7 @@ export function SupabaseAuthBridge() {
       toast.error('Account Deleted', {
         description: 'Your account was deleted by an administrator.',
       });
-      await clerkSignOut().catch(() => {});
+      await clerkSignOutSafely(clerkSignOut);
       await useAuthStore.getState().signOut().catch(() => {});
     });
     return () => {
@@ -206,7 +207,7 @@ export function SupabaseAuthBridge() {
             toast.error('Account Deleted', {
               description: 'Your account was removed by an administrator.',
             });
-            await clerkSignOut().catch(() => {});
+            await clerkSignOutSafely(clerkSignOut);
             await useAuthStore.getState().signOut().catch(() => {});
             return;
           }
@@ -300,7 +301,7 @@ export function SupabaseAuthBridge() {
             toast.error('Account Deleted', {
               description: 'Your account was deleted by an administrator.',
             });
-            await clerkSignOut().catch(() => {});
+            await clerkSignOutSafely(clerkSignOut);
             await useAuthStore.getState().signOut().catch(() => {});
           }
         }

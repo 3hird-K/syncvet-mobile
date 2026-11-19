@@ -154,14 +154,25 @@ export function getAuthorAvatarUrl(item: AnnouncementItem): string | null {
 
 function formatRelativeTime(dateString: string): string {
   try {
-    const diffMs = Date.now() - new Date(dateString).getTime();
+    const date = new Date(dateString);
+    const diffMs = Date.now() - date.getTime();
+    if (!Number.isFinite(diffMs)) return 'recently';
+
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     if (diffHours < 1) return 'just now';
     if (diffHours === 1) return '1h';
     if (diffHours < 24) return `${diffHours}h`;
+
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays === 1) return '1d';
-    return `${diffDays}d`;
+    if (diffDays < 7) return `${diffDays}d`;
+
+    // Older announcements are easier to recognize by their actual date.
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   } catch {
     return 'recently';
   }

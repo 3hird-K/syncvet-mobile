@@ -4,6 +4,7 @@ import { useAuth, useUser } from '@clerk/expo';
 import { withTimeout } from '@lib/asyncUtils';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
+import { isSignedOutGate, waitForSessionGate } from '@lib/sessionGate';
 import { isRestrictedStaffRole } from '@services/auth/types';
 
 /**
@@ -19,9 +20,13 @@ export default function IndexScreen() {
     let isMounted = true;
 
     const routeImmediately = async () => {
+      await waitForSessionGate();
+      if (!isMounted) return;
+
       const { status, user: currentUser } = useAuthStore.getState();
       const hasLocalSession = status === 'authenticated' && !!currentUser;
-      const isAuth = hasLocalSession || Boolean(isSignedIn);
+      // A stale Clerk session must not undo an intentional sign-out.
+      const isAuth = !isSignedOutGate() && (hasLocalSession || Boolean(isSignedIn));
 
       if (isAuth) {
         if (clerkUser) {

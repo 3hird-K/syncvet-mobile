@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, typography } from '@theme';
 import { Button } from '@components/ui/Button';
 import { useAuthStore } from '@store/useAuthStore';
+import { signOutEverywhere } from '@lib/sessionGate';
 import { formatRoleTitle } from '@services/auth/types';
 import { haptic } from '@lib/haptics';
 import { toast } from '@components/ui/Sonner';
@@ -22,7 +23,6 @@ export default function UnauthorizedRoleScreen() {
   const { signOut: clerkSignOut } = useAuth();
   const { user: clerkUser } = useUser();
   const currentUser = useAuthStore((state) => state.user);
-  const authStoreSignOut = useAuthStore((state) => state.signOut);
 
   const [signingOut, setSigningOut] = useState(false);
 
@@ -47,19 +47,15 @@ export default function UnauthorizedRoleScreen() {
       haptic.medium();
       setSigningOut(true);
 
-      // Sign out from Clerk
-      await clerkSignOut().catch(() => {});
-      // Sign out from local store
-      await authStoreSignOut().catch(() => {});
+      await signOutEverywhere(clerkSignOut);
 
       toast.info('Signed Out', {
         description: 'Please sign in with your Pet Owner Google account.',
       });
-
-      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     } catch (err) {
       console.warn('Switch account error:', err);
     } finally {
+      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
       setSigningOut(false);
     }
   };

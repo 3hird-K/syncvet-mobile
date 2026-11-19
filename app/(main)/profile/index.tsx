@@ -26,6 +26,7 @@ import { normalizeAppointmentStatus } from '@services/data/types';
 import { haptic } from '@lib/haptics';
 import { phoneRule } from '@lib/validation';
 import { useAuthStore } from '@store/useAuthStore';
+import { signOutEverywhere } from '@lib/sessionGate';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
@@ -62,7 +63,6 @@ export default function ProfileScreen() {
   const { user: clerkUser } = useUser();
   const { isOnline } = useNetworkStatus();
   const user = useAuthStore((state) => state.user);
-  const signOut = useAuthStore((state) => state.signOut);
   const {
     pets: storePets,
     appointments: storeAppts,
@@ -346,20 +346,21 @@ export default function ProfileScreen() {
     try {
       haptic.medium();
       setLoggingOut(true);
-      await clerkSignOut();
-      await signOut();
+      // Local session + navigation happen first. Clerk is best-effort and
+      // time-boxed so "Signing you out..." can never hang in a preview build.
+      await signOutEverywhere(clerkSignOut);
       toast.success('Logged out', {
         id: 'logout-success',
         description: 'You have been signed out of your account.',
       });
-      // The (main) layout guard also redirects once status becomes
-      // unauthenticated. Navigate immediately here as well so the screen never
-      // falls back to the empty-state skeleton while the guard catches up.
-      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     } catch (e) {
-      console.log('Signout note:', e);
-      await signOut().catch(() => {});
+      console.warn('Signout note:', e);
+    } finally {
+      // The (main) layout guard also redirects once status becomes
+      // unauthenticated. Replace here as a fallback so the tab navigator is
+      // always torn down immediately.
       router.replace({ pathname: '/onboarding', params: { slide: '3' } });
+      setLoggingOut(false);
     }
   };
 

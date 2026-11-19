@@ -24,6 +24,7 @@ import { ONBOARDING_SLIDES } from '@lib/onboarding';
 import type { OnboardingSlideData } from '@lib/onboarding';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
+import { isSignedOutGate, waitForSessionGate } from '@lib/sessionGate';
 import { isRestrictedStaffRole } from '@services/auth/types';
 import { networkService } from '@services/network';
 import { ProgressIndicator } from '@components/ui/ProgressIndicator';
@@ -73,48 +74,66 @@ export default function OnboardingScreen() {
   const coldStartCheckedRef = useRef(false);
   useEffect(() => {
     if (coldStartCheckedRef.current || connectingGoogle) return;
+    let cancelled = false;
 
-    const localSession = useAuthStore.getState();
-    const hasLocalSession =
-      localSession.status === 'authenticated' && Boolean(localSession.user);
-    const offlineLocalSession = !networkService.isOnline() && hasLocalSession;
+    void (async () => {
+      await waitForSessionGate();
+      if (cancelled || coldStartCheckedRef.current) return;
 
-    if (!isSignedIn && !offlineLocalSession) return;
-    // Clerk can report a signed-in state before the user resource is ready.
-    // Wait for it online; offline we can route from the persisted profile.
-    if (isSignedIn && !clerkUser && !offlineLocalSession) return;
+      // After an intentional logout, stay on the sign-in slide even if Clerk
+      // still thinks it has a session (common in preview/offline builds).
+      if (isSignedOutGate()) return;
 
-    coldStartCheckedRef.current = true;
-    setCheckingAuth(true);
+      const localSession = useAuthStore.getState();
+      const hasLocalSession =
+        localSession.status === 'authenticated' && Boolean(localSession.user);
+      const offlineLocalSession = !networkService.isOnline() && hasLocalSession;
 
-    const finishRouting = () => {
-      const currentUser = useAuthStore.getState().user;
-      if (!currentUser) {
-        setCheckingAuth(false);
-        return;
+      if (!isSignedIn && !offlineLocalSession) return;
+      // Clerk can report a signed-in state before the user resource is ready.
+      // Wait for it online; offline we can route from the persisted profile.
+      if (isSignedIn && !clerkUser && !offlineLocalSession) return;
+
+      coldStartCheckedRef.current = true;
+      setCheckingAuth(true);
+
+      const finishRouting = () => {
+        if (cancelled) return;
+        const currentUser = useAuthStore.getState().user;
+        if (!currentUser) {
+          setCheckingAuth(false);
+          return;
+        }
+
+        if (isRestrictedStaffRole(currentUser.role)) {
+          router.replace('/unauthorized-role');
+          return;
+        }
+
+        const hasCompletedProfile = Boolean(
+          currentUser.profileCompleted &&
+          currentUser.mobileNumber &&
+          currentUser.address,
+        );
+
+        router.replace(hasCompletedProfile ? '/(main)' : '/(register)/owner');
+      };
+
+      if (isSignedIn && clerkUser) {
+        try {
+          await useAuthStore.getState().syncUserFromClerk(clerkUser);
+        } catch {
+          // Fall through with whatever local profile we already have.
+        }
+        finishRouting();
+      } else {
+        finishRouting();
       }
+    })();
 
-      if (isRestrictedStaffRole(currentUser.role)) {
-        router.replace('/unauthorized-role');
-        return;
-      }
-
-      const hasCompletedProfile = Boolean(
-        currentUser.profileCompleted &&
-        currentUser.mobileNumber &&
-        currentUser.address,
-      );
-
-      router.replace(hasCompletedProfile ? '/(main)' : '/(register)/owner');
+    return () => {
+      cancelled = true;
     };
-
-    if (isSignedIn && clerkUser) {
-      useAuthStore.getState().syncUserFromClerk(clerkUser)
-        .then(finishRouting)
-        .catch(finishRouting);
-    } else {
-      finishRouting();
-    }
   }, [clerkLoaded, isSignedIn, clerkUser, connectingGoogle, router]);
 
   // Jump to specific slide if requested (e.g. after logout)
@@ -162,14 +181,8 @@ export default function OnboardingScreen() {
   // Authentication genuinely requires connectivity. Explain that only when the
   // user reaches the action, never as a blocking banner on the static slides.
   const handleSignInPress = useCallback(async () => {
-    if (!clerkLoaded) {
-      toast.info('Preparing Google Sign-In', {
-        description: 'Please wait a moment and try again.',
-        duration: 2500,
-      });
-      return;
-    }
-
+    // Do not block the tap here when Clerk is still loading. useGoogleAuth()
+    // keeps the paw overlay visible while it waits for Clerk with a deadline.
     if (!networkService.isOnline()) {
       haptic.light();
       toast.info('You are offline', {
@@ -179,7 +192,7 @@ export default function OnboardingScreen() {
       return;
     }
     await handleGoogleSignIn();
-  }, [handleGoogleSignIn, clerkLoaded]);
+  }, [handleGoogleSignIn]);
 
   const onScrollEndDrag = useCallback(
     (e: ScrollEvent) => {

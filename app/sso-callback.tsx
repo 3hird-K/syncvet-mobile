@@ -5,6 +5,7 @@ import { useAuth, useUser } from '@clerk/expo';
 
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
+import { clearSignedOut } from '@lib/sessionGate';
 import { networkService } from '@services/network';
 import { withTimeout } from '@lib/asyncUtils';
 import { claimPostAuthRouting, releasePostAuthRouting } from '@lib/authFlowCoordinator';
@@ -67,6 +68,7 @@ export default function SSOCallbackScreen() {
       const userId = clerkUser.id;
       if (!claimPostAuthRouting(userId)) return;
 
+      clearSignedOut();
       useOnboardingStore.getState().setCompleted();
 
       void withTimeout(

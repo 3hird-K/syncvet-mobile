@@ -17,6 +17,10 @@ import type {
 
 type AuthStatus = 'idle' | 'restoring' | 'authenticated' | 'unauthenticated';
 
+/** Incremented on every sign-out so an in-flight profile sync cannot restore a
+ *  session that the user just ended. */
+let sessionEpoch = 0;
+
 interface AuthState {
   status: AuthStatus;
   authLoading: boolean;
@@ -85,6 +89,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   syncUserFromClerk: async (clerkUser) => {
     if (!clerkUser) return;
+    const epoch = sessionEpoch;
     const currentUser = get().user;
 
     // Only query Supabase when we actually have connectivity. A cold start while
@@ -180,6 +185,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
 
     await getAuthService().updateUser(updatedUser);
+    if (epoch !== sessionEpoch) return;
     set({
       status: 'authenticated',
       user: updatedUser,
@@ -442,13 +448,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    sessionEpoch += 1;
+    // Clear in-memory auth synchronously so the (main) navigator unmounts (and
+    // the tab bar disappears) immediately. Storage cleanup follows with a hard
+    // deadline so an unavailable keychain cannot strand the sign-out flow.
+    useDataStore.getState().reset();
+    set({ status: 'unauthenticated', user: null, token: null, authLoading: false });
+
     try {
-      await getAuthService().signOut();
-    } finally {
-      useDataStore.getState().reset();
-      // Any auth overlay (Google sign-in, profile sync) must never outlive the
-      // session — otherwise onboarding opens behind a stuck paw loader.
-      set({ status: 'unauthenticated', user: null, token: null, authLoading: false });
+      await withTimeout(
+        () => getAuthService().signOut(),
+        2000,
+        'Local session cleanup timed out',
+      );
+    } catch (error) {
+      console.warn('[useAuthStore] Local session cleanup note:', error);
     }
   },
 }));
