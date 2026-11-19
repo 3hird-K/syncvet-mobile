@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   BackHandler,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,7 +18,6 @@ import { phoneRule } from '@lib/validation';
 import { useAuthStore } from '@store/useAuthStore';
 import { useProfileEditStore } from '@store/useProfileEditStore';
 import { Input } from '@components/ui/Input';
-import { Button } from '@components/ui/Button';
 import { AddressPicker } from '@components/ui/AddressPicker';
 import { toast } from '@components/ui/Sonner';
 
@@ -194,31 +193,54 @@ export function EditProfileSheet() {
         }}
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.sheetContainer}
-      >
+      <KeyboardAvoidingView behavior="padding" style={styles.sheetContainer}>
         <View style={[styles.sheetCard, shadows.lg]}>
           <View style={styles.sheetHeader}>
-            <View>
+            <View style={styles.headerText}>
               <Text style={styles.sheetTitle}>Update Profile</Text>
               <Text style={styles.sheetSubtitle}>
                 Manage your contact &amp; address details
               </Text>
             </View>
-            <Pressable
-              onPress={close}
-              style={styles.closeButton}
-              hitSlop={8}
-            >
-              <Ionicons name="close" size={20} color={colors.textSecondary} />
-            </Pressable>
+
+            <View style={styles.headerActions}>
+              <Pressable
+                accessibilityLabel={saving ? 'Saving profile' : 'Save profile'}
+                accessibilityRole="button"
+                onPress={handleSave}
+                disabled={saving}
+                hitSlop={8}
+                style={[
+                  styles.iconButton,
+                  styles.saveIconButton,
+                  saving && styles.iconButtonDisabled,
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="save-outline" size={20} color={colors.primary} />
+                )}
+              </Pressable>
+
+              <Pressable
+                accessibilityLabel="Close"
+                accessibilityRole="button"
+                onPress={close}
+                disabled={saving}
+                hitSlop={8}
+                style={[styles.iconButton, saving && styles.iconButtonDisabled]}
+              >
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </Pressable>
+            </View>
           </View>
 
           <ScrollView
             style={styles.formScroll}
             contentContainerStyle={styles.formContent}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.nameRow}>
@@ -301,19 +323,6 @@ export function EditProfileSheet() {
               </View>
             ) : null}
           </ScrollView>
-
-          <View style={styles.actions}>
-            <Button
-              title="Save Changes"
-              variant="primary"
-              leftIcon={
-                <Ionicons name="checkmark-circle-outline" size={16} color={colors.white} />
-              }
-              onPress={handleSave}
-              loading={saving}
-              fullWidth
-            />
-          </View>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -340,6 +349,7 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   sheetContainer: {
+    flex: 1,
     width: '100%',
     justifyContent: 'flex-end',
   },
@@ -355,8 +365,17 @@ const styles = StyleSheet.create({
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 14,
+  },
+  headerText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   sheetTitle: {
     ...typography.heading2,
@@ -370,12 +389,22 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     marginTop: 2,
   },
-  closeButton: {
-    padding: 4,
+  iconButton: {
+    width: 34,
+    height: 34,
     borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(7, 30, 38, 0.05)',
   },
+  saveIconButton: {
+    backgroundColor: colors.primaryLight,
+  },
+  iconButtonDisabled: {
+    opacity: 0.55,
+  },
   formScroll: {
+    flexShrink: 1,
     maxHeight: 360,
   },
   formContent: {
@@ -411,9 +440,5 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 11.5,
     flex: 1,
-  },
-  actions: {
-    width: '100%',
-    marginTop: 12,
   },
 });
