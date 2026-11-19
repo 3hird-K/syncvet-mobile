@@ -385,7 +385,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await getAuthService().signOut();
     } finally {
       useDataStore.getState().reset();
-      set({ status: 'unauthenticated', user: null, token: null });
+      // Any auth overlay (Google sign-in, profile sync) must never outlive the
+      // session — otherwise onboarding opens behind a stuck paw loader.
+      set({ status: 'unauthenticated', user: null, token: null, authLoading: false });
     }
   },
 }));

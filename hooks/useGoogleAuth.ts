@@ -89,6 +89,27 @@ function formatAuthError(error: any): string {
   return code && !String(message).includes(code) ? `${message} (${code})` : String(message);
 }
 
+/**
+ * Best-effort cleanup of a browser SSO session.
+ *
+ * In expo-web-browser v58 `dismissAuthSession()` is only supported on iOS/web.
+ * On Android it delegates to `dismissBrowser()`, which is iOS-only and throws a
+ * synchronous `UnavailabilityError`. It must therefore be skipped on Android
+ * and wrapped in try/catch so cleanup can never turn a successful sign-in into
+ * a reported failure.
+ */
+function dismissBrowserAuthSession(): void {
+  if (Platform.OS === 'android') return;
+
+  try {
+    if (typeof WebBrowser.dismissAuthSession === 'function') {
+      WebBrowser.dismissAuthSession();
+    }
+  } catch (error) {
+    console.warn('[useGoogleAuth] Auth session dismiss note:', error);
+  }
+}
+
 export interface UseGoogleAuthReturn {
   handleGoogleSignIn: () => Promise<boolean>;
   connecting: boolean;
@@ -402,6 +423,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       setError(undefined);
 
       let authResult: any = undefined;
+      let usedBrowserSSO = false;
 
       // Native builds: run the in-app Google account picker, then exchange the
       // returned ID token with Clerk. Once the picker opens, never silently
@@ -432,6 +454,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       // Web, Expo Go, or devices without the native Google module.
       if (!authResult?.createdSessionId) {
+        usedBrowserSSO = true;
         await Promise.resolve(WebBrowser.warmUpAsync()).catch(() => {});
         try {
           authResult = await withTimeout(
@@ -459,7 +482,12 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
           'Clerk session activation timed out',
         );
 
-        Promise.resolve(WebBrowser.dismissAuthSession()).catch(() => {});
+        // Only the browser SSO flow opens a web session. The native Google
+        // picker has nothing to dismiss, and dismissAuthSession() throws on
+        // Android — so this cleanup must never break a completed login.
+        if (usedBrowserSSO) {
+          dismissBrowserAuthSession();
+        }
 
         haptic.success();
         await handlePostAuthRouting(signUp, signIn, clerkUser);

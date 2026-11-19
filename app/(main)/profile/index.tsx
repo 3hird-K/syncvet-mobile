@@ -341,21 +341,24 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
+    if (loggingOut) return;
+
     try {
       haptic.medium();
       setLoggingOut(true);
       await clerkSignOut();
-      signOut();
+      await signOut();
       toast.success('Logged out', {
         id: 'logout-success',
         description: 'You have been signed out of your account.',
       });
-      setTimeout(() => {
-        router.replace({ pathname: '/onboarding', params: { slide: '3' } });
-      }, 750);
+      // The (main) layout guard also redirects once status becomes
+      // unauthenticated. Navigate immediately here as well so the screen never
+      // falls back to the empty-state skeleton while the guard catches up.
+      router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     } catch (e) {
       console.log('Signout note:', e);
-      signOut();
+      await signOut().catch(() => {});
       router.replace({ pathname: '/onboarding', params: { slide: '3' } });
     }
   };
@@ -368,6 +371,17 @@ export default function ProfileScreen() {
       console.log('Profile refresh error:', e);
     }
   }, [syncNow]);
+
+  // While signing out, show the paw loader instead of the empty-state skeleton.
+  // Both user and clerkUser clear during logout, which would otherwise make the
+  // skeleton condition below true and flash a shimmer screen before navigation.
+  if (loggingOut) {
+    return (
+      <AnimatedScreen animation="zoom" animated={false}>
+        <PawLoadingOverlay visible label="Signing you out..." />
+      </AnimatedScreen>
+    );
+  }
 
   if ((loading && !loaded && !user) || (!user && !clerkUser?.fullName)) {
     return (
@@ -861,9 +875,6 @@ export default function ProfileScreen() {
           </KeyboardAvoidingView>
         </View>
       )}
-
-      {/* Standard Paw Loading Overlay on Logout */}
-      <PawLoadingOverlay visible={loggingOut} />
     </AnimatedScreen>
   );
 }
