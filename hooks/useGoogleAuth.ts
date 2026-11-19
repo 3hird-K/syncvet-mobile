@@ -42,6 +42,7 @@ function buildOAuthRedirectUrl(): string {
 }
 
 const NATIVE_GOOGLE_MODULE_UNAVAILABLE = 'NATIVE_GOOGLE_MODULE_UNAVAILABLE';
+const GOOGLE_NATIVE_PROVIDER_FAILURE = 'GOOGLE_NATIVE_PROVIDER_FAILURE';
 
 type NativeGoogleCredentialResponse =
   | { type: 'success'; data: { idToken: string; user?: unknown } }
@@ -61,7 +62,29 @@ function getGoogleWebClientId(): string | undefined {
   );
 }
 
+// Android Credential Manager reports Google/provider failures through a
+// SIGN_IN_CANCELLED rejection whose message starts with a Play Services status
+// code (for example "[16] ..." or "16: ..."). Those are NOT user cancellations.
+// Clerk's own native flow rethrows them; without this check we silently
+// swallow them and the UI looks like "picked an account, nothing happened".
+const PLAY_SERVICES_STATUS_PREFIX = /^\s*(?:\[\d+]|\d+:)/;
+const CANCELLED_BY_USER = /cancell?ed by user/i;
+
+function isGoogleProviderFailure(error: any): boolean {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+
+  return (
+    code === 'GOOGLE_SIGN_IN_ERROR' ||
+    (code === 'SIGN_IN_CANCELLED' &&
+      PLAY_SERVICES_STATUS_PREFIX.test(message) &&
+      !CANCELLED_BY_USER.test(message))
+  );
+}
+
 function isCancellationError(error: any): boolean {
+  if (isGoogleProviderFailure(error)) return false;
+
   const message = String(error?.message || error?.errors?.[0]?.message || '').toLowerCase();
   const code = String(error?.code || error?.errors?.[0]?.code || '');
 
@@ -342,9 +365,23 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       throw new Error('Google sign-in did not return an account.');
     } catch (pickerError: any) {
+      console.warn(
+        '[useGoogleAuth] Native Google picker error:',
+        pickerError?.code,
+        pickerError?.message,
+      );
+
       if (isCancellationError(pickerError)) return null;
 
       console.error('[useGoogleAuth] Native Google picker failed:', pickerError);
+
+      if (isGoogleProviderFailure(pickerError)) {
+        throw Object.assign(
+          new Error(`Google could not sign you in: ${pickerError?.message || 'provider error'}`),
+          { code: GOOGLE_NATIVE_PROVIDER_FAILURE },
+        );
+      }
+
       throw pickerError;
     }
   }, []);
@@ -426,9 +463,9 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
       let usedBrowserSSO = false;
 
       // Native builds: run the in-app Google account picker, then exchange the
-      // returned ID token with Clerk. Once the picker opens, never silently
-      // switch to the browser flow — that hid the real failure behind the old
-      // "took too long to open" timeout.
+      // returned ID token with Clerk. If the picker cannot produce a token
+      // because of a registration/provider error, fall back to browser SSO
+      // rather than leaving the user stuck after selecting an account.
       if (Platform.OS !== 'web') {
         try {
           const idToken = await getNativeGoogleIdToken();
@@ -442,13 +479,22 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
             setActive,
           };
         } catch (nativeError: any) {
-          // Only fall back if the native module is genuinely missing (Expo Go,
-          // web, or an old build). Any error after the picker opened is real
-          // and is surfaced to the user and the logs.
-          if (nativeError?.message !== NATIVE_GOOGLE_MODULE_UNAVAILABLE) {
+          if (nativeError?.message === NATIVE_GOOGLE_MODULE_UNAVAILABLE) {
+            // Expo Go / old build without the native module.
+            authResult = undefined;
+          } else if (nativeError?.code === GOOGLE_NATIVE_PROVIDER_FAILURE) {
+            // The native picker opened but Google refused to return a token
+            // (usually a missing/mismatched SHA-1 or SHA-256 registration).
+            // Log it for diagnosis, then let browser SSO complete the login.
+            console.warn(
+              '[useGoogleAuth] Native Google provider failed; falling back to browser SSO:',
+              nativeError?.message,
+            );
+            authResult = undefined;
+          } else {
+            // A genuine unexpected error is surfaced to the user and the logs.
             throw nativeError;
           }
-          authResult = undefined;
         }
       }
 
