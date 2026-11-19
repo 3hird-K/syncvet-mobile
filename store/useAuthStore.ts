@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { getAuthService, AuthError } from '@services/auth';
 import { supabase } from '@lib/supabase';
+import { withTimeout } from '@lib/asyncUtils';
 import { buildCDOAddress } from '@lib/philippineAddresses';
 import { networkService } from '@services/network';
 import { syncEngine, syncQueue } from '@services/sync';
@@ -131,18 +132,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const photoUrl = clerkUser.imageUrl || dbUser?.avatar_url || currentUser?.photoUrl;
 
+    const dbMeta = (dbUser?.raw_user_meta_data as any) || {};
+
     const mobileNumber =
       dbUser?.phone_number ||
+      dbMeta.phoneNumber ||
+      dbMeta.mobileNumber ||
       clerkUser.primaryPhoneNumber?.phoneNumber ||
       currentUser?.mobileNumber ||
       '';
 
-    const address = dbUser?.address || currentUser?.address || '';
+    const address =
+      dbUser?.address ||
+      dbMeta.address ||
+      currentUser?.address ||
+      '';
 
+    // Supabase's profile_completed is authoritative. Some older rows keep the
+    // phone/address only in raw_user_meta_data; requiring the plain columns
+    // made completed residents look incomplete and briefly routed them through
+    // registration before this flag won.
     const profileCompleted = Boolean(
-      (dbUser?.profile_completed ?? currentUser?.profileCompleted) &&
-        mobileNumber &&
-        address,
+      dbUser ? dbUser.profile_completed : currentUser?.profileCompleted && mobileNumber && address,
     );
 
     const role: UserRole =
@@ -178,7 +189,57 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   googleSignIn: async (profile) => {
     const session = await getAuthService().signInWithGoogle(profile);
-    set({ status: 'authenticated', user: session.user, token: session.token });
+    let user = session.user;
+
+    // The local session cache can lag behind Supabase (older bundles saved
+    // profileCompleted=false even after onboarding finished). Hydrate the
+    // authoritative row BEFORE publishing the user so route guards never flash
+    // the registration screens for an already-completed resident.
+    if (networkService.isOnline()) {
+      try {
+        const { data: dbUser } = await withTimeout(
+          async () =>
+            supabase
+              .from('users')
+              .select('*')
+              .eq('id', profile.id || user.id)
+              .maybeSingle(),
+          4000,
+          'Profile hydration timed out',
+        );
+
+        if (dbUser) {
+          const dbMeta = (dbUser.raw_user_meta_data as any) || {};
+          const mobileNumber =
+            dbUser.phone_number ||
+            dbMeta.phoneNumber ||
+            dbMeta.mobileNumber ||
+            user.mobileNumber ||
+            '';
+          const address = dbUser.address || dbMeta.address || user.address || '';
+
+          user = {
+            ...user,
+            fullName: dbUser.full_name || user.fullName,
+            firstName: dbUser.first_name || user.firstName,
+            lastName: dbUser.last_name || user.lastName,
+            photoUrl: dbUser.avatar_url || user.photoUrl,
+            mobileNumber,
+            address,
+            role: dbUser.role || user.role,
+            rawUserMetaData:
+              (dbUser.raw_user_meta_data as Record<string, any> | null) ||
+              user.rawUserMetaData,
+            profileCompleted: Boolean(dbUser.profile_completed),
+          };
+          await getAuthService().updateUser(user);
+        }
+      } catch (err) {
+        console.warn('[useAuthStore] Google profile hydration note:', err);
+      }
+    }
+
+    set({ status: 'authenticated', user, token: session.token });
   },
 
   signIn: async (params) => {

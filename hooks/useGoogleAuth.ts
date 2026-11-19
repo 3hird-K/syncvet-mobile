@@ -207,14 +207,26 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         }
 
         if (liveDbUser) {
+          // Keep the values hydrated by googleSignIn() when the DB columns are
+          // empty (older rows store phone/address in raw_user_meta_data).
+          // Wiping them here would make a completed resident look incomplete
+          // and flash the registration screen before the redirect to main.
+          const dbMeta = (liveDbUser.raw_user_meta_data as any) || {};
+          const hydratedUser = useAuthStore.getState().user;
           const fullUser = {
             id: liveDbUser.id,
             fullName: liveDbUser.full_name || clerkName,
             firstName: liveDbUser.first_name || firstName,
             lastName: liveDbUser.last_name || lastName,
             email: liveDbUser.email || clerkEmail,
-            mobileNumber: liveDbUser.phone_number || '',
-            address: liveDbUser.address || '',
+            mobileNumber:
+              liveDbUser.phone_number ||
+              dbMeta.phoneNumber ||
+              dbMeta.mobileNumber ||
+              hydratedUser?.mobileNumber ||
+              '',
+            address:
+              liveDbUser.address || dbMeta.address || hydratedUser?.address || '',
             photoUrl: liveDbUser.avatar_url || photoUrl,
             authProvider: 'google' as const,
             profileCompleted: Boolean(liveDbUser.profile_completed),
