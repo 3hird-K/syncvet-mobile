@@ -25,6 +25,8 @@ interface AddressPickerProps {
   onChange: (fullAddress: string) => void;
   error?: string;
   editable?: boolean;
+  compact?: boolean;
+  onModalVisibilityChange?: (visible: boolean) => void;
 }
 
 export function AddressPicker({
@@ -32,6 +34,8 @@ export function AddressPicker({
   onChange,
   error,
   editable = true,
+  compact,
+  onModalVisibilityChange,
 }: AddressPickerProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,19 +77,27 @@ export function AddressPicker({
     return searchPhilippineLocations(searchQuery, 30);
   }, [searchQuery]);
 
+  const updateModalVisible = useCallback(
+    (nextVisible: boolean) => {
+      setModalVisible(nextVisible);
+      onModalVisibilityChange?.(nextVisible);
+    },
+    [onModalVisibilityChange],
+  );
+
   const handleOpenModal = useCallback(() => {
     if (!editable) return;
     haptic.light();
     setSearchQuery('');
-    setModalVisible(true);
-  }, [editable]);
+    updateModalVisible(true);
+  }, [editable, updateModalVisible]);
 
   const handleSelectLocation = useCallback(
     (loc: PhLocation | string) => {
       haptic.medium();
       const locStr = typeof loc === 'string' ? loc : loc.fullLocation;
       setSelectedLocation(locStr);
-      setModalVisible(false);
+      updateModalVisible(false);
 
       // Combine with street detail
       const full = streetDetail.trim()
@@ -94,7 +106,7 @@ export function AddressPicker({
       isInternalChangeRef.current = true;
       onChange(full);
     },
-    [streetDetail, onChange],
+    [streetDetail, onChange, updateModalVisible],
   );
 
   const handleStreetChange = useCallback(
@@ -130,6 +142,7 @@ export function AddressPicker({
         disabled={!editable}
         style={({ pressed }) => [
           styles.field,
+          compact && styles.fieldCompact,
           error && !selectedLocation && !value ? styles.fieldError : null,
           pressed && styles.fieldPressed,
         ]}
@@ -157,6 +170,7 @@ export function AddressPicker({
       <View
         style={[
           styles.field,
+          compact && styles.fieldCompact,
           styles.streetField,
           error && !value ? styles.fieldError : null,
         ]}
@@ -170,7 +184,7 @@ export function AddressPicker({
           onChangeText={handleStreetChange}
           placeholder="House no., street, subdivision, or zone"
           placeholderTextColor="#8A9E99"
-          style={styles.input}
+          style={[styles.input, compact && styles.inputCompact]}
           editable={editable}
           returnKeyType="done"
         />
@@ -189,12 +203,12 @@ export function AddressPicker({
         visible={modalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => updateModalVisible(false)}
       >
         <View style={styles.modalBackdrop}>
           <Pressable
             style={styles.backdropPressable}
-            onPress={() => setModalVisible(false)}
+            onPress={() => updateModalVisible(false)}
           />
 
           <SafeAreaView style={styles.sheetContainer}>
@@ -205,7 +219,7 @@ export function AddressPicker({
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Select Location</Text>
               <Pressable
-                onPress={() => setModalVisible(false)}
+                onPress={() => updateModalVisible(false)}
                 hitSlop={12}
                 style={styles.closeBtn}
               >
@@ -376,6 +390,11 @@ const styles = StyleSheet.create({
   streetField: {
     backgroundColor: '#FAFCFB',
   },
+  fieldCompact: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+  },
   fieldError: {
     borderColor: colors.error,
     backgroundColor: colors.errorLight,
@@ -405,6 +424,10 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingVertical: Platform.OS === 'android' ? 6 : 10,
     includeFontPadding: false,
+  },
+  inputCompact: {
+    fontSize: 14,
+    paddingVertical: Platform.OS === 'android' ? 4 : 7,
   },
   errorRow: {
     flexDirection: 'row',

@@ -1,12 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
-  BackHandler,
   Image,
-  KeyboardAvoidingView,
   Linking,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,17 +20,14 @@ import { colors, radius, shadows, spacing, typography } from '@theme';
 import { todayISO } from '@lib/format';
 import { normalizeAppointmentStatus } from '@services/data/types';
 import { haptic } from '@lib/haptics';
-import { phoneRule } from '@lib/validation';
 import { useAuthStore } from '@store/useAuthStore';
+import { useProfileEditStore } from '@store/useProfileEditStore';
 import { signOutEverywhere } from '@lib/sessionGate';
 import { useDataStore } from '@store/useDataStore';
 import { useResidentData } from '@hooks/useResidentData';
 import { AnimatedScreen } from '@components/ui/AnimatedScreen';
 import { Screen } from '@components/ui/Screen';
 import { Avatar } from '@components/ui/Avatar';
-import { Input } from '@components/ui/Input';
-import { Button } from '@components/ui/Button';
-import { AddressPicker } from '@components/ui/AddressPicker';
 import { supabase } from '@lib/supabase';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import { useNotificationPreferences } from '@hooks/useNotificationPreferences';
@@ -98,27 +91,6 @@ export default function ProfileScreen() {
 
   const address = user?.address || 'Cagayan de Oro City';
 
-  // Helper to split full name or extract first/last name
-  const parseNames = useCallback((full: string, clerk?: any) => {
-    const clerkFirst = clerk?.firstName?.trim();
-    const clerkLast = clerk?.lastName?.trim();
-    if (clerkFirst) {
-      return { firstName: clerkFirst, lastName: clerkLast || '' };
-    }
-    const clean = full.replace('SyncVet Resident', '').trim();
-    const parts = clean.split(' ');
-    const fName = parts[0] || '';
-    const lName = parts.slice(1).join(' ') || '';
-    return { firstName: fName, lastName: lName };
-  }, []);
-
-  // State for Edit Profile Modal
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const initialNames = useMemo(() => parseNames(fullName, clerkUser), [parseNames, fullName, clerkUser]);
-  const [editFirstName, setEditFirstName] = useState(initialNames.firstName);
-  const [editLastName, setEditLastName] = useState(initialNames.lastName);
-  const [editPhone, setEditPhone] = useState(mobileNumber);
-
   // Notification Preferences & OS Permissions
   const {
     preferences: notifPrefs,
@@ -126,25 +98,7 @@ export default function ProfileScreen() {
     updatePreference: updateNotifPref,
     requestPermission: requestNotifPermission,
   } = useNotificationPreferences();
-  const [editAddress, setEditAddress] = useState(address);
-  const [savingProfile, setSavingProfile] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [firstNameError, setFirstNameError] = useState<string | undefined>();
-  const [lastNameError, setLastNameError] = useState<string | undefined>();
-  const [phoneError, setPhoneError] = useState<string | undefined>();
-  const [editError, setEditError] = useState<string | undefined>();
-
-  // Dismiss edit modal on Android back button
-  useEffect(() => {
-    if (!editModalVisible) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!savingProfile) {
-        setEditModalVisible(false);
-      }
-      return true;
-    });
-    return () => sub.remove();
-  }, [editModalVisible, savingProfile]);
 
   // Read pets (pure Supabase store data)
   const residentPets = storePets || [];
@@ -221,118 +175,9 @@ export default function ProfileScreen() {
     }
   };
 
-  const validatePhone = (val: string): boolean => {
-    const trimmed = val.trim();
-    if (!trimmed) {
-      setPhoneError('Enter your mobile number.');
-      return false;
-    }
-    if (!phoneRule.validate(trimmed)) {
-      setPhoneError(phoneRule.message);
-      return false;
-    }
-    setPhoneError(undefined);
-    return true;
-  };
-
-  const handlePhoneChange = (text: string) => {
-    setEditPhone(text);
-    if (phoneError) setPhoneError(undefined);
-    if (editError) setEditError(undefined);
-  };
-
-  const handleFirstNameChange = (text: string) => {
-    setEditFirstName(text);
-    if (firstNameError) setFirstNameError(undefined);
-    if (editError) setEditError(undefined);
-  };
-
-  const handleLastNameChange = (text: string) => {
-    setEditLastName(text);
-    if (lastNameError) setLastNameError(undefined);
-    if (editError) setEditError(undefined);
-  };
-
   const openEditModal = () => {
     haptic.light();
-    const { firstName: fName, lastName: lName } = parseNames(fullName, clerkUser);
-    setEditFirstName(fName);
-    setEditLastName(lName);
-    setEditPhone(mobileNumber);
-    setEditAddress(address);
-    setFirstNameError(undefined);
-    setLastNameError(undefined);
-    setPhoneError(undefined);
-    setEditError(undefined);
-    setEditModalVisible(true);
-  };
-
-  const handleSaveProfile = async () => {
-    let isValid = true;
-
-    if (!editFirstName.trim()) {
-      setFirstNameError('Enter first name.');
-      isValid = false;
-    } else {
-      setFirstNameError(undefined);
-    }
-
-    if (!editLastName.trim()) {
-      setLastNameError('Enter last name.');
-      isValid = false;
-    } else {
-      setLastNameError(undefined);
-    }
-
-    if (!validatePhone(editPhone)) {
-      isValid = false;
-    }
-
-    if (!editAddress.trim()) {
-      setEditError('Please enter your residence address.');
-      isValid = false;
-    }
-
-    if (!isValid) {
-      haptic.warning();
-      return;
-    }
-
-    setSavingProfile(true);
-    setEditError(undefined);
-
-    try {
-      const firstName = editFirstName.trim();
-      const lastName = editLastName.trim();
-      const combinedFullName = `${firstName} ${lastName}`.trim();
-
-      await useAuthStore.getState().saveOwnerProfile(
-        editPhone.trim(),
-        editAddress.trim(),
-        combinedFullName,
-        firstName,
-        lastName,
-      );
-
-      if (clerkUser) {
-        try {
-          await clerkUser.update({ firstName, lastName });
-        } catch (clerkErr) {
-          console.log('Clerk update note:', clerkErr);
-        }
-      }
-
-      setEditModalVisible(false);
-      toast.success('Profile updated successfully!', {
-        description: 'Details saved locally.',
-      });
-    } catch (err: any) {
-      console.log('Update profile error:', err);
-      setEditError(err?.message || 'Could not update profile. Please try again.');
-      haptic.error();
-    } finally {
-      setSavingProfile(false);
-    }
+    useProfileEditStore.getState().open();
   };
 
   const handleCallCVO = () => {
@@ -759,123 +604,6 @@ export default function ProfileScreen() {
         </View>
       </Screen>
 
-      {/* Update Profile Modal (Rendered as overlay to avoid Android nested Modal conflict with AddressPicker) */}
-      {editModalVisible && (
-        <View style={styles.modalOverlayRoot}>
-          <Pressable
-            style={styles.modalBackdropPressable}
-            onPress={() => {
-              if (!savingProfile) setEditModalVisible(false);
-            }}
-          />
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalContainer}
-          >
-            <View style={[styles.modalCard, shadows.lg]}>
-              {/* Modal Header */}
-              <View style={styles.modalHeader}>
-                <View>
-                  <Text style={styles.modalTitle}>Update Profile</Text>
-                  <Text style={styles.modalSub}>Manage your contact & address details</Text>
-                </View>
-                <Pressable
-                  onPress={() => setEditModalVisible(false)}
-                  style={styles.modalCloseBtn}
-                  hitSlop={8}
-                >
-                  <Ionicons name="close" size={20} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-
-              <ScrollView
-                style={styles.modalFormScroll}
-                contentContainerStyle={styles.modalFormContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                {/* First Name & Last Name */}
-                <View style={styles.nameRow}>
-                  <View style={styles.nameCol}>
-                    <Text style={styles.modalFieldLabel}>First Name</Text>
-                    <Input
-                      value={editFirstName}
-                      onChangeText={handleFirstNameChange}
-                      onBlur={() => {
-                        if (!editFirstName.trim()) setFirstNameError('Enter first name.');
-                        else setFirstNameError(undefined);
-                      }}
-                      error={firstNameError}
-                      placeholder="First name"
-                      leftIcon={<Ionicons name="person-outline" size={17} color={colors.primary} />}
-                      editable={!savingProfile}
-                    />
-                  </View>
-                  <View style={styles.nameCol}>
-                    <Text style={styles.modalFieldLabel}>Last Name</Text>
-                    <Input
-                      value={editLastName}
-                      onChangeText={handleLastNameChange}
-                      onBlur={() => {
-                        if (!editLastName.trim()) setLastNameError('Enter last name.');
-                        else setLastNameError(undefined);
-                      }}
-                      error={lastNameError}
-                      placeholder="Last name"
-                      editable={!savingProfile}
-                    />
-                  </View>
-                </View>
-
-                {/* Mobile Number */}
-                <View style={styles.modalField}>
-                  <Text style={styles.modalFieldLabel}>Mobile Number</Text>
-                  <Input
-                    value={editPhone}
-                    onChangeText={handlePhoneChange}
-                    onBlur={() => validatePhone(editPhone)}
-                    error={phoneError}
-                    keyboardType="phone-pad"
-                    maxLength={13}
-                    placeholder="09XXXXXXXXX"
-                    leftIcon={<Ionicons name="call-outline" size={18} color={colors.primary} />}
-                    editable={!savingProfile}
-                  />
-                </View>
-
-                {/* Address Picker */}
-                <View style={styles.modalField}>
-                  <Text style={styles.modalFieldLabel}>Residence Address</Text>
-                  <AddressPicker
-                    value={editAddress}
-                    onChange={setEditAddress}
-                    editable={!savingProfile}
-                  />
-                </View>
-
-                {editError ? (
-                  <View style={styles.editErrorWrap}>
-                    <Ionicons name="alert-circle" size={16} color={colors.error} />
-                    <Text style={styles.editErrorText}>{editError}</Text>
-                  </View>
-                ) : null}
-              </ScrollView>
-
-              {/* Action Buttons */}
-              <View style={styles.modalActionsRow}>
-                <Button
-                  title="Save Changes"
-                  variant="primary"
-                  leftIcon={<Ionicons name="checkmark-circle-outline" size={16} color={colors.white} />}
-                  onPress={handleSaveProfile}
-                  loading={savingProfile}
-                  fullWidth
-                />
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      )}
     </AnimatedScreen>
   );
 }
@@ -1353,105 +1081,5 @@ const styles = StyleSheet.create({
   },
   footerSpacing: {
     height: 4,
-  },
-  modalOverlayRoot: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(7, 30, 38, 0.60)',
-    justifyContent: 'flex-end',
-    zIndex: 999,
-    elevation: 999,
-  },
-  modalBackdropPressable: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(7, 30, 38, 0.60)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    width: '100%',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
-    paddingHorizontal: spacing.xl,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.lg,
-  },
-  modalTitle: {
-    ...typography.heading2,
-    color: colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  modalSub: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  modalCloseBtn: {
-    padding: 4,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(7, 30, 38, 0.05)',
-  },
-  modalFormScroll: {
-    maxHeight: 400,
-  },
-  modalFormContent: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  nameCol: {
-    flex: 1,
-    gap: 4,
-  },
-  modalField: {
-    gap: 4,
-  },
-  modalFieldLabel: {
-    ...typography.captionBold,
-    color: colors.textPrimary,
-    fontSize: 12.5,
-  },
-  editErrorWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    padding: 10,
-    borderRadius: radius.md,
-  },
-  editErrorText: {
-    ...typography.caption,
-    color: colors.error,
-    fontSize: 12,
-    flex: 1,
-  },
-  modalActionsRow: {
-    width: '100%',
-    marginTop: spacing.md,
   },
 });

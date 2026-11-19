@@ -32,6 +32,7 @@ export interface InputProps extends TextInputProps {
   onRightIconPress?: () => void;
   required?: boolean;
   containerStyle?: object;
+  compact?: boolean;
 }
 
 export const Input = forwardRef<any, InputProps>(function Input(
@@ -44,6 +45,7 @@ export const Input = forwardRef<any, InputProps>(function Input(
     onRightIconPress,
     required,
     containerStyle,
+    compact,
     onFocus,
     onBlur,
     style,
@@ -105,6 +107,7 @@ export const Input = forwardRef<any, InputProps>(function Input(
       <Animated.View
         style={[
           styles.field,
+          compact && styles.fieldCompact,
           borderColorAnim,
           { backgroundColor: editable ? colors.surface : colors.surfaceMuted },
           error && styles.fieldError,
@@ -116,6 +119,7 @@ export const Input = forwardRef<any, InputProps>(function Input(
           ref={ref}
           style={[
             styles.input,
+            compact && styles.inputCompact,
             rest.multiline && styles.inputMultiline,
             style,
           ]}
@@ -178,6 +182,11 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: spacing.lg,
   },
+  fieldCompact: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+  },
   fieldError: {
     backgroundColor: colors.errorLight,
   },
@@ -195,6 +204,10 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingVertical: Platform.OS === 'android' ? 6 : 10,
     includeFontPadding: false,
+  },
+  inputCompact: {
+    fontSize: 14,
+    paddingVertical: Platform.OS === 'android' ? 4 : 7,
   },
   inputMultiline: {
     minHeight: 64,
