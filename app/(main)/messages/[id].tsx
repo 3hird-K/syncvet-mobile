@@ -8,7 +8,6 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  LayoutAnimation,
   Modal,
   PanResponder,
   Platform,
@@ -18,7 +17,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  UIManager,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -435,25 +433,12 @@ export default function ChatConversationScreen() {
     };
   }, [chat?.id, isOnline, ownerId, queryClient]);
 
-  // Android Keyboard height management & layout animation
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-      UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
-  }, []);
-
+  // Keep the newest message in view when the keyboard opens or closes. The
+  // composer stays above the keyboard via KeyboardAvoidingView's padding.
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setIsKeyboardOpen(true);
-        if (Platform.OS === 'android') {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          setAndroidKeyboardHeight(e.endCoordinates.height);
-        }
+      () => {
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 50);
@@ -463,11 +448,7 @@ export default function ChatConversationScreen() {
     const hideSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
-        setIsKeyboardOpen(false);
-        if (Platform.OS === 'android') {
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          setAndroidKeyboardHeight(0);
-        }
+        flatListRef.current?.scrollToEnd({ animated: true });
       },
     );
 
@@ -880,12 +861,11 @@ const handleThumbsUp = () => {
           <ChatMessageListSkeleton />
         ) : (
           <KeyboardAvoidingView
-            style={[
-              styles.keyboardContainer,
-              Platform.OS === 'android' && { paddingBottom: androidKeyboardHeight },
-            ]}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(insets.top, 16) + 52 : 0}
+            style={styles.keyboardContainer}
+            behavior="padding"
+            // The custom chat header lives outside this view, so no extra offset
+            // is needed to keep the composer clear of it.
+            keyboardVerticalOffset={0}
           >
             {/* Messages List */}
             <FlatList
@@ -1472,11 +1452,7 @@ const handleThumbsUp = () => {
             <View
               style={[
                 styles.composerRoot,
-                {
-                  paddingBottom: isKeyboardOpen
-                    ? 8
-                    : Math.max(insets.bottom, 12),
-                },
+                { paddingBottom: Math.max(insets.bottom, 12) },
               ]}
             >
               {/* Photo / Image attachment button */}
