@@ -5,7 +5,8 @@ import { useAuth, useUser } from '@clerk/expo';
 
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import { clearSignedOut } from '@lib/sessionGate';
+import { bootstrapSession } from '@lib/sessionBootstrap';
+import { clearSignedOut, reconcileStaleSignedOutGate } from '@lib/sessionGate';
 import { networkService } from '@services/network';
 import { withTimeout } from '@lib/asyncUtils';
 import { claimPostAuthRouting, releasePostAuthRouting } from '@lib/authFlowCoordinator';
@@ -44,56 +45,67 @@ export default function SSOCallbackScreen() {
   useEffect(() => {
     // Hard deadline: never strand the user on the paw loader just because
     // Clerk is still initializing or the profile lookup is slow.
-    const timer = setTimeout(() => finishRouting(), 8000);
+    const timer = setTimeout(() => finishRouting(), 12000);
     return () => clearTimeout(timer);
   }, [finishRouting]);
 
   useEffect(() => {
     if (routed.current) return;
+    let cancelled = false;
 
-    const authState = useAuthStore.getState();
-    const hasLocalSession =
-      authState.status === 'authenticated' && Boolean(authState.user);
-    const isOffline = !networkService.isOnline();
+    void (async () => {
+      await bootstrapSession();
+      if (cancelled || routed.current) return;
 
-    // An existing local session is authoritative on a cold start while offline.
-    if (isOffline && hasLocalSession) {
-      finishRouting();
-      return;
-    }
+      const authState = useAuthStore.getState();
+      const hasLocalSession =
+        authState.status === 'authenticated' && Boolean(authState.user);
+      const isOffline = !networkService.isOnline();
 
-    if (!isLoaded) return;
+      // An existing local session is authoritative on a cold start while offline.
+      if (isOffline && hasLocalSession) {
+        finishRouting();
+        return;
+      }
 
-    if (isSignedIn && clerkUser) {
-      const userId = clerkUser.id;
-      if (!claimPostAuthRouting(userId)) return;
+      if (!isLoaded) return;
 
-      clearSignedOut();
-      useOnboardingStore.getState().setCompleted();
+      if (isSignedIn && clerkUser) {
+        const userId = clerkUser.id;
+        reconcileStaleSignedOutGate(userId, authState.user?.id);
+        if (!claimPostAuthRouting(userId)) return;
 
-      void withTimeout(
-        (async () => {
-          await useAuthStore.getState().googleSignIn({
-            id: userId,
-            email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
-            fullName: clerkUser.fullName || clerkUser.firstName || 'Resident',
-            photoUrl: clerkUser.imageUrl,
+        clearSignedOut();
+        useOnboardingStore.getState().setCompleted();
+
+        await withTimeout(
+          (async () => {
+            await useAuthStore.getState().googleSignIn({
+              id: userId,
+              email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
+              fullName: clerkUser.fullName || clerkUser.firstName || 'Resident',
+              photoUrl: clerkUser.imageUrl,
+            });
+            await useAuthStore.getState().syncUserFromClerk(clerkUser);
+          })(),
+          6000,
+          'Session restore timed out',
+        )
+          .then(() => finishRouting())
+          .catch((error) => {
+            console.warn('[sso-callback] Session restore note:', error);
+            releasePostAuthRouting(userId);
+            // Keep any usable local session; otherwise fall back to onboarding.
+            finishRouting();
           });
-          await useAuthStore.getState().syncUserFromClerk(clerkUser);
-        })(),
-        6000,
-        'Session restore timed out',
-      )
-        .then(() => finishRouting())
-        .catch((error) => {
-          console.warn('[sso-callback] Session restore note:', error);
-          releasePostAuthRouting(userId);
-          // Keep any usable local session; otherwise fall back to onboarding.
-          finishRouting();
-        });
-    } else if (!isSignedIn) {
-      finishRouting();
-    }
+      } else if (!isSignedIn) {
+        finishRouting();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isLoaded, isSignedIn, clerkUser, finishRouting]);
 
   return (

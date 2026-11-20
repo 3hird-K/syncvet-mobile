@@ -24,7 +24,8 @@ import { ONBOARDING_SLIDES } from '@lib/onboarding';
 import type { OnboardingSlideData } from '@lib/onboarding';
 import { useAuthStore } from '@store/useAuthStore';
 import { useOnboardingStore } from '@store/useOnboardingStore';
-import { isSignedOutGate, waitForSessionGate } from '@lib/sessionGate';
+import { bootstrapSession } from '@lib/sessionBootstrap';
+import { isSignedOutGate, reconcileStaleSignedOutGate } from '@lib/sessionGate';
 import { isRestrictedStaffRole } from '@services/auth/types';
 import { networkService } from '@services/network';
 import { ProgressIndicator } from '@components/ui/ProgressIndicator';
@@ -52,6 +53,10 @@ export default function OnboardingScreen() {
   const [current, setCurrent] = useState(initialIndex);
   const setCompleted = useOnboardingStore((state) => state.setCompleted);
   const authLoading = useAuthStore((state) => state.authLoading);
+  // Subscribe to the persisted session so this screen re-checks when the
+  // SecureStore restore finishes after the first render.
+  const localStatus = useAuthStore((state) => state.status);
+  const localUserId = useAuthStore((state) => state.user?.id);
 
   const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
   const { user: clerkUser } = useUser();
@@ -77,22 +82,29 @@ export default function OnboardingScreen() {
     let cancelled = false;
 
     void (async () => {
-      await waitForSessionGate();
+      await bootstrapSession();
       if (cancelled || coldStartCheckedRef.current) return;
+
+      const localSession = useAuthStore.getState();
+      const hasLocalSession =
+        localSession.status === 'authenticated' && Boolean(localSession.user);
+
+      // If Clerk and the local store agree on the user, this is an ongoing
+      // session whose signed-out flag was left behind by an earlier logout.
+      if (isSignedIn && clerkUser) {
+        reconcileStaleSignedOutGate(clerkUser.id, localSession.user?.id);
+      }
 
       // After an intentional logout, stay on the sign-in slide even if Clerk
       // still thinks it has a session (common in preview/offline builds).
       if (isSignedOutGate()) return;
 
-      const localSession = useAuthStore.getState();
-      const hasLocalSession =
-        localSession.status === 'authenticated' && Boolean(localSession.user);
-      const offlineLocalSession = !networkService.isOnline() && hasLocalSession;
-
-      if (!isSignedIn && !offlineLocalSession) return;
+      // A persisted local session is authoritative on cold start, online or
+      // not. Requiring Clerk here used to strand returning residents on this
+      // slide whenever Clerk restored its client after the local store.
+      if (!isSignedIn && !hasLocalSession) return;
       // Clerk can report a signed-in state before the user resource is ready.
-      // Wait for it online; offline we can route from the persisted profile.
-      if (isSignedIn && !clerkUser && !offlineLocalSession) return;
+      if (isSignedIn && !clerkUser && !hasLocalSession) return;
 
       coldStartCheckedRef.current = true;
       setCheckingAuth(true);
@@ -134,7 +146,15 @@ export default function OnboardingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [clerkLoaded, isSignedIn, clerkUser, connectingGoogle, router]);
+  }, [
+    clerkLoaded,
+    isSignedIn,
+    clerkUser,
+    connectingGoogle,
+    router,
+    localStatus,
+    localUserId,
+  ]);
 
   // Jump to specific slide if requested (e.g. after logout)
   useEffect(() => {

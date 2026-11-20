@@ -43,21 +43,11 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     persistSession: false,
     detectSessionInUrl: false,
   },
+  // supabase-js calls this for REST, Realtime, Storage and Functions. Adding a
+  // second Authorization header in `global.fetch` would fetch the Clerk token
+  // twice per request and could replace a valid token with `null`.
   accessToken: async () => {
     return await getClerkSupabaseToken();
-  },
-  global: {
-    fetch: async (url, options = {}) => {
-      const headers = new Headers(options.headers);
-      const token = await getClerkSupabaseToken();
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
-      return fetch(url, {
-        ...options,
-        headers,
-      });
-    },
   },
 });
 

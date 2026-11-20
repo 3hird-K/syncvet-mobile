@@ -26,8 +26,12 @@ import {
 import { supabase } from '@lib/supabase';
 import { isRestrictedStaffRole } from '@services/auth/types';
 
-const CLERK_READY_TIMEOUT_MS = 12000;
+const CLERK_READY_TIMEOUT_MS = 20000;
 const CLERK_READY_POLL_MS = 100;
+// The browser stays open while the resident picks an account, enters a
+// password or completes 2FA. A short cap here reports a false "timed out" for
+// perfectly valid logins, especially on slower preview builds.
+const SSO_FLOW_TIMEOUT_MS = 120000;
 
 function buildOAuthRedirectUrl(): string {
   let isExpoGo = false;
@@ -208,6 +212,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
     ) => {
       const userId =
         clerkUser?.id ||
+        (clerk as any)?.user?.id ||
         signInFlow?.createdUserId ||
         signUpFlow?.createdUserId ||
         signInFlow?.userData?.id;
@@ -365,7 +370,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
         throw err;
       }
     },
-    [router],
+    [router, clerk],
   );
 
   const handleGoogleSignIn = useCallback(async (): Promise<boolean> => {
@@ -407,7 +412,7 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
           await clearClerkClientToken().catch(() => {});
           return withTimeout(
             startSSOFlowRef.current(ssoParams),
-            25000,
+            SSO_FLOW_TIMEOUT_MS,
             'Google browser sign-in timed out. Please try again.',
           );
         };
@@ -432,8 +437,20 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
 
       const { createdSessionId, signIn, signUp } = authResult ?? {};
       const authSetActive = authResult?.setActive ?? setActiveRef.current;
+      const browserSucceeded = authResult?.authSessionResult?.type === 'success';
+
+      // On a native build the browser redirect can create the Clerk session
+      // before `startSSOFlow()` returns a fresh session id. If the browser
+      // reported success, reuse the active Clerk session instead of silently
+      // dropping the resident back on the sign-in slide.
+      const activeClerkSessionId = browserSucceeded
+        ? (clerk as any)?.session?.id
+        : undefined;
       const sessionId =
-        createdSessionId || signIn?.createdSessionId || signUp?.createdSessionId;
+        createdSessionId ||
+        signIn?.createdSessionId ||
+        signUp?.createdSessionId ||
+        activeClerkSessionId;
 
       if (sessionId && authSetActive) {
         await withTimeout(
@@ -441,7 +458,9 @@ export function useGoogleAuth(): UseGoogleAuthReturn {
           12000,
           'Clerk session activation timed out',
         );
+      }
 
+      if (sessionId) {
         // dismissAuthSession() is skipped internally on Android (it throws
         // there), so this cleanup can never break a completed login.
         dismissBrowserAuthSession();

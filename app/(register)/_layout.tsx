@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
 import { colors } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
+import { isSignedOutGate } from '@lib/sessionGate';
 import { isRestrictedStaffRole } from '@services/auth/types';
 
 /**
@@ -26,7 +27,9 @@ export default function RegisterLayout() {
   const segmentPath = segments.join('/');
   const onSuccess = segmentPath.includes('success');
 
-  const isAuth = (status === 'authenticated' && !!currentUser) || (clerkLoaded && isSignedIn);
+  const isAuth =
+    !isSignedOutGate() &&
+    ((status === 'authenticated' && !!currentUser) || (clerkLoaded && isSignedIn));
 
   useEffect(() => {
     // Redirect Veterinarians and Administrators away from pet owner registration

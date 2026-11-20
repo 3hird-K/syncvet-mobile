@@ -3,7 +3,6 @@ import { LogBox, Platform, StatusBar as RNStatusBar, StyleSheet } from 'react-na
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import * as WebBrowser from 'expo-web-browser';
 import { ClerkProvider, ClerkLoaded } from '@clerk/expo';
 import { resourceCache } from '@clerk/expo/resource-cache';
 import {
@@ -18,7 +17,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { colors } from '@theme';
-import { useAuthStore } from '@store/useAuthStore';
+import { bootstrapSession } from '@lib/sessionBootstrap';
 import { tokenCache } from '@lib/tokenCache';
 import { Toaster } from '@components/ui/Sonner';
 import { NetworkToastListener } from '@components/ui/NetworkToastListener';
@@ -63,7 +62,7 @@ if (__DEV__) {
   };
 }
 
-WebBrowser.maybeCompleteAuthSession();
+// ClerkProvider handles WebBrowser.maybeCompleteAuthSession() internally.
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
@@ -82,8 +81,6 @@ export default function RootLayout() {
     PlusJakartaSans_800ExtraBold,
   });
 
-  const restoreSession = useAuthStore((state) => state.restoreSession);
-
   useEffect(() => {
     if (Platform.OS === 'android') {
       (RNStatusBar as any).setTranslucent?.(true);
@@ -101,16 +98,15 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      Promise.race([
-        restoreSession(),
-        new Promise<void>((resolve) => setTimeout(resolve, 4000)),
-      ])
-        .catch(() => {})
-        .finally(() => {
-          SplashScreen.hideAsync().catch(() => {});
-        });
+      // Wait for the single shared bootstrap instead of racing an arbitrary
+      // 4s timer. Hiding the splash before the session read finished let the
+      // index route see an empty store and show the login screen to users who
+      // were already signed in.
+      void bootstrapSession().finally(() => {
+        SplashScreen.hideAsync().catch(() => {});
+      });
     }
-  }, [fontsLoaded, fontError, restoreSession]);
+  }, [fontsLoaded, fontError]);
 
   return (
     <ClerkProvider

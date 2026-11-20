@@ -20,16 +20,34 @@ const CLERK_CLIENT_JWT_KEY = '__clerk_client_jwt';
 
 let hydrationPromise: Promise<void> | null = null;
 
-/** Read the persisted flag once, before any auto-auth routing decision. */
+/**
+ * Read the persisted flag once, before any auto-auth routing decision.
+ *
+ * Zustand's `persist` middleware already rehydrates the store on creation.
+ * Calling `rehydrate()` again here used to race with that automatic hydration
+ * and could resolve on a 1.5s timeout before `signedOut` was known, which made
+ * returning users land on the sign-in screen. Listen for the real hydration
+ * completion instead, with a generous safety deadline.
+ */
 export function waitForSessionGate(): Promise<void> {
   if (!hydrationPromise) {
-    hydrationPromise = withTimeout(
-      () => useOnboardingStore.persist.rehydrate(),
-      1500,
-      'Session gate hydration timed out',
-    )
-      .catch(() => {})
-      .then(() => undefined);
+    const persist = useOnboardingStore.persist;
+
+    hydrationPromise = new Promise<void>((resolve) => {
+      if (persist.hasHydrated()) {
+        resolve();
+        return;
+      }
+
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (timer) clearTimeout(timer);
+        unsubscribe();
+        resolve();
+      };
+      const unsubscribe = persist.onFinishHydration(finish);
+      timer = setTimeout(finish, 3000);
+    });
   }
   return hydrationPromise;
 }
@@ -44,6 +62,26 @@ export function markSignedOut(): void {
 
 export function clearSignedOut(): void {
   useOnboardingStore.getState().clearSignedOut();
+}
+
+/**
+ * A new login can finish through a path that never calls `clearSignedOut()`
+ * (for example when the browser redirect resolves in a different screen). When
+ * Clerk and the persisted local session both describe the *same* user, the gate
+ * is stale and must not keep a returning resident on the sign-in slide.
+ *
+ * It is intentionally not cleared on a local session or a Clerk session alone:
+ * after an intentional sign-out, Clerk can still report a stale signed-in
+ * client, and that must not resurrect the app session.
+ */
+export function reconcileStaleSignedOutGate(
+  clerkUserId: string | undefined | null,
+  localUserId: string | undefined | null,
+): void {
+  if (!isSignedOutGate()) return;
+  if (clerkUserId && localUserId && clerkUserId === localUserId) {
+    clearSignedOut();
+  }
 }
 
 /** Remove Clerk's cached client JWT so the next OAuth flow starts with a new

@@ -7,18 +7,22 @@ import { toast } from './Sonner';
  * displays subtle Sonner toast notifications when entering or leaving offline mode.
  */
 export function NetworkToastListener() {
-  const isFirstMount = useRef(true);
   const wasOnlineRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     const unsubscribe = networkService.subscribe((state) => {
+      // The startup state is optimistic until the first native check resolves.
+      // Establish the baseline only once the result is known, otherwise an
+      // online cold start would briefly announce "Offline mode".
+      if (!networkService.isReady()) {
+        wasOnlineRef.current = null;
+        return;
+      }
+
       const isOnline = state.isConnected && state.isInternetReachable;
 
-      if (isFirstMount.current) {
-        isFirstMount.current = false;
+      if (wasOnlineRef.current === null) {
         wasOnlineRef.current = isOnline;
-        // Cold-start offline is a normal state here: cached screens render
-        // normally and only actions that need connectivity explain the limit.
         return;
       }
 
@@ -42,9 +46,7 @@ export function NetworkToastListener() {
       }
     });
 
-    return () => {
-      unsubscribe();
-    };
+    return unsubscribe;
   }, []);
 
   return null;

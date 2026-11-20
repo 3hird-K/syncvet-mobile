@@ -1,6 +1,9 @@
 import { Platform } from 'react-native';
 import * as Network from 'expo-network';
+import { withTimeout } from '@lib/asyncUtils';
 import type { ConnectionStatus, NetworkState, NetworkStatusListener } from './types';
+
+const NETWORK_CHECK_TIMEOUT_MS = 2000;
 
 class NetworkService {
   private currentState: NetworkState = {
@@ -17,9 +20,11 @@ class NetworkService {
   private webOfflineHandler: (() => void) | null = null;
   private isChecking = false;
   private isSyncing = false;
+  private ready = false;
+  private readyPromise: Promise<void>;
 
   constructor() {
-    this.init();
+    this.readyPromise = this.init();
   }
 
   private async init() {
@@ -33,7 +38,7 @@ class NetworkService {
       // relying only on the slower fallback heartbeat below.
       try {
         this.networkSubscription = Network.addNetworkStateListener((state) => {
-          const isConnected = state.isConnected ?? true;
+          const isConnected = state.isConnected ?? this.ready;
           const isInternetReachable = state.isInternetReachable ?? isConnected;
           this.updateState({
             isConnected,
@@ -47,10 +52,28 @@ class NetworkService {
       }
     }
 
-    await this.checkNetwork();
+    try {
+      await this.checkNetwork();
+    } catch {
+      // checkNetwork already falls back conservatively on cold start.
+    } finally {
+      // Consumers (auth bridge, data store, UI) must not treat the optimistic
+      // "online" default as real until the first native check has settled.
+      this.ready = true;
+      this.notifyListeners();
+    }
 
     // Periodic check every 15 seconds to ensure heartbeat liveness without excessive battery drain
     this.startPeriodicCheck(15000);
+  }
+
+  /** Resolves once the first connectivity check has completed. */
+  public waitUntilReady(): Promise<void> {
+    return this.readyPromise;
+  }
+
+  public isReady(): boolean {
+    return this.ready;
   }
 
   public async checkNetwork(): Promise<NetworkState> {
@@ -69,8 +92,12 @@ class NetworkService {
         return this.currentState;
       }
 
-      const state = await Network.getNetworkStateAsync();
-      const isConnected = state.isConnected ?? true;
+      const state = await withTimeout(
+        () => Network.getNetworkStateAsync(),
+        NETWORK_CHECK_TIMEOUT_MS,
+        'Network state check timed out',
+      );
+      const isConnected = state.isConnected ?? this.ready;
       const isInternetReachable = state.isInternetReachable ?? isConnected;
 
       this.updateState({
@@ -80,7 +107,16 @@ class NetworkService {
         lastCheckedAt: Date.now(),
       });
     } catch {
-      // In case of error querying native network module, preserve previous connectivity status
+      // If the very first native check is unavailable, assume offline so auth
+      // and data code cannot mistake an optimistic default for connectivity.
+      if (!this.ready) {
+        this.updateState({
+          isConnected: false,
+          isInternetReachable: false,
+          status: 'offline',
+          lastCheckedAt: Date.now(),
+        });
+      }
     } finally {
       this.isChecking = false;
     }
@@ -133,7 +169,9 @@ class NetworkService {
   }
 
   public isOnline(): boolean {
-    return this.currentState.isConnected && this.currentState.isInternetReachable;
+    return (
+      this.ready && this.currentState.isConnected && this.currentState.isInternetReachable
+    );
   }
 
   public subscribe(listener: NetworkStatusListener): () => void {
